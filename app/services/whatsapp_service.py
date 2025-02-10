@@ -73,11 +73,20 @@ class WhatsAppCloudAPI:
         state = context.get('state', 'initial')
         message = message.lower().strip()
         
+        print(f"\nDEBUG - Current state: {state}")
+        print(f"DEBUG - Message received: {message}")
+        print(f"DEBUG - Context: {context}")
+        
         if state == 'initial':
+            print(f"DEBUG - Checking initial state conditions")
+            print(f"DEBUG - 'hola' in message: {'hola' in message}")
+            print(f"DEBUG - message == '1': {message == '1'}")
+            
             if 'hola' in message or message == '1':
                 name = user.name if user.name else ""
                 greeting = f", {name}" if name else ""
                 
+                print(f"DEBUG - Updating state to asking_name")
                 await self.conversation_service.update_context(
                     conversation.id,
                     {'state': 'asking_name'}
