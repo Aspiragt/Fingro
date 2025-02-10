@@ -30,29 +30,34 @@ pip install -r requirements.txt
 python app.py
 ```
 
-## Despliegue en Heroku
+## Despliegue en Render
 
-1. Crear una nueva aplicación en Heroku:
-```bash
-heroku create fingro-whatsapp
-```
+1. Crear una cuenta en [Render](https://render.com) si no tienes una
 
-2. Configurar variables de entorno:
-```bash
-heroku config:set WHATSAPP_PHONE_NUMBER_ID=tu_phone_number_id
-heroku config:set WHATSAPP_ACCESS_TOKEN=tu_access_token
-heroku config:set WHATSAPP_WEBHOOK_VERIFY_TOKEN=tu_webhook_verify_token
-```
+2. Conectar tu repositorio de GitHub a Render:
+   - Ve a https://dashboard.render.com/
+   - Haz clic en "New +"
+   - Selecciona "Web Service"
+   - Conecta tu repositorio de GitHub
+   - Selecciona el repositorio de Fingro
 
-3. Desplegar:
-```bash
-git push heroku main
-```
+3. Configurar el servicio:
+   - **Name**: `fingro-whatsapp`
+   - **Environment**: `Python 3`
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `uvicorn app:app --host 0.0.0.0 --port $PORT`
+
+4. Configurar variables de entorno:
+   - `WHATSAPP_PHONE_NUMBER_ID`
+   - `WHATSAPP_ACCESS_TOKEN`
+   - `WHATSAPP_WEBHOOK_VERIFY_TOKEN`
+
+5. Hacer clic en "Create Web Service"
 
 ## Configuración de Webhook
 
-1. Usar la URL de Heroku como base para el webhook:
-   `https://tu-app.herokuapp.com/webhook/whatsapp`
+1. Usar la URL de Render como base para el webhook:
+   `https://fingro-whatsapp.onrender.com/webhook/whatsapp`
 
 2. En Meta for Developers:
    - Ir a WhatsApp > Configuration
