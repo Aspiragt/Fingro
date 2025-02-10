@@ -33,6 +33,9 @@ async def verify_webhook(request: Request):
             challenge = params.get('hub.challenge')
             return int(challenge)
         else:
+            print(f"Verificación fallida:")
+            print(f"- Token esperado: {verify_token}")
+            print(f"- Token recibido: {params.get('hub.verify_token')}")
             raise HTTPException(status_code=403, detail="Verification failed")
             
     except Exception as e:
@@ -47,7 +50,7 @@ async def whatsapp_webhook(request: Request):
     try:
         # Obtener los datos del webhook
         data = await request.json()
-        print(f"Datos recibidos: {json.dumps(data, indent=2)}")
+        print(f"Datos recibidos en webhook POST: {json.dumps(data, indent=2)}")
         
         # Procesar el mensaje entrante
         try:
@@ -55,6 +58,10 @@ async def whatsapp_webhook(request: Request):
             entry = data['entry'][0]
             changes = entry['changes'][0]
             value = changes['value']
+            
+            print(f"Procesando entrada: {json.dumps(entry, indent=2)}")
+            print(f"Cambios detectados: {json.dumps(changes, indent=2)}")
+            print(f"Valor del cambio: {json.dumps(value, indent=2)}")
             
             if 'messages' in value:
                 message = value['messages'][0]
@@ -64,20 +71,30 @@ async def whatsapp_webhook(request: Request):
                 print(f"\nMensaje recibido de {from_number}: {message_body}")
                 
                 # Enviar respuesta
-                response = whatsapp.send_text_message(
-                    to_number=from_number,
-                    message="¡Hola! 🌱 Bienvenido a Fingro. ¿Te gustaría saber cuánto podrías ganar con tu cosecha?"
-                )
-                print(f"Respuesta enviada: {json.dumps(response, indent=2)}")
+                try:
+                    response = whatsapp.send_text_message(
+                        to_number=from_number,
+                        message="¡Hola! 🌱 Bienvenido a Fingro. ¿Te gustaría saber cuánto podrías ganar con tu cosecha?"
+                    )
+                    print(f"Respuesta enviada exitosamente: {json.dumps(response, indent=2)}")
+                except Exception as e:
+                    print(f"Error enviando respuesta: {str(e)}")
+                    if hasattr(e, 'response'):
+                        print(f"Respuesta del error: {e.response.text}")
+                    raise e
                 
             return {"status": "success"}
             
         except Exception as e:
             print(f"Error procesando mensaje: {str(e)}")
+            if hasattr(e, 'response'):
+                print(f"Respuesta del error: {e.response.text}")
             raise e
             
     except Exception as e:
         print(f"Error en webhook: {str(e)}")
+        if hasattr(e, 'response'):
+            print(f"Respuesta del error: {e.response.text}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
