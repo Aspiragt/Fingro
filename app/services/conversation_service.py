@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Optional, List, Dict
 from datetime import datetime
 import uuid
 import json
@@ -10,25 +10,31 @@ class ConversationService:
         self.db = db
     
     async def create_conversation(self, user_id: str) -> Conversation:
-        """Create a new conversation"""
+        """Create a new conversation for a user"""
         try:
+            print(f"\n=== CREANDO NUEVA CONVERSACIÓN ===")
+            print(f"Usuario ID: {user_id}")
+            
+            # Primero cerrar cualquier conversación activa existente
+            active_conv = await self.get_active_conversation(user_id)
+            if active_conv:
+                print(f"Cerrando conversación activa: {active_conv.id}")
+                await self.close_conversation(active_conv.id)
+            
+            # Crear nueva conversación
             conversation = Conversation(
-                id='',  # Se actualizará después
+                id=str(uuid.uuid4()),
                 user_id=user_id,
+                context={'state': 'initial'},
                 messages=[],
-                context={'state': 'initial'},  # Inicializar con estado initial
                 active=True,
                 created_at=datetime.now(),
                 updated_at=datetime.now()
             )
             
-            # Guardar en Firebase
+            # Guardar en base de datos
             conv_dict = conversation.model_dump()
-            doc_id = await self.db.add_document('conversations', conv_dict)
-            
-            # Actualizar ID
-            conversation.id = doc_id
-            await self.db.update_document('conversations', doc_id, {'id': doc_id})
+            await self.db.create_document('conversations', conv_dict)
             
             print(f"Nueva conversación creada: {conversation.model_dump_json(indent=2)}")
             return conversation
@@ -65,53 +71,27 @@ class ConversationService:
             raise e
     
     async def get_active_conversation(self, user_id: str) -> Optional[Conversation]:
-        """Get the active conversation for a user"""
+        """Get active conversation for a user"""
         try:
-            print("\n=== BUSCANDO CONVERSACIÓN ACTIVA ===")
+            print(f"\n=== BUSCANDO CONVERSACIÓN ACTIVA ===")
             print(f"Usuario ID: {user_id}")
             
-            # 1. Buscar conversaciones del usuario
-            convs = await self.db.query_collection(
+            # Buscar conversación activa
+            conversations = await self.db.query_collection(
                 'conversations',
                 'user_id',
                 '==',
-                user_id
+                user_id,
+                additional_filters=[('active', '==', True)]
             )
             
-            # 2. Filtrar por activas
-            active_convs = [conv for conv in convs if conv.get('active', False)]
-            if not active_convs:
+            if not conversations:
+                print("No se encontró conversación activa")
                 return None
             
-            conv_data = active_convs[0]
-            
-            # 3. Convertir strings ISO a datetime
-            if isinstance(conv_data.get('created_at'), str):
-                conv_data['created_at'] = datetime.fromisoformat(conv_data['created_at'])
-            if isinstance(conv_data.get('updated_at'), str):
-                conv_data['updated_at'] = datetime.fromisoformat(conv_data['updated_at'])
-            
-            # 4. Convertir mensajes
-            messages = []
-            for msg_data in conv_data.get('messages', []):
-                if isinstance(msg_data.get('timestamp'), str):
-                    msg_data['timestamp'] = datetime.fromisoformat(msg_data['timestamp'])
-                messages.append(Message(**msg_data))
-            conv_data['messages'] = messages
-            
-            # 5. Asegurar que el contexto tenga un estado válido
-            if not conv_data.get('context'):
-                conv_data['context'] = {'state': 'initial'}
-            elif not conv_data['context'].get('state'):
-                conv_data['context']['state'] = 'initial'
-            
-            conversation = Conversation(**conv_data)
-            
-            print(f"Conversación activa encontrada:")
-            print(f"ID: {conversation.id}")
-            print(f"Estado: {conversation.context.get('state')}")
-            print(f"Contexto: {json.dumps(conversation.context, indent=2)}")
-            
+            # Convertir a modelo
+            conversation = Conversation(**conversations[0])
+            print(f"Conversación encontrada: {conversation.model_dump_json(indent=2)}")
             return conversation
             
         except Exception as e:
@@ -121,47 +101,71 @@ class ConversationService:
     async def add_message(self, conversation_id: str, role: str, content: str) -> bool:
         """Add a message to a conversation"""
         try:
-            # Obtener conversación
+            print(f"\n=== AGREGANDO MENSAJE A CONVERSACIÓN ===")
+            print(f"ID: {conversation_id}")
+            print(f"Role: {role}")
+            print(f"Content: {content}")
+            
+            # 1. Obtener conversación
             conversation = await self.get_conversation(conversation_id)
             if not conversation:
                 raise ValueError(f"Conversation {conversation_id} not found")
             
-            # Crear mensaje
+            # 2. Validar role
+            if role not in ['user', 'bot']:
+                raise ValueError(f"Invalid role: {role}")
+            
+            # 3. Crear mensaje con timestamp actual
             message = Message(
                 role=role,
                 content=content,
                 timestamp=datetime.now()
             )
             
-            # Agregar mensaje y actualizar
+            # 4. Agregar mensaje y actualizar timestamps
             conversation.messages.append(message)
             conversation.updated_at = datetime.now()
             
-            # Guardar en Firebase
+            # 5. Guardar en base de datos
             conv_dict = conversation.model_dump()
             await self.db.update_document('conversations', conversation_id, conv_dict)
             
+            print(f"Mensaje agregado: {message.model_dump_json(indent=2)}")
             return True
             
         except Exception as e:
             print(f"Error en add_message: {str(e)}")
             raise e
     
-    async def update_conversation_context(self, conversation_id: str, context: dict) -> bool:
+    async def update_conversation_context(self, conversation_id: str, new_context: Dict) -> bool:
         """Update conversation context"""
         try:
+            print(f"\n=== ACTUALIZANDO CONTEXTO DE CONVERSACIÓN ===")
+            print(f"ID: {conversation_id}")
+            print(f"Nuevo contexto: {json.dumps(new_context, indent=2)}")
+            
+            # 1. Obtener conversación actual
             conversation = await self.get_conversation(conversation_id)
             if not conversation:
                 raise ValueError(f"Conversation {conversation_id} not found")
             
-            # Actualizar el contexto existente en lugar de sobrescribirlo
-            conversation.context.update(context)
+            # 2. Validar el estado
+            if 'state' in new_context and not new_context['state']:
+                raise ValueError("State cannot be empty")
+            
+            # 3. Merge context instead of overwrite
+            current_context = conversation.context or {}
+            merged_context = {**current_context, **new_context}
+            
+            # 4. Actualizar timestamps
+            conversation.context = merged_context
             conversation.updated_at = datetime.now()
             
+            # 5. Guardar en base de datos
             conv_dict = conversation.model_dump()
             await self.db.update_document('conversations', conversation_id, conv_dict)
             
-            print(f"Contexto actualizado: {conversation.context}")
+            print(f"Contexto actualizado: {json.dumps(merged_context, indent=2)}")
             return True
             
         except Exception as e:
@@ -171,14 +175,31 @@ class ConversationService:
     async def reset_conversation(self, conversation_id: str) -> bool:
         """Reset a conversation to initial state"""
         try:
+            print(f"\n=== RESETEANDO CONVERSACIÓN ===")
+            print(f"ID: {conversation_id}")
+            
+            # 1. Obtener conversación actual
             conversation = await self.get_conversation(conversation_id)
             if not conversation:
                 raise ValueError(f"Conversation {conversation_id} not found")
             
-            # Resetear el contexto
-            conversation.context = {'state': 'initial'}
+            # 2. Preservar datos importantes del contexto
+            current_context = conversation.context or {}
+            preserved_data = {
+                'user_name': current_context.get('user_name'),
+                'phone_number': current_context.get('phone_number')
+            }
+            
+            # 3. Resetear contexto pero preservar datos importantes
+            conversation.context = {
+                'state': 'initial',
+                **{k: v for k, v in preserved_data.items() if v is not None}
+            }
+            
+            # 4. Actualizar timestamps
             conversation.updated_at = datetime.now()
             
+            # 5. Guardar en base de datos
             conv_dict = conversation.model_dump()
             await self.db.update_document('conversations', conversation_id, conv_dict)
             
