@@ -3,9 +3,24 @@ from firebase_admin import credentials, firestore
 from pathlib import Path
 import os
 import json
+from datetime import datetime
 from dotenv import load_dotenv
 
 load_dotenv()
+
+def convert_firebase_object(obj):
+    """Convert Firebase objects to serializable format"""
+    if isinstance(obj, (firestore.DocumentReference, firestore.CollectionReference)):
+        return obj.path
+    elif hasattr(obj, 'seconds') and hasattr(obj, 'nanos'):  # Firebase Timestamp
+        return datetime.fromtimestamp(obj.seconds + obj.nanos/1e9).isoformat()
+    elif isinstance(obj, datetime):
+        return obj.isoformat()
+    elif isinstance(obj, dict):
+        return {k: convert_firebase_object(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_firebase_object(i) for i in obj]
+    return obj
 
 class FirebaseDB:
     _instance = None
@@ -46,7 +61,7 @@ class FirebaseDB:
             print(f"\n=== AGREGANDO DOCUMENTO ===")
             print(f"Colección: {collection}")
             print(f"ID: {doc_id if doc_id else 'auto-generated'}")
-            print(f"Datos: {json.dumps(data, indent=2)}")
+            print(f"Datos: {json.dumps(convert_firebase_object(data), indent=2)}")
             
             if doc_id:
                 doc_ref = self.db.collection(collection).document(doc_id)
@@ -73,7 +88,7 @@ class FirebaseDB:
             doc = doc_ref.get()
             
             if doc.exists:
-                data = doc.to_dict()
+                data = convert_firebase_object(doc.to_dict())
                 print(f"Documento encontrado: {json.dumps(data, indent=2)}")
                 return data
             else:
@@ -90,7 +105,7 @@ class FirebaseDB:
             print(f"\n=== ACTUALIZANDO DOCUMENTO ===")
             print(f"Colección: {collection}")
             print(f"ID: {doc_id}")
-            print(f"Datos: {json.dumps(data, indent=2)}")
+            print(f"Datos: {json.dumps(convert_firebase_object(data), indent=2)}")
             
             doc_ref = self.db.collection(collection).document(doc_id)
             
@@ -141,7 +156,7 @@ class FirebaseDB:
             print(f"Valor: {value}")
             
             docs = self.db.collection(collection).where(field, operator, value).stream()
-            results = [doc.to_dict() for doc in docs]
+            results = [convert_firebase_object(doc.to_dict()) for doc in docs]
             
             print(f"Documentos encontrados: {len(results)}")
             for doc in results:
