@@ -1,9 +1,16 @@
 from typing import Optional, List, Dict
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from datetime import datetime
+import json
+
+def datetime_to_str(dt: datetime) -> str:
+    return dt.isoformat() if dt else None
 
 class User(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        json_encoders={datetime: datetime_to_str}
+    )
     
     id: str
     phone_number: str
@@ -18,9 +25,13 @@ class User(BaseModel):
     fingro_score: Optional[int] = None
     financing_history: Optional[str] = None
     financing_purpose: Optional[str] = None
-    created_at: datetime = datetime.now()
-    updated_at: datetime = datetime.now()
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(default_factory=datetime.now)
     crops: List[str] = []
     active_conversation: Optional[str] = None
     referral_code: Optional[str] = None
     referral_count: int = 0
+    
+    def model_dump_json(self, **kwargs) -> str:
+        """Override to ensure proper datetime serialization"""
+        return json.dumps(self.model_dump(), default=datetime_to_str, **kwargs)
