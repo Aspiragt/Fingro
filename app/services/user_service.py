@@ -1,6 +1,7 @@
 from app.models.user import User
 from app.database.firebase import db
 from datetime import datetime
+import uuid
 
 class UserService:
     def __init__(self):
@@ -9,13 +10,16 @@ class UserService:
     async def get_or_create_user(self, phone_number: str) -> User:
         """Get a user by phone number or create if not exists"""
         try:
+            print(f"\n=== BUSCANDO O CREANDO USUARIO ===")
+            print(f"Teléfono: {phone_number}")
+            
             # Buscar usuario existente
             users = await self.db.query_collection('users', 'phone_number', '==', phone_number)
             
             if users and len(users) > 0:
+                print("Usuario encontrado")
                 # Usuario existe, convertir a modelo
                 user_data = users[0]
-                user_data['id'] = user_data.get('id', '')  # Asegurar que id existe
                 
                 # Convertir strings ISO a datetime
                 if isinstance(user_data.get('created_at'), str):
@@ -23,28 +27,39 @@ class UserService:
                 if isinstance(user_data.get('updated_at'), str):
                     user_data['updated_at'] = datetime.fromisoformat(user_data['updated_at'])
                 
-                return User(**user_data)
+                user = User(**user_data)
+                print(f"Usuario: {user.model_dump_json(indent=2)}")
+                return user
             
-            # Crear nuevo usuario
-            user = User(
-                id='',  # Se actualizará después
-                phone_number=phone_number,
-                created_at=datetime.now(),
-                updated_at=datetime.now()
-            )
+            print("Usuario no encontrado, creando nuevo")
             
-            # Guardar en Firebase
-            user_dict = user.model_dump()
-            doc_id = await self.db.add_document('users', user_dict)
+            # Generar ID único
+            user_id = str(uuid.uuid4())
             
-            # Actualizar ID
-            user.id = doc_id
-            await self.db.update_document('users', doc_id, {'id': doc_id})
+            # Crear datos del usuario
+            user_data = {
+                'id': user_id,
+                'phone_number': phone_number,
+                'name': '',
+                'country': '',
+                'location': '',
+                'crops': [],
+                'created_at': datetime.now(),
+                'updated_at': datetime.now()
+            }
             
+            # Guardar en Firebase usando el ID generado
+            saved_data = await self.db.add_document('users', user_data, user_id)
+            
+            # Convertir a modelo
+            user = User(**saved_data)
+            print(f"Usuario creado: {user.model_dump_json(indent=2)}")
             return user
             
         except Exception as e:
             print(f"Error en get_or_create_user: {str(e)}")
+            import traceback
+            print(traceback.format_exc())
             raise e
     
     async def get_user_by_id(self, user_id: str) -> User:

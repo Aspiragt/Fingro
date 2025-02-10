@@ -64,14 +64,25 @@ class FirebaseDB:
             print(f"Datos: {json.dumps(convert_firebase_object(data), indent=2)}")
             
             if doc_id:
+                # Si se proporciona ID, crear documento con ese ID
                 doc_ref = self.db.collection(collection).document(doc_id)
                 doc_ref.set(data)
                 print(f"Documento creado con ID: {doc_id}")
-                return doc_id
+                
+                # Asegurarnos que el ID esté en los datos
+                data['id'] = doc_id
+                return data
             else:
+                # Si no se proporciona ID, generar uno automáticamente
                 doc_ref = self.db.collection(collection).add(data)[1]
-                print(f"Documento creado con ID: {doc_ref.id}")
-                return doc_ref.id
+                doc_id = doc_ref.id
+                
+                # Actualizar el documento para incluir su ID
+                data['id'] = doc_id
+                doc_ref.update({'id': doc_id})
+                
+                print(f"Documento creado con ID: {doc_id}")
+                return data
                 
         except Exception as e:
             print(f"Error agregando documento: {str(e)}")

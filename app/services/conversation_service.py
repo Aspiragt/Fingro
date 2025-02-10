@@ -21,50 +21,69 @@ class ConversationService:
                 print(f"Cerrando conversación activa: {active_conv.id}")
                 await self.close_conversation(active_conv.id)
             
-            # Crear nueva conversación
-            conversation = Conversation(
-                id=str(uuid.uuid4()),
-                user_id=user_id,
-                context={'state': 'initial'},
-                messages=[],
-                active=True,
-                created_at=datetime.now(),
-                updated_at=datetime.now()
-            )
+            # Generar ID único
+            conversation_id = str(uuid.uuid4())
             
-            # Guardar en base de datos
-            conv_dict = conversation.model_dump()
-            await self.db.create_document('conversations', conv_dict)
+            # Crear datos de la conversación
+            conversation_data = {
+                'id': conversation_id,
+                'user_id': user_id,
+                'context': {'state': 'initial'},
+                'messages': [],
+                'active': True,
+                'created_at': datetime.now(),
+                'updated_at': datetime.now()
+            }
             
+            # Guardar en base de datos usando el ID generado
+            saved_data = await self.db.add_document('conversations', conversation_data, conversation_id)
+            
+            # Convertir a modelo
+            conversation = Conversation(**saved_data)
             print(f"Nueva conversación creada: {conversation.model_dump_json(indent=2)}")
             return conversation
             
         except Exception as e:
             print(f"Error en create_conversation: {str(e)}")
+            import traceback
+            print(traceback.format_exc())
             raise e
     
     async def get_conversation(self, conversation_id: str) -> Optional[Conversation]:
         """Get a conversation by ID"""
         try:
-            conv_data = await self.db.get_document('conversations', conversation_id)
-            if not conv_data:
+            print(f"\n=== BUSCANDO CONVERSACIÓN ===")
+            print(f"ID: {conversation_id}")
+            
+            # Obtener conversación
+            conv = await self.db.get_document('conversations', conversation_id)
+            if not conv:
+                print("Conversación no encontrada")
                 return None
             
-            # Convertir strings ISO a datetime
-            if isinstance(conv_data.get('created_at'), str):
-                conv_data['created_at'] = datetime.fromisoformat(conv_data['created_at'])
-            if isinstance(conv_data.get('updated_at'), str):
-                conv_data['updated_at'] = datetime.fromisoformat(conv_data['updated_at'])
+            # Convertir timestamps
+            if isinstance(conv.get('created_at'), str):
+                conv['created_at'] = datetime.fromisoformat(conv['created_at'])
+            if isinstance(conv.get('updated_at'), str):
+                conv['updated_at'] = datetime.fromisoformat(conv['updated_at'])
             
             # Convertir mensajes
             messages = []
-            for msg_data in conv_data.get('messages', []):
-                if isinstance(msg_data.get('timestamp'), str):
-                    msg_data['timestamp'] = datetime.fromisoformat(msg_data['timestamp'])
-                messages.append(Message(**msg_data))
-            conv_data['messages'] = messages
+            for msg in conv.get('messages', []):
+                if isinstance(msg.get('timestamp'), str):
+                    msg['timestamp'] = datetime.fromisoformat(msg['timestamp'])
+                messages.append(Message(**msg))
+            conv['messages'] = messages
             
-            return Conversation(**conv_data)
+            # Asegurar que el contexto tenga un estado válido
+            if not conv.get('context'):
+                conv['context'] = {'state': 'initial'}
+            elif not conv['context'].get('state'):
+                conv['context']['state'] = 'initial'
+            
+            conversation = Conversation(**conv)
+            print(f"Conversación encontrada: {conversation.model_dump_json(indent=2)}")
+            return conversation
             
         except Exception as e:
             print(f"Error en get_conversation: {str(e)}")
@@ -90,8 +109,30 @@ class ConversationService:
                 return None
             
             # Convertir a modelo
-            conversation = Conversation(**conversations[0])
-            print(f"Conversación encontrada: {conversation.model_dump_json(indent=2)}")
+            conv_data = conversations[0]
+            
+            # Convertir timestamps
+            if isinstance(conv_data.get('created_at'), str):
+                conv_data['created_at'] = datetime.fromisoformat(conv_data['created_at'])
+            if isinstance(conv_data.get('updated_at'), str):
+                conv_data['updated_at'] = datetime.fromisoformat(conv_data['updated_at'])
+            
+            # Convertir mensajes
+            messages = []
+            for msg in conv_data.get('messages', []):
+                if isinstance(msg.get('timestamp'), str):
+                    msg['timestamp'] = datetime.fromisoformat(msg['timestamp'])
+                messages.append(Message(**msg))
+            conv_data['messages'] = messages
+            
+            # Asegurar que el contexto tenga un estado válido
+            if not conv_data.get('context'):
+                conv_data['context'] = {'state': 'initial'}
+            elif not conv_data['context'].get('state'):
+                conv_data['context']['state'] = 'initial'
+            
+            conversation = Conversation(**conv_data)
+            print(f"Conversación activa encontrada: {conversation.model_dump_json(indent=2)}")
             return conversation
             
         except Exception as e:

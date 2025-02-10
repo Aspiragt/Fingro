@@ -95,164 +95,228 @@ class WhatsAppCloudAPI:
 
     async def process_message(self, from_number: str, message: str) -> str:
         """Process an incoming message and return the appropriate response"""
-        print(f"\n=== PROCESANDO MENSAJE ===")
-        print(f"From: {from_number}")
-        print(f"Message: {message}")
+        print(f"\n{'='*50}")
+        print(f"PROCESANDO MENSAJE")
+        print(f"{'='*50}")
+        print(f"De: {from_number}")
+        print(f"Mensaje: {message}")
         
         try:
             # 1. Obtener o crear usuario
+            print(f"\n{'>'*20} PASO 1: Usuario {'<'*20}")
             user = await self.user_service.get_or_create_user(from_number)
-            print(f"\n[1] Usuario: {user.model_dump_json(indent=2)}")
+            print(f"Usuario: {user.model_dump_json(indent=2)}")
             
             # 2. Obtener o crear conversación
+            print(f"\n{'>'*20} PASO 2: Conversación {'<'*20}")
             conversation = await self.conversation_service.get_active_conversation(user.id)
             if not conversation:
-                print("\n[2] No hay conversación activa, creando nueva...")
+                print("No hay conversación activa, creando nueva...")
                 conversation = await self.conversation_service.create_conversation(user.id)
-            print(f"\n[2] Conversación: {conversation.model_dump_json(indent=2)}")
+            print(f"Conversación: {conversation.model_dump_json(indent=2)}")
             
             # 3. Guardar mensaje del usuario
+            print(f"\n{'>'*20} PASO 3: Guardar Mensaje {'<'*20}")
             await self.conversation_service.add_message(conversation.id, "user", message)
-            print("\n[3] Mensaje del usuario guardado")
+            print("Mensaje guardado")
             
             # 4. Generar respuesta basada en contexto
+            print(f"\n{'>'*20} PASO 4: Generar Respuesta {'<'*20}")
             response = await self.get_response_based_on_context(conversation, message, user)
-            print(f"\n[4] Respuesta generada: {response}")
+            print(f"Respuesta: {response}")
             
             # 5. Guardar respuesta del bot
+            print(f"\n{'>'*20} PASO 5: Guardar Respuesta {'<'*20}")
             await self.conversation_service.add_message(conversation.id, "bot", response)
-            print("\n[5] Respuesta del bot guardada")
+            print("Respuesta guardada")
+            
+            print(f"\n{'='*50}")
+            print(f"MENSAJE PROCESADO EXITOSAMENTE")
+            print(f"{'='*50}\n")
             
             return response
             
         except Exception as e:
-            print(f"\nError processing message: {str(e)}")
+            print(f"\n{'!'*50}")
+            print(f"ERROR PROCESANDO MENSAJE")
+            print(f"{'!'*50}")
+            print(f"Error: {str(e)}")
             import traceback
             print(traceback.format_exc())
             return "Lo siento, ha ocurrido un error. Por favor, intenta nuevamente."
 
     async def get_response_based_on_context(self, conversation, message: str, user: User) -> str:
         """Generate response based on conversation context"""
-        print(f"\n=== GENERANDO RESPUESTA ===")
-        
-        context = conversation.context
-        state = context.get('state', 'initial')
-        original_message = message
-        message = message.lower().strip()
-        
-        print(f"Estado actual: {state}")
-        print(f"Mensaje original: {original_message}")
-        print(f"Mensaje procesado: {message}")
-        print(f"Contexto: {json.dumps(context, indent=2)}")
-        
-        if state == 'initial':
-            print("\nVerificando condiciones iniciales:")
-            greetings = ['hola', 'hello', 'hi', '1', 'buenos dias', 'buenas']
+        try:
+            print(f"\n=== GENERANDO RESPUESTA BASADA EN CONTEXTO ===")
+            print(f"Estado actual: {conversation.context.get('state', 'unknown')}")
+            print(f"Mensaje: {message}")
             
-            print(f"Saludos válidos: {greetings}")
-            print(f"Mensaje contiene saludo: {any(greeting in message for greeting in greetings)}")
+            # Obtener estado actual y procesar mensaje
+            state = conversation.context.get('state', 'initial')
+            message = message.lower().strip()
             
-            # Verificar cada saludo individualmente para depuración
-            for greeting in greetings:
-                print(f"- '{greeting}' in '{message}': {greeting in message}")
+            # Inicializar respuestas si no existen
+            if 'responses' not in conversation.context:
+                conversation.context['responses'] = {}
             
-            if any(greeting in message for greeting in greetings):
-                name = user.name if user.name else ""
-                greeting = f", {name}" if name else ""
+            print(f"\nProcesando estado: {state}")
+            print(f"Respuestas anteriores: {json.dumps(conversation.context.get('responses', {}), indent=2)}")
+            
+            if state == 'initial':
+                greetings = ['hola', 'hello', 'hi', '1', 'buenos dias', 'buenas']
+                if any(greeting in message for greeting in greetings):
+                    # Resetear conversación si es necesario
+                    if conversation.context.get('state') != 'initial':
+                        await self.conversation_service.reset_conversation(conversation.id)
+                    
+                    # Actualizar contexto
+                    await self.conversation_service.update_conversation_context(
+                        conversation.id,
+                        {
+                            'state': 'welcome',
+                            'responses': {'greeting': message}
+                        }
+                    )
+                    
+                    name = user.name if user.name else ""
+                    greeting = f", {name}" if name else ""
+                    return (f"¡Hola{greeting}! 🌱\n\n"
+                           f"Soy *Fingro*, tu asistente financiero inteligente. "
+                           f"Te ayudaré a conseguir el financiamiento que necesitas para tu cosecha, "
+                           f"de manera rápida y sin complicaciones.\n\n"
+                           f"¿Te gustaría saber:\n"
+                           f"✨ Cuánto podrías ganar con tu cosecha?\n"
+                           f"💰 Si calificas para financiamiento?\n"
+                           f"📊 Qué opciones de crédito tenemos para ti?\n\n"
+                           f"Responde *SI* para comenzar. 🚀")
                 
-                # Resetear la conversación si ya existe
-                if conversation.context.get('state') != 'initial':
-                    print("\nReseteando conversación existente...")
-                    await self.conversation_service.reset_conversation(conversation.id)
-                
-                print("\nActualizando estado a welcome")
-                await self.conversation_service.update_conversation_context(
-                    conversation.id,
-                    {'state': 'welcome'}
-                )
-                
-                return (f"¡Hola{greeting}! 🚜 Soy Fingro, tu aliado para conseguir financiamiento "
-                       f"sin trámites complicados.\n\n"
-                       f"¿Te gustaría saber cuánto podrías ganar con tu cosecha y si calificas "
-                       f"para financiamiento? 💰📊\n\n"
-                       f"Responde *SI* para comenzar.")
+                return ("¡Hola! 🌱\n\n"
+                       "Soy *Fingro*, tu aliado financiero para el campo.\n\n"
+                       "¿Te gustaría conocer las opciones de financiamiento que tenemos para tu cosecha? Salúdame para comenzar. 👋")
             
-            print("\nNo se detectó un saludo válido")
-            return ("¡Hola! 🌱 Soy Fingro, tu aliado financiero.\n\n"
-                   "¿Te gustaría saber si calificas para financiamiento y cuánto podrías ganar con tu cosecha?\n\n"
-                   "Escribe 'hola' o '1' para comenzar")
+            elif state == 'welcome':
+                confirmations = ['si', 'sí', 'yes', 'ok', 'dale', 'va', 'empezar', 'comenzar', 'claro']
+                if any(confirm in message for confirm in confirmations):
+                    # Guardar respuesta y actualizar estado
+                    responses = conversation.context.get('responses', {})
+                    responses['confirmation'] = message
+                    
+                    await self.conversation_service.update_conversation_context(
+                        conversation.id,
+                        {
+                            'state': 'asking_name',
+                            'responses': responses
+                        }
+                    )
+                    return ("¡Perfecto! 🌟 Para empezar, ¿podrías decirme tu nombre?")
+                else:
+                    return ("Para comenzar el proceso, por favor responde *SI*.\n\n"
+                           "Si no deseas continuar, puedes escribir 'salir' en cualquier momento.")
 
-        elif state == 'welcome':
-            print("\nVerificando respuesta de bienvenida")
-            confirmations = ['si', 'sí', 'yes', 'ok', 'dale', 'va', 'empezar', 'comenzar', 'claro']
-            
-            if any(confirm in message for confirm in confirmations):
-                print("\nActualizando estado a asking_name")
+            elif state == 'asking_name':
+                # Guardar nombre en usuario y en contexto
+                user.name = message.title()
+                await self.user_service.update_user(user)
+                
+                responses = conversation.context.get('responses', {})
+                responses['name'] = user.name
+                
                 await self.conversation_service.update_conversation_context(
                     conversation.id,
-                    {'state': 'asking_name'}
+                    {
+                        'state': 'asking_location',
+                        'responses': responses
+                    }
                 )
                 
-                return ("¡Perfecto! 🌟 Para empezar, ¿podrías decirme tu nombre?")
-            else:
-                return ("Para comenzar el proceso, por favor responde *SI*.\n\n"
-                       "Si no deseas continuar, puedes escribir 'salir' en cualquier momento.")
-        
-        elif state == 'asking_name':
-            print("\nProcesando nombre del usuario")
-            # Update user name
-            user.name = message.title()  # Capitalize first letter of each word
-            await self.user_service.update_user(user)
+                return (f"¡Gracias {user.name}! 🤝\n\n"
+                       f"¿En qué departamento te encuentras?")
+
+            elif state == 'asking_location':
+                # Procesar ubicación
+                if ',' in message:
+                    country, location = [part.strip() for part in message.split(',')]
+                else:
+                    country = "Guatemala"
+                    location = message.strip().title()
+                
+                # Actualizar usuario
+                user.country = country
+                user.location = location
+                await self.user_service.update_user(user)
+                
+                # Guardar en contexto
+                responses = conversation.context.get('responses', {})
+                responses['location'] = {
+                    'country': country,
+                    'department': location
+                }
+                
+                await self.conversation_service.update_conversation_context(
+                    conversation.id,
+                    {
+                        'state': 'asking_land_ownership',
+                        'responses': responses
+                    }
+                )
+                
+                return ("¡Excelente! 🌎\n\n"
+                       "¿Los terrenos donde cultivas son propios o alquilados?")
+
+            elif state == 'asking_land_ownership':
+                # Determinar tipo de propiedad
+                ownership = 'propio' if 'propi' in message else 'alquilado' if 'alquil' in message else 'mixto'
+                
+                # Actualizar usuario
+                user.land_ownership = ownership
+                await self.user_service.update_user(user)
+                
+                # Guardar en contexto
+                responses = conversation.context.get('responses', {})
+                responses['land_ownership'] = ownership
+                
+                await self.conversation_service.update_conversation_context(
+                    conversation.id,
+                    {
+                        'state': 'asking_crop',
+                        'responses': responses
+                    }
+                )
+                
+                return ("¡Perfecto! 🌱\n\n"
+                       "¿qué cultivas actualmente?")
+
+            elif state == 'asking_crop':
+                # Guardar cultivo
+                responses = conversation.context.get('responses', {})
+                responses['crop'] = message.strip()
+                
+                # Actualizar usuario
+                user.crops.append(message.strip())
+                await self.user_service.update_user(user)
+                
+                await self.conversation_service.update_conversation_context(
+                    conversation.id,
+                    {
+                        'state': 'finished',
+                        'responses': responses
+                    }
+                )
+                
+                return (f"¡Excelente {user.name}! 🎉\n\n"
+                       f"He guardado toda tu información. Pronto un asesor se pondrá en contacto contigo "
+                       f"para discutir las opciones de financiamiento disponibles para tu cultivo de {message.strip()}.\n\n"
+                       f"Si tienes alguna pregunta adicional, no dudes en escribirme.")
             
-            print(f"Nombre guardado: {user.name}")
-            await self.conversation_service.update_conversation_context(
-                conversation.id,
-                {'state': 'asking_location'}
-            )
-            
-            return (f"¡Gracias {user.name}! 🤝\n\n"
-                   f"¿En qué departamento te encuentras?")
-        
-        elif state == 'asking_location':
-            print("\nProcesando ubicación del usuario")
-            # Update user location
-            if ',' in message:
-                country, location = [part.strip() for part in message.split(',')]
-            else:
-                country = "Guatemala"  # Default country
-                location = message.strip().title()
-            
-            print(f"País: {country}")
-            print(f"Ubicación: {location}")
-            
-            user.country = country
-            user.location = location
-            await self.user_service.update_user(user)
-            
-            await self.conversation_service.update_conversation_context(
-                conversation.id,
-                {'state': 'asking_land_ownership'}
-            )
-            
-            return ("¡Excelente! 🌎\n\n"
-                   "¿Los terrenos donde cultivas son propios o alquilados?")
-        
-        elif state == 'asking_land_ownership':
-            print("\nProcesando propiedad de terrenos")
-            ownership = 'propio' if 'propi' in message else 'alquilado' if 'alquil' in message else 'mixto'
-            
-            print(f"Tipo de propiedad detectado: {ownership}")
-            
-            user.land_ownership = ownership
-            await self.user_service.update_user(user)
-            
-            await self.conversation_service.update_conversation_context(
-                conversation.id,
-                {'state': 'asking_crop'}
-            )
-            
-            return ("¡Perfecto! 🌱\n\n"
-                   "¿qué cultivas actualmente?")
-        
-        print("\nNo se encontró un estado válido")
-        return "Lo siento, no entendí tu mensaje. Escribe 'hola' o '1' para comenzar."
+            print("\nNo se encontró un estado válido")
+            return "Lo siento, no entendí tu mensaje. Escribe 'hola' o '1' para comenzar."
+
+        except Exception as e:
+            print(f"\n{'!'*50}")
+            print(f"ERROR GENERANDO RESPUESTA")
+            print(f"{'!'*50}")
+            print(f"Error: {str(e)}")
+            import traceback
+            print(traceback.format_exc())
+            return "Lo siento, ha ocurrido un error. Por favor, intenta nuevamente."
