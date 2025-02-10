@@ -123,22 +123,21 @@ class FirebaseDB:
             print(f"Error actualizando documento: {str(e)}")
             raise e
     
-    async def delete_document(self, collection: str, doc_id: str):
-        """Delete a document"""
+    async def delete_document(self, collection: str, doc_id: str) -> bool:
+        """Delete a document from a collection"""
         try:
             print(f"\n=== ELIMINANDO DOCUMENTO ===")
             print(f"Colección: {collection}")
             print(f"ID: {doc_id}")
             
-            doc_ref = self.db.collection(collection).document(doc_id)
-            
-            # Verificar si el documento existe
-            doc = doc_ref.get()
+            # Verificar que el documento existe
+            doc = await self.db.collection(collection).document(doc_id).get()
             if not doc.exists:
-                print(f"Error: Documento {doc_id} no existe")
                 raise ValueError(f"Document {doc_id} does not exist")
             
-            doc_ref.delete()
+            # Eliminar documento
+            await self.db.collection(collection).document(doc_id).delete()
+            
             print("Documento eliminado exitosamente")
             return True
             

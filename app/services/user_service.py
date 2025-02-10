@@ -78,3 +78,51 @@ class UserService:
         except Exception as e:
             print(f"Error en update_user: {str(e)}")
             raise e
+
+    async def delete_user_data(self, phone_number: str) -> bool:
+        """Delete a user and all associated data"""
+        try:
+            print(f"\n=== ELIMINANDO DATOS DE USUARIO ===")
+            print(f"Teléfono: {phone_number}")
+            
+            # 1. Buscar usuario por número de teléfono
+            users = await self.db.query_collection(
+                'users',
+                'phone_number',
+                '==',
+                phone_number
+            )
+            
+            if not users:
+                print("No se encontró el usuario")
+                return True
+                
+            user_data = users[0]
+            user_id = user_data.get('id')
+            
+            print(f"Usuario encontrado: {user_id}")
+            
+            # 2. Buscar conversaciones del usuario
+            convs = await self.db.query_collection(
+                'conversations',
+                'user_id',
+                '==',
+                user_id
+            )
+            
+            # 3. Eliminar conversaciones
+            for conv in convs:
+                conv_id = conv.get('id')
+                print(f"Eliminando conversación: {conv_id}")
+                await self.db.delete_document('conversations', conv_id)
+            
+            # 4. Eliminar usuario
+            print(f"Eliminando usuario: {user_id}")
+            await self.db.delete_document('users', user_id)
+            
+            print("Datos eliminados exitosamente")
+            return True
+            
+        except Exception as e:
+            print(f"Error eliminando datos de usuario: {str(e)}")
+            raise e
