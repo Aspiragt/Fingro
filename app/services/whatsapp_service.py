@@ -160,21 +160,38 @@ class WhatsAppCloudAPI:
                 name = user.name if user.name else ""
                 greeting = f", {name}" if name else ""
                 
+                print("\nActualizando estado a welcome")
+                await self.conversation_service.update_conversation_context(
+                    conversation.id,
+                    {'state': 'welcome'}
+                )
+                
+                return (f"¡Hola{greeting}! 🚜 Soy Fingro, tu aliado para conseguir financiamiento "
+                       f"sin trámites complicados.\n\n"
+                       f"¿Te gustaría saber cuánto podrías ganar con tu cosecha y si calificas "
+                       f"para financiamiento? 💰📊\n\n"
+                       f"Responde *SI* para comenzar.")
+            
+            print("\nNo se detectó un saludo válido")
+            return ("¡Hola! 🌱 Soy Fingro, tu aliado financiero.\n\n"
+                   "¿Te gustaría saber si calificas para financiamiento y cuánto podrías ganar con tu cosecha?\n\n"
+                   "Escribe 'hola' o '1' para comenzar")
+
+        elif state == 'welcome':
+            print("\nVerificando respuesta de bienvenida")
+            confirmations = ['si', 'sí', 'yes', 'ok', 'dale', 'va', 'empezar', 'comenzar', 'claro']
+            
+            if any(confirm in message for confirm in confirmations):
                 print("\nActualizando estado a asking_name")
                 await self.conversation_service.update_conversation_context(
                     conversation.id,
                     {'state': 'asking_name'}
                 )
                 
-                return (f"¡Hola{greeting}! 🚜 Soy Fingro, tu aliado para conseguir financiamiento "
-                       f"sin trámites complicados. Te haré unas preguntas rápidas y te diré cuánto "
-                       f"podrías ganar con tu cosecha y si calificas para financiamiento. 💰📊\n\n"
-                       f"Para empezar, ¿cómo te llamas?")
-            
-            print("\nNo se detectó un saludo válido")
-            return ("¡Hola! 🌱 Soy Fingro, tu aliado financiero.\n\n"
-                   "¿Te gustaría saber si calificas para financiamiento y cuánto podrías ganar con tu cosecha?\n\n"
-                   "Escribe 'hola' o '1' para comenzar")
+                return ("¡Perfecto! 🌟 Para empezar, ¿podrías decirme tu nombre?")
+            else:
+                return ("Para comenzar el proceso, por favor responde *SI*.\n\n"
+                       "Si no deseas continuar, puedes escribir 'salir' en cualquier momento.")
         
         elif state == 'asking_name':
             print("\nProcesando nombre del usuario")
