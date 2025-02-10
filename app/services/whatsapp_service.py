@@ -105,10 +105,10 @@ class WhatsAppCloudAPI:
             print(f"\n[1] Usuario: {user.model_dump_json(indent=2)}")
             
             # 2. Obtener o crear conversación
-            conversation = await self.conversation_service.get_active_conversation(from_number)
+            conversation = await self.conversation_service.get_active_conversation(user.id)
             if not conversation:
                 print("\n[2] No hay conversación activa, creando nueva...")
-                conversation = await self.conversation_service.create_conversation(from_number)
+                conversation = await self.conversation_service.create_conversation(user.id)
             print(f"\n[2] Conversación: {conversation.model_dump_json(indent=2)}")
             
             # 3. Guardar mensaje del usuario
@@ -161,7 +161,7 @@ class WhatsAppCloudAPI:
                 greeting = f", {name}" if name else ""
                 
                 print("\nActualizando estado a asking_name")
-                await self.conversation_service.update_context(
+                await self.conversation_service.update_conversation_context(
                     conversation.id,
                     {'state': 'asking_name'}
                 )
@@ -180,10 +180,10 @@ class WhatsAppCloudAPI:
             print("\nProcesando nombre del usuario")
             # Update user name
             user.name = message.title()  # Capitalize first letter of each word
-            await self.user_service.update_user(user.id, {'name': user.name})
+            await self.user_service.update_user(user)
             
             print(f"Nombre guardado: {user.name}")
-            await self.conversation_service.update_context(
+            await self.conversation_service.update_conversation_context(
                 conversation.id,
                 {'state': 'asking_location'}
             )
@@ -203,15 +203,11 @@ class WhatsAppCloudAPI:
             print(f"País: {country}")
             print(f"Ubicación: {location}")
             
-            await self.user_service.update_user(
-                user.id,
-                {
-                    'country': country,
-                    'location': location
-                }
-            )
+            user.country = country
+            user.location = location
+            await self.user_service.update_user(user)
             
-            await self.conversation_service.update_context(
+            await self.conversation_service.update_conversation_context(
                 conversation.id,
                 {'state': 'asking_land_ownership'}
             )
@@ -225,12 +221,10 @@ class WhatsAppCloudAPI:
             
             print(f"Tipo de propiedad detectado: {ownership}")
             
-            await self.user_service.update_user(
-                user.id,
-                {'land_ownership': ownership}
-            )
+            user.land_ownership = ownership
+            await self.user_service.update_user(user)
             
-            await self.conversation_service.update_context(
+            await self.conversation_service.update_conversation_context(
                 conversation.id,
                 {'state': 'asking_crop'}
             )
