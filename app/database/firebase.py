@@ -131,12 +131,13 @@ class FirebaseDB:
             print(f"ID: {doc_id}")
             
             # Verificar que el documento existe
-            doc = await self.db.collection(collection).document(doc_id).get()
+            doc_ref = self.db.collection(collection).document(doc_id)
+            doc = await doc_ref.get()
             if not doc.exists:
                 raise ValueError(f"Document {doc_id} does not exist")
             
             # Eliminar documento
-            await self.db.collection(collection).document(doc_id).delete()
+            await doc_ref.delete()
             
             print("Documento eliminado exitosamente")
             return True
