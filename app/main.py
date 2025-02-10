@@ -43,60 +43,6 @@ async def verify_webhook(request: Request):
         print(f"Error verificando webhook: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-def get_response_for_state(user_id: str, message: str) -> str:
-    """
-    Determina la respuesta basada en el estado del usuario y su mensaje
-    """
-    message = message.lower().strip()
-    state = user_states.get(user_id, "initial")
-    
-    if state == "initial":
-        if "hola" in message or message == "1":
-            user_states[user_id] = "asked_crop"
-            return ("¡Hola! 🌱 Bienvenido a Fingro.\n\n"
-                   "¿Qué cultivo te gustaría analizar?\n\n"
-                   "1. Maíz 🌽\n"
-                   "2. Frijol 🫘\n"
-                   "3. Café ☕\n"
-                   "4. Otro cultivo")
-        
-        return ("¡Hola! 🌱 Soy el asistente de Fingro.\n\n"
-                "¿Te gustaría saber cuánto podrías ganar con tu cosecha?\n\n"
-                "Escribe 1 o 'hola' para comenzar")
-
-    elif state == "asked_crop":
-        crops = {
-            "1": "Maíz 🌽",
-            "2": "Frijol 🫘",
-            "3": "Café ☕",
-            "4": "Otro cultivo"
-        }
-        
-        if message in crops:
-            user_states[user_id] = "asked_area"
-            selected_crop = crops[message]
-            return (f"Has seleccionado: {selected_crop}\n\n"
-                   f"¿Cuántas hectáreas o cuerdas tienes sembradas de {selected_crop}?\n\n"
-                   "Por favor, escribe el número y especifica si son hectáreas o cuerdas.")
-        
-        return ("Por favor, selecciona una opción válida:\n\n"
-                "1. Maíz 🌽\n"
-                "2. Frijol 🫘\n"
-                "3. Café ☕\n"
-                "4. Otro cultivo")
-
-    elif state == "asked_area":
-        # Reiniciamos el estado para una nueva consulta
-        user_states[user_id] = "initial"
-        return ("¡Gracias por la información! 📊\n\n"
-                "Basado en los datos proporcionados, te ayudaré a:\n"
-                "✅ Calcular tu rendimiento esperado\n"
-                "✅ Estimar tus costos de producción\n"
-                "✅ Proyectar tus ganancias potenciales\n\n"
-                "¿Te gustaría hacer otra consulta? Escribe 'hola' o '1' para comenzar de nuevo.")
-
-    return "Lo siento, no entendí tu mensaje. Escribe 'hola' o '1' para comenzar."
-
 @app.post("/webhook/whatsapp")
 async def whatsapp_webhook(request: Request):
     """
@@ -118,9 +64,10 @@ async def whatsapp_webhook(request: Request):
                 
                 print(f"\nMensaje recibido de {from_number}: {message_body}")
                 
-                # Obtener respuesta basada en el estado
-                response_message = get_response_for_state(from_number, message_body)
+                # Procesar mensaje y obtener respuesta
+                response_message = await whatsapp.process_message(from_number, message_body)
                 
+                # Enviar respuesta
                 try:
                     response = whatsapp.send_text_message(
                         to_number=from_number,
