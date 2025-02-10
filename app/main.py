@@ -50,48 +50,86 @@ async def whatsapp_webhook(request: Request):
     """
     try:
         data = await request.json()
-        print(f"Datos recibidos en webhook POST: {json.dumps(data, indent=2)}")
+        print(f"\nDEBUG - Webhook data received: {json.dumps(data, indent=2)}")
         
         try:
+            # Verificar si hay entradas
+            if not data.get('entry'):
+                print("DEBUG - No entries in webhook data")
+                return {"status": "success"}
+            
             entry = data['entry'][0]
+            
+            # Verificar si hay cambios
+            if not entry.get('changes'):
+                print("DEBUG - No changes in entry")
+                return {"status": "success"}
+            
             changes = entry['changes'][0]
+            
+            # Verificar si hay valor
+            if not changes.get('value'):
+                print("DEBUG - No value in changes")
+                return {"status": "success"}
+            
             value = changes['value']
             
-            if 'messages' in value:
-                message = value['messages'][0]
-                from_number = message['from']
-                message_body = message.get('text', {}).get('body', '')
+            # Verificar si hay mensajes
+            if not value.get('messages'):
+                print("DEBUG - No messages in value")
+                return {"status": "success"}
+            
+            message = value['messages'][0]
+            
+            # Obtener el número y el texto del mensaje
+            from_number = message['from']
+            
+            # Verificar si es un mensaje de texto
+            if message.get('type') != 'text':
+                print(f"DEBUG - Message is not text type: {message.get('type')}")
+                return {"status": "success"}
+            
+            if not message.get('text', {}).get('body'):
+                print("DEBUG - No text body in message")
+                return {"status": "success"}
+            
+            message_body = message['text']['body']
+            
+            print(f"\nDEBUG - Processing message:")
+            print(f"From: {from_number}")
+            print(f"Message: {message_body}")
+            
+            # Procesar mensaje y obtener respuesta
+            response_message = await whatsapp.process_message(from_number, message_body)
+            
+            print(f"\nDEBUG - Sending response: {response_message}")
+            
+            # Enviar respuesta
+            try:
+                response = whatsapp.send_text_message(
+                    to_number=from_number,
+                    message=response_message
+                )
+                print(f"DEBUG - Response sent successfully: {json.dumps(response, indent=2)}")
                 
-                print(f"\nMensaje recibido de {from_number}: {message_body}")
-                
-                # Procesar mensaje y obtener respuesta
-                response_message = await whatsapp.process_message(from_number, message_body)
-                
-                # Enviar respuesta
-                try:
-                    response = whatsapp.send_text_message(
-                        to_number=from_number,
-                        message=response_message
-                    )
-                    print(f"Respuesta enviada exitosamente: {json.dumps(response, indent=2)}")
-                except Exception as e:
-                    print(f"Error enviando respuesta: {str(e)}")
-                    if hasattr(e, 'response'):
-                        print(f"Respuesta del error: {e.response.text}")
-                    raise e
+            except Exception as e:
+                print(f"Error sending response: {str(e)}")
+                if hasattr(e, 'response'):
+                    print(f"Error response: {e.response.text}")
+                raise e
                 
             return {"status": "success"}
             
         except Exception as e:
-            print(f"Error procesando mensaje: {str(e)}")
+            print(f"Error processing message: {str(e)}")
             if hasattr(e, 'response'):
-                print(f"Respuesta del error: {e.response.text}")
+                print(f"Error response: {e.response.text}")
             raise e
             
     except Exception as e:
-        print(f"Error en webhook: {str(e)}")
+        print(f"Error in webhook: {str(e)}")
         if hasattr(e, 'response'):
-            print(f"Respuesta del error: {e.response.text}")
+            print(f"Error response: {e.response.text}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
