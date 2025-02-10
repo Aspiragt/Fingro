@@ -160,6 +160,11 @@ class WhatsAppCloudAPI:
                 name = user.name if user.name else ""
                 greeting = f", {name}" if name else ""
                 
+                # Resetear la conversación si ya existe
+                if conversation.context.get('state') != 'initial':
+                    print("\nReseteando conversación existente...")
+                    await self.conversation_service.reset_conversation(conversation.id)
+                
                 print("\nActualizando estado a welcome")
                 await self.conversation_service.update_conversation_context(
                     conversation.id,
