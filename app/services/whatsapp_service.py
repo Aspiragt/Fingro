@@ -36,7 +36,7 @@ class WhatsAppCloudAPI:
         
         print(f"\nAPI Request:")
         print(f"URL: {self.api_url}")
-        print(f"Headers: {json.dumps(headers, indent=2)}")
+        print(f"Headers: {json.dumps({k: '***' if k == 'Authorization' else v for k, v in headers.items()}, indent=2)}")
         print(f"Data: {json.dumps(data, indent=2)}")
         
         try:
@@ -44,7 +44,8 @@ class WhatsAppCloudAPI:
                 response = client.post(
                     self.api_url,
                     headers=headers,
-                    json=data
+                    json=data,
+                    timeout=30.0
                 )
                 response.raise_for_status()
                 print(f"\nAPI Response: {response.text}")
@@ -100,10 +101,12 @@ class WhatsAppCloudAPI:
         
         context = conversation.context
         state = context.get('state', 'initial')
+        original_message = message
         message = message.lower().strip()
         
         print(f"Estado actual: {state}")
-        print(f"Mensaje recibido: {message}")
+        print(f"Mensaje original: {original_message}")
+        print(f"Mensaje procesado: {message}")
         print(f"Contexto: {json.dumps(context, indent=2)}")
         
         if state == 'initial':
@@ -112,6 +115,10 @@ class WhatsAppCloudAPI:
             
             print(f"Saludos válidos: {greetings}")
             print(f"Mensaje contiene saludo: {any(greeting in message for greeting in greetings)}")
+            
+            # Verificar cada saludo individualmente para depuración
+            for greeting in greetings:
+                print(f"- '{greeting}' in '{message}': {greeting in message}")
             
             if any(greeting in message for greeting in greetings):
                 name = user.name if user.name else ""
@@ -128,32 +135,37 @@ class WhatsAppCloudAPI:
                        f"podrías ganar con tu cosecha y si calificas para financiamiento. 💰📊\n\n"
                        f"Para empezar, ¿cómo te llamas?")
             
+            print("\nNo se detectó un saludo válido")
             return ("¡Hola! 🌱 Soy Fingro, tu aliado financiero.\n\n"
                    "¿Te gustaría saber si calificas para financiamiento y cuánto podrías ganar con tu cosecha?\n\n"
                    "Escribe 'hola' o '1' para comenzar")
         
         elif state == 'asking_name':
+            print("\nProcesando nombre del usuario")
             # Update user name
             user.name = message.title()  # Capitalize first letter of each word
             await self.user_service.update_user(user.id, {'name': user.name})
             
+            print(f"Nombre guardado: {user.name}")
             await self.conversation_service.update_context(
                 conversation.id,
                 {'state': 'asking_location'}
             )
             
-            return (f"Gracias, {user.name}. Ahora dime, ¿en qué país y "
-                   f"departamento/villa/pueblo vives?")
+            return (f"¡Gracias {user.name}! 🤝\n\n"
+                   f"¿En qué departamento te encuentras?")
         
         elif state == 'asking_location':
+            print("\nProcesando ubicación del usuario")
             # Update user location
-            location_parts = message.split(',')
-            if len(location_parts) >= 2:
-                country = location_parts[0].strip().title()
-                location = location_parts[1].strip().title()
+            if ',' in message:
+                country, location = [part.strip() for part in message.split(',')]
             else:
                 country = "Guatemala"  # Default country
                 location = message.strip().title()
+            
+            print(f"País: {country}")
+            print(f"Ubicación: {location}")
             
             await self.user_service.update_user(
                 user.id,
@@ -168,11 +180,14 @@ class WhatsAppCloudAPI:
                 {'state': 'asking_land_ownership'}
             )
             
-            return (f"¡Perfecto! Esto nos ayudará a calcular mejor tu financiamiento. "
-                   f"Ahora dime, ¿tienes terrenos propios o alquilados?")
+            return ("¡Excelente! 🌎\n\n"
+                   "¿Los terrenos donde cultivas son propios o alquilados?")
         
         elif state == 'asking_land_ownership':
+            print("\nProcesando propiedad de terrenos")
             ownership = 'propio' if 'propi' in message else 'alquilado' if 'alquil' in message else 'mixto'
+            
+            print(f"Tipo de propiedad detectado: {ownership}")
             
             await self.user_service.update_user(
                 user.id,
@@ -184,7 +199,8 @@ class WhatsAppCloudAPI:
                 {'state': 'asking_crop'}
             )
             
-            return ("¡Gracias por la información! Ahora cuéntame, "
+            return ("¡Perfecto! 🌱\n\n"
                    "¿qué cultivas actualmente?")
         
+        print("\nNo se encontró un estado válido")
         return "Lo siento, no entendí tu mensaje. Escribe 'hola' o '1' para comenzar."
