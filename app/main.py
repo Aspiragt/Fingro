@@ -28,6 +28,17 @@ async def delete_user_data(phone_number: str):
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.delete("/database/clean")
+async def clean_database():
+    """Clean all data from the database"""
+    try:
+        await whatsapp.user_service.db.delete_all_collections()
+        return {"status": "success", "message": "Database cleaned successfully"}
+    except Exception as e:
+        print(f"Error cleaning database: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/webhook/whatsapp")
 async def verify_webhook(request: Request):
     """

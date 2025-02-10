@@ -146,6 +146,47 @@ class FirebaseDB:
             print(f"Error eliminando documento: {str(e)}")
             raise e
     
+    async def delete_all_documents(self, collection: str) -> bool:
+        """Delete all documents in a collection"""
+        try:
+            print(f"\n=== ELIMINANDO TODOS LOS DOCUMENTOS ===")
+            print(f"Colección: {collection}")
+            
+            # Obtener todos los documentos
+            docs = self.db.collection(collection).get()
+            count = 0
+            
+            # Eliminar cada documento
+            for doc in docs:
+                doc.reference.delete()
+                count += 1
+                
+            print(f"Documentos eliminados: {count}")
+            return True
+            
+        except Exception as e:
+            print(f"Error eliminando documentos: {str(e)}")
+            raise e
+    
+    async def delete_all_collections(self) -> bool:
+        """Delete all documents in all collections"""
+        try:
+            print(f"\n=== LIMPIANDO BASE DE DATOS ===")
+            
+            # Lista de colecciones a limpiar
+            collections = ['users', 'conversations']
+            
+            # Limpiar cada colección
+            for collection in collections:
+                await self.delete_all_documents(collection)
+            
+            print("Base de datos limpiada exitosamente")
+            return True
+            
+        except Exception as e:
+            print(f"Error limpiando base de datos: {str(e)}")
+            raise e
+    
     async def query_collection(self, collection: str, field: str, operator: str, value: any):
         """Query documents in a collection"""
         try:
