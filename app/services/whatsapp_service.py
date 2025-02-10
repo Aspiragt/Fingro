@@ -82,7 +82,8 @@ class WhatsAppCloudAPI:
             print(f"DEBUG - 'hola' in message: {'hola' in message}")
             print(f"DEBUG - message == '1': {message == '1'}")
             
-            if 'hola' in message or message == '1':
+            # Verificar el mensaje inicial de manera más flexible
+            if any(greeting in message for greeting in ['hola', 'hello', 'hi', '1', 'buenos dias', 'buenas']):
                 name = user.name if user.name else ""
                 greeting = f", {name}" if name else ""
                 
