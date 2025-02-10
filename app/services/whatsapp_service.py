@@ -8,10 +8,23 @@ from app.services.user_service import UserService
 
 class WhatsAppCloudAPI:
     def __init__(self):
+        print("\n=== INICIALIZANDO WHATSAPP API ===")
         self.phone_number_id = os.getenv('WHATSAPP_PHONE_NUMBER_ID')
         self.access_token = os.getenv('WHATSAPP_ACCESS_TOKEN')
         self.api_version = 'v17.0'
         self.api_url = f"https://graph.facebook.com/{self.api_version}/{self.phone_number_id}/messages"
+        
+        print(f"Phone Number ID: {self.phone_number_id}")
+        print(f"Access Token: {'*' * 20}{self.access_token[-4:] if self.access_token else 'None'}")
+        print(f"API Version: {self.api_version}")
+        print(f"API URL: {self.api_url}")
+        
+        if not self.phone_number_id or not self.access_token:
+            print("ERROR: Missing required environment variables")
+            print(f"WHATSAPP_PHONE_NUMBER_ID: {'Present' if self.phone_number_id else 'Missing'}")
+            print(f"WHATSAPP_ACCESS_TOKEN: {'Present' if self.access_token else 'Missing'}")
+            raise ValueError("Missing required WhatsApp API configuration")
+        
         self.conversation_service = ConversationService()
         self.user_service = UserService()
 
@@ -47,14 +60,37 @@ class WhatsAppCloudAPI:
                     json=data,
                     timeout=30.0
                 )
+                
+                print(f"\nAPI Response Status: {response.status_code}")
+                print(f"API Response Headers: {dict(response.headers)}")
+                print(f"API Response Body: {response.text}")
+                
+                try:
+                    response_json = response.json()
+                    print(f"API Response JSON: {json.dumps(response_json, indent=2)}")
+                except json.JSONDecodeError:
+                    print("Response is not JSON")
+                
+                if response.status_code == 401:
+                    print("\nERROR 401: Unauthorized")
+                    print("This usually means:")
+                    print("1. The access token is invalid")
+                    print("2. The access token has expired")
+                    print("3. The access token doesn't have the required permissions")
+                    raise ValueError("WhatsApp API authentication failed")
+                
                 response.raise_for_status()
-                print(f"\nAPI Response: {response.text}")
                 return response.json()
                 
+        except httpx.HTTPStatusError as e:
+            print(f"\nHTTP Error: {str(e)}")
+            print(f"Response: {e.response.text if hasattr(e, 'response') else 'No response'}")
+            raise
+        except httpx.RequestError as e:
+            print(f"\nRequest Error: {str(e)}")
+            raise
         except Exception as e:
-            print(f"\nError sending message: {str(e)}")
-            if hasattr(e, 'response'):
-                print(f"Response error: {e.response.text}")
+            print(f"\nUnexpected Error: {str(e)}")
             raise
 
     async def process_message(self, from_number: str, message: str) -> str:
