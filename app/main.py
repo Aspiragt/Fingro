@@ -17,6 +17,17 @@ user_states = {}
 async def root():
     return {"message": "Fingro WhatsApp API"}
 
+@app.delete("/users/{phone_number}/data")
+async def delete_user_data(phone_number: str):
+    """Delete all data for a user"""
+    try:
+        await whatsapp.user_service.delete_user_data(phone_number)
+        return {"status": "success", "message": f"Data deleted for user {phone_number}"}
+    except Exception as e:
+        print(f"Error deleting user data: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/webhook/whatsapp")
 async def verify_webhook(request: Request):
     """
