@@ -1,8 +1,10 @@
 from typing import Optional, Dict
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 
 class Crop(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    
     id: str
     name: str
     type: str
@@ -18,6 +20,3 @@ class Crop(BaseModel):
     notes: Optional[str] = None
     created_at: datetime = datetime.now()
     updated_at: datetime = datetime.now()
-    
-    class Config:
-        from_attributes = True
