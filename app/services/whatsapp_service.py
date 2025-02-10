@@ -56,7 +56,7 @@ class WhatsAppCloudAPI:
         )
         
         # Process message based on context
-        response = await self.get_response_based_on_context(conversation, message_body)
+        response = await self.get_response_based_on_context(conversation, message_body, user)
         
         # Add bot response to conversation
         await self.conversation_service.add_message(
@@ -67,7 +67,7 @@ class WhatsAppCloudAPI:
         
         return response
     
-    async def get_response_based_on_context(self, conversation, message: str) -> str:
+    async def get_response_based_on_context(self, conversation, message: str, user: User) -> str:
         """Generate response based on conversation context"""
         context = conversation.context
         state = context.get('state', 'initial')
@@ -75,85 +75,79 @@ class WhatsAppCloudAPI:
         
         if state == 'initial':
             if 'hola' in message or message == '1':
+                name = user.name if user.name else ""
+                greeting = f", {name}" if name else ""
+                
                 await self.conversation_service.update_context(
                     conversation.id,
-                    {'state': 'asking_crop'}
+                    {'state': 'asking_name'}
                 )
-                return ("¡Hola! 🌱 Bienvenido a Fingro.\n\n"
-                       "Me gustaría ayudarte a analizar tu cultivo. "
-                       "¿Qué cultivo tienes o te gustaría sembrar?\n\n"
-                       "Puedes decirme cualquier cultivo que tengas en mente.")
+                
+                return (f"¡Hola{greeting}! 🚜 Soy Fingro, tu aliado para conseguir financiamiento "
+                       f"sin trámites complicados. Te haré unas preguntas rápidas y te diré cuánto "
+                       f"podrías ganar con tu cosecha y si calificas para financiamiento. 💰📊\n\n"
+                       f"Para empezar, ¿cómo te llamas?")
             
-            return ("¡Hola! 🌱 Soy el asistente de Fingro.\n\n"
-                    "¿Te gustaría saber cuánto podrías ganar con tu cosecha?\n\n"
-                    "Escribe 'hola' o '1' para comenzar")
+            return ("¡Hola! 🌱 Soy Fingro, tu aliado financiero.\n\n"
+                   "¿Te gustaría saber si calificas para financiamiento y cuánto podrías ganar con tu cosecha?\n\n"
+                   "Escribe 'hola' o '1' para comenzar")
         
-        elif state == 'asking_crop':
-            # Store the crop name
+        elif state == 'asking_name':
+            # Update user name
+            user.name = message.title()  # Capitalize first letter of each word
+            await self.db.update_document('users', user.id, {'name': user.name})
+            
             await self.conversation_service.update_context(
                 conversation.id,
+                {'state': 'asking_location'}
+            )
+            
+            return (f"Gracias, {user.name}. Ahora dime, ¿en qué país y "
+                   f"departamento/villa/pueblo vives?")
+        
+        elif state == 'asking_location':
+            # Update user location
+            location_parts = message.split(',')
+            if len(location_parts) >= 2:
+                country = location_parts[0].strip().title()
+                location = location_parts[1].strip().title()
+            else:
+                country = "Guatemala"  # Default country
+                location = message.strip().title()
+            
+            await self.db.update_document(
+                'users', 
+                user.id,
                 {
-                    'state': 'asking_area',
-                    'collected_data': {
-                        'crop': message
-                    }
+                    'country': country,
+                    'location': location
                 }
             )
             
-            return (f"¡Excelente elección! Has seleccionado: {message}\n\n"
-                   f"¿Cuántas hectáreas o cuerdas tienes o planeas sembrar de {message}?\n\n"
-                   "Por favor, especifica el número y si son hectáreas o cuerdas.")
-        
-        elif state == 'asking_area':
-            # Try to extract number and unit from message
-            import re
-            numbers = re.findall(r'\d+(?:\.\d+)?', message)
-            area = float(numbers[0]) if numbers else 0
-            unit = 'hectáreas' if 'hectarea' in message or 'hectárea' in message else 'cuerdas'
-            
-            collected_data = context.get('collected_data', {})
-            collected_data.update({
-                'area': area,
-                'area_unit': unit
-            })
-            
-            # Create crop in database
-            crop = {
-                'id': str(uuid.uuid4()),
-                'name': collected_data['crop'],
-                'type': collected_data['crop'],
-                'area': area,
-                'area_unit': unit,
-                'user_id': conversation.user_id,
-                'created_at': datetime.now(),
-                'updated_at': datetime.now()
-            }
-            
-            await self.db.add_document('crops', crop, crop['id'])
-            
-            # Update user's crops
-            user_data = await self.db.get_document('users', conversation.user_id)
-            if user_data:
-                user = User(**user_data)
-                user.crops.append(crop['id'])
-                await self.db.update_document('users', user.id, {'crops': user.crops})
-            
-            # Reset conversation state
             await self.conversation_service.update_context(
                 conversation.id,
-                {
-                    'state': 'initial',
-                    'collected_data': {}
-                }
+                {'state': 'asking_land_ownership'}
             )
             
-            return (f"¡Perfecto! He registrado tu cultivo de {collected_data['crop']} "
-                   f"con un área de {area} {unit}.\n\n"
-                   "En los próximos días estaré:\n"
-                   "✅ Analizando los precios actuales del mercado\n"
-                   "✅ Calculando costos estimados de producción\n"
-                   "✅ Preparando recomendaciones personalizadas\n\n"
-                   "¿Te gustaría registrar otro cultivo? Escribe 'hola' o '1' para comenzar de nuevo.")
+            return (f"¡Perfecto! Esto nos ayudará a calcular mejor tu financiamiento. "
+                   f"Ahora dime, ¿tienes terrenos propios o alquilados?")
+        
+        elif state == 'asking_land_ownership':
+            ownership = 'propio' if 'propi' in message else 'alquilado' if 'alquil' in message else 'mixto'
+            
+            await self.db.update_document(
+                'users',
+                user.id,
+                {'land_ownership': ownership}
+            )
+            
+            await self.conversation_service.update_context(
+                conversation.id,
+                {'state': 'asking_crop'}
+            )
+            
+            return ("¡Gracias por la información! Ahora cuéntame, "
+                   "¿qué cultivas actualmente?")
         
         return "Lo siento, no entendí tu mensaje. Escribe 'hola' o '1' para comenzar."
         
