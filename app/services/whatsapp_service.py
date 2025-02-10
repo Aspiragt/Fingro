@@ -1,93 +1,123 @@
+from typing import Optional, Dict, Any
 import os
 import json
-import requests
-from typing import Dict, List, Optional
-from dotenv import load_dotenv
-from datetime import datetime
-import uuid
-from app.database.firebase import db
-from app.services.conversation_service import ConversationService
+import httpx
 from app.models.user import User
-
-load_dotenv()
+from app.services.conversation_service import ConversationService
+from app.services.user_service import UserService
 
 class WhatsAppCloudAPI:
     def __init__(self):
         self.phone_number_id = os.getenv('WHATSAPP_PHONE_NUMBER_ID')
         self.access_token = os.getenv('WHATSAPP_ACCESS_TOKEN')
-        self.api_version = 'v21.0'
-        self.api_url = f'https://graph.facebook.com/{self.api_version}/{self.phone_number_id}/messages'
+        self.api_version = 'v17.0'
+        self.api_url = f"https://graph.facebook.com/{self.api_version}/{self.phone_number_id}/messages"
         self.conversation_service = ConversationService()
-        self.db = db
+        self.user_service = UserService()
+
+    def send_text_message(self, to_number: str, message: str) -> Dict[str, Any]:
+        """Send a text message to a WhatsApp number"""
+        print(f"\n=== ENVIANDO MENSAJE ===")
+        print(f"To: {to_number}")
+        print(f"Message: {message}")
         
-    async def get_or_create_user(self, phone_number: str) -> User:
-        """Get existing user or create a new one"""
-        users = await self.db.query_collection('users', 'phone_number', '==', phone_number)
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "Content-Type": "application/json"
+        }
         
-        if users:
-            return User(**users[0])
+        data = {
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": to_number,
+            "type": "text",
+            "text": {"body": message}
+        }
         
-        # Create new user
-        user = User(
-            id=str(uuid.uuid4()),
-            phone_number=phone_number,
-            created_at=datetime.now(),
-            updated_at=datetime.now()
-        )
+        print(f"\nAPI Request:")
+        print(f"URL: {self.api_url}")
+        print(f"Headers: {json.dumps(headers, indent=2)}")
+        print(f"Data: {json.dumps(data, indent=2)}")
         
-        await self.db.add_document('users', user.model_dump(), user.id)
-        return user
-    
-    async def process_message(self, from_number: str, message_body: str) -> str:
-        """Process incoming message and return response"""
-        # Get or create user
-        user = await self.get_or_create_user(from_number)
+        try:
+            with httpx.Client() as client:
+                response = client.post(
+                    self.api_url,
+                    headers=headers,
+                    json=data
+                )
+                response.raise_for_status()
+                print(f"\nAPI Response: {response.text}")
+                return response.json()
+                
+        except Exception as e:
+            print(f"\nError sending message: {str(e)}")
+            if hasattr(e, 'response'):
+                print(f"Response error: {e.response.text}")
+            raise
+
+    async def process_message(self, from_number: str, message: str) -> str:
+        """Process an incoming message and return the appropriate response"""
+        print(f"\n=== PROCESANDO MENSAJE ===")
+        print(f"From: {from_number}")
+        print(f"Message: {message}")
         
-        # Get active conversation or create new one
-        conversation = await self.conversation_service.get_active_conversation(user.id)
-        if not conversation:
-            conversation = await self.conversation_service.create_conversation(user.id)
-        
-        # Add user message to conversation
-        await self.conversation_service.add_message(
-            conversation.id,
-            'user',
-            message_body
-        )
-        
-        # Process message based on context
-        response = await self.get_response_based_on_context(conversation, message_body, user)
-        
-        # Add bot response to conversation
-        await self.conversation_service.add_message(
-            conversation.id,
-            'assistant',
-            response
-        )
-        
-        return response
-    
+        try:
+            # 1. Obtener o crear usuario
+            user = await self.user_service.get_or_create_user(from_number)
+            print(f"\n[1] Usuario: {user.model_dump_json(indent=2)}")
+            
+            # 2. Obtener o crear conversación
+            conversation = await self.conversation_service.get_active_conversation(from_number)
+            if not conversation:
+                print("\n[2] No hay conversación activa, creando nueva...")
+                conversation = await self.conversation_service.create_conversation(from_number)
+            print(f"\n[2] Conversación: {conversation.model_dump_json(indent=2)}")
+            
+            # 3. Guardar mensaje del usuario
+            await self.conversation_service.add_message(conversation.id, "user", message)
+            print("\n[3] Mensaje del usuario guardado")
+            
+            # 4. Generar respuesta basada en contexto
+            response = await self.get_response_based_on_context(conversation, message, user)
+            print(f"\n[4] Respuesta generada: {response}")
+            
+            # 5. Guardar respuesta del bot
+            await self.conversation_service.add_message(conversation.id, "bot", response)
+            print("\n[5] Respuesta del bot guardada")
+            
+            return response
+            
+        except Exception as e:
+            print(f"\nError processing message: {str(e)}")
+            import traceback
+            print(traceback.format_exc())
+            return "Lo siento, ha ocurrido un error. Por favor, intenta nuevamente."
+
     async def get_response_based_on_context(self, conversation, message: str, user: User) -> str:
         """Generate response based on conversation context"""
+        print(f"\n=== GENERANDO RESPUESTA ===")
+        
         context = conversation.context
         state = context.get('state', 'initial')
         message = message.lower().strip()
         
-        print(f"\nDEBUG - Current state: {state}")
-        print(f"DEBUG - Message received: {message}")
-        print(f"DEBUG - Context: {context}")
+        print(f"Estado actual: {state}")
+        print(f"Mensaje recibido: {message}")
+        print(f"Contexto: {json.dumps(context, indent=2)}")
         
         if state == 'initial':
-            print(f"DEBUG - Checking initial state conditions")
-            print(f"DEBUG - 'hola' in message: {'hola' in message}")
-            print(f"DEBUG - message == '1': {message == '1'}")
+            print("\nVerificando condiciones iniciales:")
+            greetings = ['hola', 'hello', 'hi', '1', 'buenos dias', 'buenas']
             
-            # Verificar el mensaje inicial de manera más flexible
-            if any(greeting in message for greeting in ['hola', 'hello', 'hi', '1', 'buenos dias', 'buenas']):
+            print(f"Saludos válidos: {greetings}")
+            print(f"Mensaje contiene saludo: {any(greeting in message for greeting in greetings)}")
+            
+            if any(greeting in message for greeting in greetings):
                 name = user.name if user.name else ""
                 greeting = f", {name}" if name else ""
                 
-                print(f"DEBUG - Updating state to asking_name")
+                print("\nActualizando estado a asking_name")
                 await self.conversation_service.update_context(
                     conversation.id,
                     {'state': 'asking_name'}
@@ -105,7 +135,7 @@ class WhatsAppCloudAPI:
         elif state == 'asking_name':
             # Update user name
             user.name = message.title()  # Capitalize first letter of each word
-            await self.db.update_document('users', user.id, {'name': user.name})
+            await self.user_service.update_user(user.id, {'name': user.name})
             
             await self.conversation_service.update_context(
                 conversation.id,
@@ -125,8 +155,7 @@ class WhatsAppCloudAPI:
                 country = "Guatemala"  # Default country
                 location = message.strip().title()
             
-            await self.db.update_document(
-                'users', 
+            await self.user_service.update_user(
                 user.id,
                 {
                     'country': country,
@@ -145,8 +174,7 @@ class WhatsAppCloudAPI:
         elif state == 'asking_land_ownership':
             ownership = 'propio' if 'propi' in message else 'alquilado' if 'alquil' in message else 'mixto'
             
-            await self.db.update_document(
-                'users',
+            await self.user_service.update_user(
                 user.id,
                 {'land_ownership': ownership}
             )
@@ -160,74 +188,3 @@ class WhatsAppCloudAPI:
                    "¿qué cultivas actualmente?")
         
         return "Lo siento, no entendí tu mensaje. Escribe 'hola' o '1' para comenzar."
-        
-    def send_template_message(self, to_number: str, template_name: str, language_code: str = "es") -> Dict:
-        """Send a template message"""
-        to_number = to_number.lstrip('+')
-        
-        headers = {
-            'Authorization': f'Bearer {self.access_token}',
-            'Content-Type': 'application/json'
-        }
-        
-        payload = {
-            "messaging_product": "whatsapp",
-            "to": to_number,
-            "type": "template",
-            "template": {
-                "name": template_name,
-                "language": {
-                    "code": language_code
-                }
-            }
-        }
-        
-        try:
-            response = requests.post(
-                self.api_url,
-                headers=headers,
-                json=payload
-            )
-            response.raise_for_status()
-            return response.json()
-            
-        except requests.exceptions.RequestException as e:
-            print(f"Error sending message: {str(e)}")
-            if hasattr(e, 'response'):
-                print(f"Server response: {e.response.text}")
-            raise e
-    
-    def send_text_message(self, to_number: str, message: str) -> Dict:
-        """Send a text message"""
-        to_number = to_number.lstrip('+')
-        
-        headers = {
-            'Authorization': f'Bearer {self.access_token}',
-            'Content-Type': 'application/json'
-        }
-        
-        payload = {
-            "messaging_product": "whatsapp",
-            "recipient_type": "individual",
-            "to": to_number,
-            "type": "text",
-            "text": {
-                "preview_url": False,
-                "body": message
-            }
-        }
-        
-        try:
-            response = requests.post(
-                self.api_url,
-                headers=headers,
-                json=payload
-            )
-            response.raise_for_status()
-            return response.json()
-            
-        except requests.exceptions.RequestException as e:
-            print(f"Error sending message: {str(e)}")
-            if hasattr(e, 'response'):
-                print(f"Server response: {e.response.text}")
-            raise e
