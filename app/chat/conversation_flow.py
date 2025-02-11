@@ -52,14 +52,15 @@ class ConversationManager:
         """Mensaje de bienvenida"""
         return (
             "¡Hola! 👋 Soy Figo de FinGro 🌱\n"
-            "Analizaré tu proyecto agrícola para un posible financiamiento."
+            "Analizaré tu proyecto agrícola para un posible financiamiento.\n"
+            "¿Qué cultivo sembrarás? 🌱"
         )
     
     def get_next_question(self) -> str:
         """Obtiene la siguiente pregunta según el estado"""
         if self.state == ConversationState.INIT:
             self.state = ConversationState.ASK_CROP
-            return "¿Qué cultivo sembrarás? 🌱"
+            return self.get_welcome_message()
             
         elif self.state == ConversationState.ASK_CROP:
             self.state = ConversationState.ASK_AREA
