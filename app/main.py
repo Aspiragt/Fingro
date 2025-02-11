@@ -90,7 +90,7 @@ async def process_user_message(from_number: str, message: str) -> str:
             'data': {}
         }
         await db.create_or_update_user(from_number, user_data)
-        return get_response_for_state(ConversationState.INICIO, {})
+        return "¡Bienvenido a Fingro! 🌱\n\n¿Qué te gustaría cultivar?"
     
     current_state = ConversationState(user_data.get('estado_conversacion', ConversationState.INICIO))
     conversation_data = user_data.get('data', {})
