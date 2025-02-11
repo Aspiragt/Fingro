@@ -1,3 +1,6 @@
+"""
+FastAPI app principal
+"""
 from fastapi import FastAPI, Request, Response, HTTPException
 from fastapi.responses import JSONResponse
 from typing import Any, Optional
@@ -59,15 +62,17 @@ def get_response_for_state(state: ConversationState, user_data: dict[str, Any]) 
         ConversationState.RIEGO: "¿Y ya tienes comprador para tu cosecha? ¿A quién le vendes normalmente?\nPor ejemplo: cooperativa, exportación, mercado local, intermediario, central de mayoreo",
         ConversationState.COMERCIALIZACION: "¿En qué municipio está o estará ubicado el cultivo?",
         ConversationState.UBICACION: "¡Perfecto! Dame un momento para analizar tu proyecto...",
+        ConversationState.FINALIZADO: None  # Se genera dinámicamente
     }
     
-    if state in responses:
+    if state != ConversationState.FINALIZADO:
         return responses[state]
     
     # Si es el estado FINALIZADO, generar resumen
     cultivo = user_data.get('cultivo', 'N/A')
     hectareas = float(user_data.get('hectareas', 0))
     riego = user_data.get('riego', 'tradicional')
+    comercializacion = user_data.get('comercializacion', 'N/A')
     municipio = user_data.get('ubicacion', 'N/A')
     precio_info = user_data.get('precio_info', {})
     
@@ -86,19 +91,27 @@ def get_response_for_state(state: ConversationState, user_data: dict[str, Any]) 
         ganancia = venta_total - costo_total
         margen = (ganancia / venta_total) * 100 if venta_total > 0 else 0
         
-        return (f"¡Excelente! He analizado tu proyecto de {cultivo} y esto es lo que puedes esperar:\n\n"
-                f"💰 Resumen Financiero:\n"
-                f"• Costo Total: Q.{costo_total:,.2f}\n"
-                f"• Venta Esperada: Q.{venta_total:,.2f}\n"
-                f"• Ganancia: Q.{ganancia:,.2f}\n"
-                f"• Margen: {margen:.1f}%\n\n"
-                f"📊 Detalles:\n"
-                f"• Producción: {produccion_total:,.2f} quintales\n"
-                f"• Precio actual: Q.{precio_actual}/quintal\n"
-                f"• Tiempo de cosecha: {resumen['tiempo_retorno']} meses\n\n"
-                f"¿Te gustaría conocer las opciones de financiamiento disponibles para tu proyecto?")
-    
-    return "Lo siento, no pude realizar el análisis financiero. Por favor, intenta nuevamente."
+        return (f"¡Excelente! Aquí está el análisis de tu proyecto:\n\n"
+                f"📊 Resumen del Proyecto:\n"
+                f"• Cultivo: {cultivo}\n"
+                f"• Área: {hectareas} hectáreas\n"
+                f"• Riego: {riego}\n"
+                f"• Comercialización: {comercializacion}\n"
+                f"• Ubicación: {municipio}\n\n"
+                f"💰 Análisis Financiero:\n"
+                f"• Inversión Requerida: Q.{costo_total:,.2f}\n"
+                f"• Venta Proyectada: Q.{venta_total:,.2f}\n"
+                f"• Ganancia Estimada: Q.{ganancia:,.2f}\n"
+                f"• Margen de Ganancia: {margen:.1f}%\n\n"
+                f"🌱 Próximos Pasos:\n"
+                f"1. Nuestro equipo se pondrá en contacto contigo pronto para discutir las opciones de financiamiento.\n"
+                f"2. Prepara los siguientes documentos:\n"
+                f"   • DPI\n"
+                f"   • Comprobante de domicilio\n"
+                f"   • Título de propiedad o contrato de arrendamiento\n\n"
+                f"Si tienes preguntas o quieres iniciar una nueva consulta, escribe 'reiniciar'.")
+    else:
+        return ("Lo siento, hubo un error al analizar tu proyecto. Por favor, escribe 'reiniciar' para intentar de nuevo.")
 
 async def process_user_message(from_number: str, message: str) -> str:
     """Procesa el mensaje del usuario y actualiza el estado de la conversación"""
@@ -154,22 +167,27 @@ async def process_user_message(from_number: str, message: str) -> str:
             response = get_response_for_state(ConversationState.CULTIVO, conversation_data)
             
             if precio_info:
-                response += (f" Información del mercado:\n"
+                response += (f"\n\nInformación del mercado:\n"
                            f"• Precio actual: Q.{precio_info['precio_actual']}/{precio_info['unidad_medida']}\n"
                            f"• Tendencia: {precio_info['tendencia']}\n"
-                           f"• Última actualización: {precio_info['ultima_actualizacion']}\n\n")
-            
-            response += "¿Cuántas hectáreas planeas cultivar?"
+                           f"• Última actualización: {precio_info['ultima_actualizacion']}")
             
             # Actualizar usuario con la información de precios
             conversation_data['precio_info'] = precio_info if precio_info else None
-            next_state = ConversationState.HECTAREAS
+            next_state = ConversationState.CULTIVO
             await db.update_conversation_state(from_number, next_state, conversation_data)
             
             return response
             
         elif current_state == ConversationState.CULTIVO:
-            conversation_data['hectareas'] = message
+            try:
+                hectareas = float(message.replace(',', '.'))
+                if hectareas <= 0:
+                    return "Por favor, ingresa un número válido mayor que 0."
+            except ValueError:
+                return "Por favor, ingresa un número válido. Por ejemplo: 2.5"
+                
+            conversation_data['hectareas'] = hectareas
             next_state = ConversationState.HECTAREAS
             await db.update_conversation_state(from_number, next_state, conversation_data)
             return get_response_for_state(next_state, conversation_data)
@@ -189,6 +207,13 @@ async def process_user_message(from_number: str, message: str) -> str:
         elif current_state == ConversationState.COMERCIALIZACION:
             conversation_data['ubicacion'] = message
             next_state = ConversationState.UBICACION
+            await db.update_conversation_state(from_number, next_state, conversation_data)
+            
+            # Enviar mensaje de análisis y luego el resumen
+            await send_whatsapp_message(from_number, get_response_for_state(next_state, conversation_data))
+            
+            # Actualizar al estado final y enviar el resumen
+            next_state = ConversationState.FINALIZADO
             await db.update_conversation_state(from_number, next_state, conversation_data)
             return get_response_for_state(next_state, conversation_data)
         
