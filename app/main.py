@@ -76,16 +76,25 @@ def get_response_for_state(state: ConversationState, user_data: Dict[str, Any]) 
     
     if analisis:
         resumen = analisis['resumen_financiero']
-        return (f"¡Excelente! He analizado tu proyecto y tengo buenas noticias:\n\n"
-                f"📊 Resumen de tu proyecto:\n"
-                f"• Cultivo: {cultivo}\n"
-                f"• Área: {hectareas} hectáreas\n"
-                f"• Ubicación: {municipio}\n\n"
-                f"💰 Análisis financiero:\n"
-                f"• Inversión necesaria: Q.{resumen['inversion_requerida']:,.2f}\n"
-                f"• Retorno esperado: Q.{resumen['retorno_esperado']:,.2f}\n"
-                f"• Tiempo de retorno: {resumen['tiempo_retorno']} meses\n"
-                f"• Rentabilidad mensual: {resumen['rentabilidad_mensual']}%\n\n"
+        detalle = analisis['analisis_detallado']
+        
+        # Calcular valores simplificados
+        costo_total = resumen['inversion_requerida']
+        produccion_total = detalle['rendimiento_total_min']  # Usamos el mínimo para ser conservadores
+        venta_total = produccion_total * precio_actual
+        ganancia = venta_total - costo_total
+        margen = (ganancia / venta_total) * 100 if venta_total > 0 else 0
+        
+        return (f"¡Excelente! He analizado tu proyecto de {cultivo} y esto es lo que puedes esperar:\n\n"
+                f"💰 Resumen Financiero:\n"
+                f"• Costo Total: Q.{costo_total:,.2f}\n"
+                f"• Venta Esperada: Q.{venta_total:,.2f}\n"
+                f"• Ganancia: Q.{ganancia:,.2f}\n"
+                f"• Margen: {margen:.1f}%\n\n"
+                f"📊 Detalles:\n"
+                f"• Producción: {produccion_total:,.2f} quintales\n"
+                f"• Precio actual: Q.{precio_actual}/quintal\n"
+                f"• Tiempo de cosecha: {resumen['tiempo_retorno']} meses\n\n"
                 f"¿Te gustaría conocer las opciones de financiamiento disponibles para tu proyecto?")
     
     return "Lo siento, no pude realizar el análisis financiero. Por favor, intenta nuevamente."
