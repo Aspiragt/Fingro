@@ -4,11 +4,11 @@ import logging
 import os
 import json
 import httpx
-from typing import Dict, Any
 from enum import Enum
 from datetime import datetime
 from .database import db
 from .external_apis.maga import maga_client
+from .analysis.financial import financial_analyzer
 
 # Configuración de logging
 logging.basicConfig(
@@ -52,53 +52,43 @@ def get_next_state(current_state: ConversationState) -> ConversationState:
 def get_response_for_state(state: ConversationState, user_data: Dict[str, Any]) -> str:
     """Genera la respuesta apropiada según el estado de la conversación"""
     responses = {
-        ConversationState.INICIO: "¡Hola! Soy Fingro , tu asistente para conseguir financiamiento agrícola. ¿Qué te gustaría cultivar?",
-        ConversationState.CULTIVO: f"¡Excelente elección! ¿Cuántas hectáreas planeas cultivar?",
+        ConversationState.INICIO: "¡Hola! Soy Fingro, tu asistente para conseguir financiamiento agrícola. ¿Qué te gustaría cultivar?",
+        ConversationState.CULTIVO: "¡Excelente elección! ¿Cuántas hectáreas planeas cultivar?",
         ConversationState.HECTAREAS: "Entiendo. ¿Qué método de riego utilizas o planeas utilizar?\nPor ejemplo: por goteo, aspersión, o tradicional",
         ConversationState.RIEGO: "¿Y ya tienes comprador para tu cosecha? ¿A quién le vendes normalmente?\nPor ejemplo: cooperativa, exportación, mercado local, intermediario, central de mayoreo",
-        ConversationState.COMERCIALIZACION: "¿En qué municipio se encuentra o estará tu cultivo?",
-        ConversationState.UBICACION: generate_summary(user_data),
-        ConversationState.FINALIZADO: "¡Gracias por tu interés! Pronto un asesor se pondrá en contacto contigo."
+        ConversationState.COMERCIALIZACION: "¿En qué municipio está o estará ubicado el cultivo?",
+        ConversationState.UBICACION: "¡Perfecto! Dame un momento para analizar tu proyecto...",
     }
-    return responses.get(state, "No entiendo ese estado.")
-
-def generate_summary(user_data: Dict[str, Any]) -> str:
-    """Genera un resumen de la información recopilada"""
-    cultivo = user_data.get('cultivo', 'N/A')
-    hectareas = user_data.get('hectareas', 'N/A')
-    riego = user_data.get('riego', 'N/A')
-    municipio = user_data.get('ubicacion', 'N/A')
-    precio_info = user_data.get('precio_info', None)
     
-    if precio_info:
-        precio_actual = precio_info.get('precio_actual', 'N/A')
-        unidad_medida = precio_info.get('unidad_medida', 'N/A')
-        tendencia = precio_info.get('tendencia', 'N/A')
-        ultima_actualizacion = precio_info.get('ultima_actualizacion', 'N/A')
-        
-        return f"""¡Gracias! Con la información que me has dado, puedo decirte que:
-
- Cultivo de {cultivo}
- {hectareas} hectáreas con riego por {riego}
- Ubicación: {municipio}
- Información del mercado:
- • Precio actual: Q.{precio_actual}/{unidad_medida}
- • Tendencia: {tendencia}
- • Última actualización: {ultima_actualizacion}
- Ingresos estimados: Q.80,000 (estimado)
- Costos estimados: Q.40,000 (estimado)
-
-¿Te gustaría saber cuánto financiamiento podrías obtener?"""
-    else:
-        return f"""¡Gracias! Con la información que me has dado, puedo decirte que:
-
- Cultivo de {cultivo}
- {hectareas} hectáreas con riego por {riego}
- Ubicación: {municipio}
- Ingresos estimados: Q.80,000 (estimado)
- Costos estimados: Q.40,000 (estimado)
-
-¿Te gustaría saber cuánto financiamiento podrías obtener?"""
+    if state in responses:
+        return responses[state]
+    
+    # Si es el estado FINALIZADO, generar resumen
+    cultivo = user_data.get('cultivo', 'N/A')
+    hectareas = float(user_data.get('hectareas', 0))
+    riego = user_data.get('riego', 'tradicional')
+    municipio = user_data.get('ubicacion', 'N/A')
+    precio_info = user_data.get('precio_info', {})
+    
+    # Realizar análisis financiero
+    precio_actual = precio_info.get('precio_actual', 150)  # Precio por defecto si no hay datos del MAGA
+    analisis = financial_analyzer.analizar_proyecto(cultivo, hectareas, precio_actual, riego)
+    
+    if analisis:
+        resumen = analisis['resumen_financiero']
+        return (f"¡Excelente! He analizado tu proyecto y tengo buenas noticias:\n\n"
+                f"📊 Resumen de tu proyecto:\n"
+                f"• Cultivo: {cultivo}\n"
+                f"• Área: {hectareas} hectáreas\n"
+                f"• Ubicación: {municipio}\n\n"
+                f"💰 Análisis financiero:\n"
+                f"• Inversión necesaria: Q.{resumen['inversion_requerida']:,.2f}\n"
+                f"• Retorno esperado: Q.{resumen['retorno_esperado']:,.2f}\n"
+                f"• Tiempo de retorno: {resumen['tiempo_retorno']} meses\n"
+                f"• Rentabilidad mensual: {resumen['rentabilidad_mensual']}%\n\n"
+                f"¿Te gustaría conocer las opciones de financiamiento disponibles para tu proyecto?")
+    
+    return "Lo siento, no pude realizar el análisis financiero. Por favor, intenta nuevamente."
 
 async def process_user_message(from_number: str, message: str) -> str:
     """Procesa el mensaje del usuario y actualiza el estado de la conversación"""
