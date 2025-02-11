@@ -10,7 +10,7 @@ from app.utils.constants import ConversationState
 
 logger = logging.getLogger(__name__)
 
-class FirebaseManager:
+class FirebaseDB:
     """Maneja la interacción con Firebase y el caché local"""
     
     def __init__(self):
@@ -161,4 +161,4 @@ class FirebaseManager:
             logger.error(f"Error guardando Fingro Score para usuario {phone}: {str(e)}")
 
 # Instancia global
-firebase_manager = FirebaseManager()
+firebase_manager = FirebaseDB()
