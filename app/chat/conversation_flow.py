@@ -1,175 +1,136 @@
 """
-Módulo para manejar el flujo de conversación con el usuario
+Módulo para manejar el flujo de la conversación
 """
-from enum import Enum
-from typing import Dict, Any, Optional
-from dataclasses import dataclass
-from datetime import datetime
+import logging
+import random
+from typing import Dict, Any, Tuple, List
+from app.utils.constants import ConversationState, MESSAGES, VALID_RESPONSES
+from app.database.firebase import firebase_manager
+from app.analysis.scoring import FingroScoring
 
-class ConversationState(Enum):
-    """Estados posibles de la conversación"""
-    INIT = "init"
-    ASK_CROP = "ask_crop"
-    ASK_AREA = "ask_area"
-    ASK_MARKET = "ask_market"
-    ASK_IRRIGATION = "ask_irrigation"
-    ASK_LOCATION = "ask_location"
-    SHOW_ANALYSIS = "show_analysis"
-    WAITING_CONFIRMATION = "waiting_confirmation"
-
-class MarketType(Enum):
-    """Tipos de comercialización"""
-    LOCAL = "Mercado local"
-    EXPORT = "Exportación"
-    INTERMEDIARY = "Intermediario"
-    OTHER = "Otro"
-
-class IrrigationType(Enum):
-    """Tipos de riego"""
-    DRIP = "Goteo"
-    SPRINKLER = "Aspersión"
-    GRAVITY = "Gravedad"
-    NONE = "No tengo riego"
-
-@dataclass
-class ProjectData:
-    """Datos del proyecto agrícola"""
-    crop_name: Optional[str] = None
-    area_ha: Optional[float] = None
-    market_type: Optional[MarketType] = None
-    irrigation_type: Optional[IrrigationType] = None
-    location: Optional[str] = None
-    created_at: datetime = datetime.now()
+logger = logging.getLogger(__name__)
 
 class ConversationManager:
-    """Maneja el flujo de conversación"""
+    """Maneja el flujo de la conversación con el usuario"""
     
     def __init__(self):
-        self.state = ConversationState.INIT
-        self.project_data = ProjectData()
+        """Inicializa el manejador de conversación"""
+        self.scoring = FingroScoring()
+        
+        # Variaciones de mensajes para respuestas más naturales
+        self.message_variations = {
+            'greeting': [
+                "¡Hola {}! ",
+                "¡Qué gusto verte {}! ",
+                "¡Bienvenido de nuevo {}! ",
+                "¡Hola {}! Me alegra verte "
+            ],
+            'thanks': [
+                "¡Gracias {}! ",
+                "¡Excelente {}! ",
+                "¡Perfecto {}! ",
+                "¡Muy bien {}! "
+            ],
+            'continue': [
+                "Continuemos con tu solicitud...",
+                "Sigamos con el proceso...",
+                "Avancemos con tu evaluación...",
+                "Procedamos con tu solicitud..."
+            ]
+        }
     
-    def get_welcome_message(self) -> str:
-        """Mensaje de bienvenida"""
-        return (
-            "¡Hola! 👋 Soy Figo de FinGro 🌱\n"
-            "Analizaré tu proyecto agrícola para un posible financiamiento.\n"
-            "¿Qué cultivo sembrarás? 🌱"
-        )
+    def _get_personalized_message(self, message_type: str, name: str = None) -> str:
+        """Obtiene una variación aleatoria del mensaje y la personaliza con el nombre"""
+        variations = self.message_variations.get(message_type, [""])
+        message = random.choice(variations)
+        return message.format(name if name else "")
     
-    def get_next_question(self) -> str:
-        """Obtiene la siguiente pregunta según el estado"""
-        if self.state == ConversationState.INIT:
-            self.state = ConversationState.ASK_CROP
-            return self.get_welcome_message()
-            
-        elif self.state == ConversationState.ASK_CROP:
-            self.state = ConversationState.ASK_AREA
-            return "¿Cuántas hectáreas? 📏"
-            
-        elif self.state == ConversationState.ASK_AREA:
-            self.state = ConversationState.ASK_MARKET
-            return (
-                "¿Dónde venderás tu cosecha? 🚛\n"
-                "1. 🏪 Mercado local\n"
-                "2. 🌎 Exportación\n"
-                "3. 🤝 Intermediario\n"
-                "4. 📦 Otro"
-            )
-            
-        elif self.state == ConversationState.ASK_MARKET:
-            self.state = ConversationState.ASK_IRRIGATION
-            return (
-                "¿Sistema de riego? 💧\n"
-                "1. 💧 Goteo\n"
-                "2. 🌧️ Aspersión\n"
-                "3. ⛰️ Gravedad\n"
-                "4. ❌ No tengo"
-            )
-            
-        elif self.state == ConversationState.ASK_IRRIGATION:
-            self.state = ConversationState.ASK_LOCATION
-            return "¿Municipio y departamento? 📍"
-            
-        elif self.state == ConversationState.ASK_LOCATION:
-            self.state = ConversationState.SHOW_ANALYSIS
-            return "Analizando... ⚡️"
-            
-        return ""
-    
-    def process_answer(self, answer: str) -> Optional[str]:
-        """Procesa la respuesta del usuario"""
-        if self.state == ConversationState.ASK_CROP:
-            self.project_data.crop_name = answer.lower()
-            
-        elif self.state == ConversationState.ASK_AREA:
-            try:
-                self.project_data.area_ha = float(answer)
-                if self.project_data.area_ha <= 0:
-                    return "El área debe ser mayor a 0"
-            except ValueError:
-                return "Ingresa un número válido (ejemplo: 1.5)"
-                
-        elif self.state == ConversationState.ASK_MARKET:
-            market_map = {
-                "1": MarketType.LOCAL,
-                "2": MarketType.EXPORT,
-                "3": MarketType.INTERMEDIARY,
-                "4": MarketType.OTHER
-            }
-            if answer not in market_map:
-                return "Elige un número del 1 al 4"
-            self.project_data.market_type = market_map[answer]
-            
-        elif self.state == ConversationState.ASK_IRRIGATION:
-            irrigation_map = {
-                "1": IrrigationType.DRIP,
-                "2": IrrigationType.SPRINKLER,
-                "3": IrrigationType.GRAVITY,
-                "4": IrrigationType.NONE
-            }
-            if answer not in irrigation_map:
-                return "Elige un número del 1 al 4"
-            self.project_data.irrigation_type = irrigation_map[answer]
-            
-        elif self.state == ConversationState.ASK_LOCATION:
-            self.project_data.location = answer
-            
-        return None  # Sin error
-    
-    def is_ready_for_analysis(self) -> bool:
-        """Verifica si tenemos todos los datos necesarios"""
-        return all([
-            self.project_data.crop_name,
-            self.project_data.area_ha,
-            self.project_data.market_type,
-            self.project_data.irrigation_type,
-            self.project_data.location
-        ])
-
-    async def handle_special_command(self, phone_number: str, command: str) -> str:
+    def handle_message(self, phone: str, message: str) -> Tuple[str, List[str]]:
         """
-        Maneja comandos especiales como 'reiniciar' o 'ayuda'
+        Maneja el mensaje del usuario y retorna la respuesta apropiada
         """
         try:
-            if command == 'reiniciar':
-                # Reiniciar completamente la conversación
-                await db.reset_conversation(phone_number)
-                logger.info(f"Conversación reiniciada para {phone_number}")
-                return "🔄 Conversación reiniciada.\n\n" + MESSAGES[ConversationState.INIT]
+            # Obtener estado actual
+            user_state = firebase_manager.get_user_state(phone)
+            current_state = user_state.get('state', ConversationState.INICIO)
+            user_data = user_state.get('data', {})
+            user_name = user_state.get('name')
+            
+            # Verificar comandos especiales
+            if message.lower() in ['reiniciar', 'reset']:
+                firebase_manager.reset_conversation(phone)
+                return "Conversación reiniciada. ¿En qué puedo ayudarte?", []
+            
+            # Si es un saludo y tenemos el nombre, personalizar respuesta
+            if current_state == ConversationState.INICIO and user_name:
+                greeting = self._get_personalized_message('greeting', user_name)
+                return f"{greeting}\n{MESSAGES[current_state]}", []
+            
+            # Procesar respuesta según el estado actual
+            next_state, response = self._process_state(current_state, message, user_data)
+            
+            # Si la respuesta es válida, actualizar estado
+            if next_state:
+                firebase_manager.update_user_state(phone, next_state, user_data)
                 
-            elif command == 'ayuda':
-                return ("🤖 *Comandos disponibles:*\n" +
-                        "\n".join([f"• {cmd}: {desc}" for cmd, desc in SPECIAL_COMMANDS.items()]))
-                        
-            elif command == 'solicitar':
-                return ("🏦 Para solicitar tu préstamo, necesitaremos:\n\n"
-                        "📄 1. DPI\n"
-                        "📝 2. Comprobante de domicilio\n"
-                        "🏡 3. Título de propiedad o contrato de arrendamiento\n\n"
-                        "Un asesor se pondrá en contacto contigo pronto. 👋")
-                        
-            return "❓ Comando no reconocido. Escribe 'ayuda' para ver los comandos disponibles."
+                # Si llegamos al final, calcular y guardar score
+                if next_state == ConversationState.FINALIZADO:
+                    score_data = self.scoring.calculate_score(user_data)
+                    firebase_manager.save_fingro_score(phone, score_data)
+                    user_data['score_data'] = score_data
+                    
+                    # Generar mensaje final con los datos
+                    if callable(MESSAGES[ConversationState.FINALIZADO]):
+                        response = MESSAGES[ConversationState.FINALIZADO](user_data)
+            
+            return response, []
             
         except Exception as e:
-            logger.error(f"Error en handle_special_command: {str(e)}")
-            return "❌ Lo siento, ocurrió un error. Por favor, intenta nuevamente."
+            logger.error(f"Error procesando mensaje: {str(e)}")
+            return "Lo siento, hubo un error procesando tu mensaje. Por favor intenta de nuevo.", []
+    
+    def _process_state(self, current_state: str, message: str, user_data: Dict[str, Any]) -> Tuple[str, str]:
+        """
+        Procesa el mensaje según el estado actual y retorna el siguiente estado y respuesta
+        """
+        message = message.lower().strip()
+        
+        if current_state == ConversationState.INICIO:
+            user_data['cultivo'] = message
+            return ConversationState.CULTIVO, MESSAGES[ConversationState.CULTIVO]
+            
+        elif current_state == ConversationState.CULTIVO:
+            try:
+                hectareas = float(message.replace(',', '.'))
+                if hectareas <= 0:
+                    return None, "Por favor, ingresa un número válido mayor a 0."
+                user_data['hectareas'] = hectareas
+                return ConversationState.HECTAREAS, MESSAGES[ConversationState.HECTAREAS]
+            except ValueError:
+                return None, "Por favor, ingresa solo el número de hectáreas (ejemplo: 2.5)."
+                
+        elif current_state == ConversationState.HECTAREAS:
+            if message not in VALID_RESPONSES[ConversationState.RIEGO]:
+                options = ", ".join(VALID_RESPONSES[ConversationState.RIEGO])
+                return None, f"Por favor, selecciona una opción válida: {options}"
+            user_data['riego'] = message
+            return ConversationState.RIEGO, MESSAGES[ConversationState.RIEGO]
+            
+        elif current_state == ConversationState.RIEGO:
+            if message not in VALID_RESPONSES[ConversationState.COMERCIALIZACION]:
+                options = ", ".join(VALID_RESPONSES[ConversationState.COMERCIALIZACION])
+                return None, f"Por favor, selecciona una opción válida: {options}"
+            user_data['comercializacion'] = message
+            return ConversationState.COMERCIALIZACION, MESSAGES[ConversationState.COMERCIALIZACION]
+            
+        elif current_state == ConversationState.COMERCIALIZACION:
+            user_data['ubicacion'] = message
+            return ConversationState.UBICACION, MESSAGES[ConversationState.UBICACION]
+            
+        elif current_state == ConversationState.UBICACION:
+            return ConversationState.FINALIZADO, MESSAGES[ConversationState.FINALIZADO](user_data)
+            
+        return None, "Lo siento, no entendí tu mensaje. ¿Podrías intentarlo de nuevo?"
+
+# Instancia global
+conversation_manager = ConversationManager()

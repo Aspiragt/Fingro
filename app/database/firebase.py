@@ -1,253 +1,164 @@
-import os
-from typing import Optional, Dict, Any, List
-import firebase_admin
-from firebase_admin import credentials, firestore
-from datetime import datetime, timedelta
-from functools import lru_cache
+"""
+Módulo para manejar la interacción con Firebase
+"""
 import logging
-from cachetools import TTLCache, cached
+from typing import Dict, Any, Optional
+from datetime import datetime, timedelta
+from cachetools import TTLCache
+from firebase_admin import firestore
+from app.utils.constants import ConversationState
 
 logger = logging.getLogger(__name__)
 
-class FirebaseDB:
-    _instance = None
-    _initialized = False
+class FirebaseManager:
+    """Maneja la interacción con Firebase y el caché local"""
     
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
-
     def __init__(self):
-        if not self._initialized:
-            self._initialize_firebase()
-            self._initialized = True
-            # Caché para estados de conversación (TTL de 1 hora)
-            self._conversation_cache = TTLCache(maxsize=1000, ttl=3600)
-            # Caché para datos de usuario (TTL de 24 horas)
-            self._user_cache = TTLCache(maxsize=1000, ttl=86400)
-
-    @lru_cache(maxsize=1)
-    def _get_credentials(self) -> Dict[str, str]:
-        """Get Firebase credentials from environment variables"""
-        required_vars = [
-            'FIREBASE_PROJECT_ID',
-            'FIREBASE_PRIVATE_KEY',
-            'FIREBASE_CLIENT_EMAIL'
-        ]
+        """Inicializa el cliente de Firestore y el caché"""
+        self.db = firestore.client()
+        # Caché con tiempo de vida de 5 minutos
+        self.cache = TTLCache(maxsize=100, ttl=300)
         
-        missing = [var for var in required_vars if not os.getenv(var)]
-        if missing:
-            raise ValueError(f"Missing required environment variables: {', '.join(missing)}")
-            
-        return {
-            'type': 'service_account',
-            'project_id': os.getenv('FIREBASE_PROJECT_ID'),
-            'private_key': os.getenv('FIREBASE_PRIVATE_KEY').replace('\\n', '\n'),
-            'client_email': os.getenv('FIREBASE_CLIENT_EMAIL'),
-            'token_uri': 'https://oauth2.googleapis.com/token'
-        }
-
-    def _initialize_firebase(self) -> None:
-        """Initialize Firebase connection"""
+    def _get_user_ref(self, phone: str) -> firestore.DocumentReference:
+        """Obtiene la referencia al documento del usuario"""
+        return self.db.collection('users').document(phone)
+        
+    def get_user_state(self, phone: str) -> Dict[str, Any]:
+        """
+        Obtiene el estado actual del usuario desde el caché o Firebase
+        """
         try:
-            if not firebase_admin._apps:
-                cred = credentials.Certificate(self._get_credentials())
-                firebase_admin.initialize_app(cred)
-            self.db = firestore.client()
-            logger.info("Firebase initialized successfully")
-        except Exception as e:
-            logger.error(f"Error initializing Firebase: {str(e)}")
-            raise
-
-    def get_user(self, phone_number: str) -> Optional[Dict[str, Any]]:
-        """Get user data with caching"""
-        # Intentar obtener del caché primero
-        if phone_number in self._user_cache:
-            logger.debug(f"Cache hit for user {phone_number}")
-            return self._user_cache[phone_number]
-
-        # Si no está en caché, obtener de Firebase
-        doc = self.db.collection('users').document(phone_number).get()
-        if doc.exists:
-            user_data = doc.to_dict()
-            self._user_cache[phone_number] = user_data
-            return user_data
-        return None
-
-    def create_user(self, phone_number: str, data: Dict[str, Any]) -> None:
-        """Create new user"""
-        self.db.collection('users').document(phone_number).set(data)
-        # Actualizar caché
-        self._user_cache[phone_number] = data
-
-    def update_user(self, phone_number: str, data: Dict[str, Any]) -> None:
-        """Update user data"""
-        self.db.collection('users').document(phone_number).set(data, merge=True)
-        # Actualizar caché
-        if phone_number in self._user_cache:
-            self._user_cache[phone_number].update(data)
-
-    def get_conversation_state(self, phone_number: str) -> Optional[Dict[str, Any]]:
-        """Get conversation state with caching"""
-        # Intentar obtener del caché primero
-        if phone_number in self._conversation_cache:
-            logger.debug(f"Cache hit for conversation state {phone_number}")
-            return self._conversation_cache[phone_number]
-
-        # Si no está en caché, obtener del usuario
-        user = self.get_user(phone_number)
-        if user:
-            state = user.get('conversation_state')
-            if state:
-                self._conversation_cache[phone_number] = state
-            return state
-        return None
-
-    def update_conversation_state(self, phone_number: str, conversation_data: Dict[str, Any]) -> None:
-        """Update conversation state with caching"""
-        try:
-            user_ref = self.db.collection('users').document(phone_number)
-            doc = user_ref.get()
+            # Intentar obtener del caché
+            cache_key = f"state_{phone}"
+            if cache_key in self.cache:
+                return self.cache[cache_key]
             
-            if doc.exists:
-                # Actualizar estado existente
-                user_ref.update({'conversation_state': conversation_data})
+            # Si no está en caché, obtener de Firebase
+            user_ref = self._get_user_ref(phone)
+            user_doc = user_ref.get()
+            
+            if not user_doc.exists:
+                # Usuario nuevo
+                state = {
+                    'state': ConversationState.INICIO,
+                    'data': {},
+                    'last_activity': datetime.now().isoformat(),
+                    'name': None
+                }
+                user_ref.set(state)
             else:
-                # Crear nuevo usuario con estado inicial
-                user_ref.set({
-                    'phone_number': phone_number,
-                    'created_at': firestore.SERVER_TIMESTAMP,
-                    'conversation_state': conversation_data
-                })
+                state = user_doc.to_dict()
+                # Actualizar última actividad
+                user_ref.update({'last_activity': datetime.now().isoformat()})
             
-            # Actualizar caché
-            self._conversation_cache[phone_number] = conversation_data
+            # Guardar en caché
+            self.cache[cache_key] = state
+            return state
             
         except Exception as e:
-            logger.error(f"Error updating conversation state: {str(e)}")
-            raise
-
-    def reset_conversation(self, phone_number: str) -> None:
+            logger.error(f"Error obteniendo estado del usuario {phone}: {str(e)}")
+            return {
+                'state': ConversationState.INICIO,
+                'data': {},
+                'last_activity': datetime.now().isoformat(),
+                'name': None
+            }
+    
+    def update_user_state(self, phone: str, new_state: str, data: Dict[str, Any] = None) -> None:
         """
-        Reinicia completamente la conversación y limpia todos los datos del usuario
+        Actualiza el estado del usuario en Firebase y caché
         """
         try:
-            # Limpiar estado de conversación
-            initial_state = {
-                'state': 'INICIO',
-                'data': {}
+            user_ref = self._get_user_ref(phone)
+            update_data = {
+                'state': new_state,
+                'last_activity': datetime.now().isoformat()
             }
             
-            # Actualizar documento del usuario
-            user_ref = self.db.collection('users').document(phone_number)
-            user_ref.set({
-                'phone_number': phone_number,
-                'conversation_state': initial_state,
-                'updated_at': firestore.SERVER_TIMESTAMP
-            }, merge=False)  # merge=False para sobrescribir todo el documento
+            if data:
+                update_data['data'] = data
             
-            # Eliminar mensajes anteriores
-            messages_ref = self.db.collection('conversations').document(phone_number).collection('messages')
-            self._delete_collection(messages_ref, 100)
+            # Actualizar en Firebase
+            user_ref.update(update_data)
             
-            # Limpiar cachés
-            if phone_number in self._conversation_cache:
-                del self._conversation_cache[phone_number]
-            if phone_number in self._user_cache:
-                del self._user_cache[phone_number]
+            # Actualizar caché
+            cache_key = f"state_{phone}"
+            if cache_key in self.cache:
+                cached_state = self.cache[cache_key]
+                cached_state.update(update_data)
+                self.cache[cache_key] = cached_state
                 
-            logger.info(f"Conversación reiniciada para {phone_number}")
+        except Exception as e:
+            logger.error(f"Error actualizando estado del usuario {phone}: {str(e)}")
+    
+    def update_user_name(self, phone: str, name: str) -> None:
+        """
+        Actualiza el nombre del usuario
+        """
+        try:
+            user_ref = self._get_user_ref(phone)
+            user_ref.update({'name': name})
             
+            # Actualizar caché
+            cache_key = f"state_{phone}"
+            if cache_key in self.cache:
+                cached_state = self.cache[cache_key]
+                cached_state['name'] = name
+                self.cache[cache_key] = cached_state
+                
         except Exception as e:
-            logger.error(f"Error resetting conversation: {str(e)}")
-            raise
-
-    def _delete_collection(self, coll_ref, batch_size):
+            logger.error(f"Error actualizando nombre del usuario {phone}: {str(e)}")
+    
+    def reset_conversation(self, phone: str) -> None:
         """
-        Elimina una colección por lotes
+        Reinicia la conversación del usuario
         """
-        docs = coll_ref.limit(batch_size).stream()
-        deleted = 0
-
-        for doc in docs:
-            doc.reference.delete()
-            deleted = deleted + 1
-
-        if deleted >= batch_size:
-            return self._delete_collection(coll_ref, batch_size)
-
-    def add_message(self, phone_number: str, message: Dict[str, Any]) -> None:
-        """Add message to conversation history"""
-        message['timestamp'] = firestore.SERVER_TIMESTAMP
-        self.db.collection('conversations').document(phone_number).collection('messages').add(message)
-
-    def get_messages(self, phone_number: str, limit: int = 10) -> List[Dict[str, Any]]:
-        """Get conversation history"""
-        messages = (self.db.collection('conversations')
-                   .document(phone_number)
-                   .collection('messages')
-                   .order_by('timestamp', direction=firestore.Query.DESCENDING)
-                   .limit(limit)
-                   .stream())
-        return [msg.to_dict() for msg in messages]
-
-    def collection(self, name: str):
-        """Get a collection reference"""
-        return self.db.collection(name)
-    
-    async def add_document(self, collection: str, data: dict, doc_id: str = None):
-        """Add a document to a collection"""
         try:
-            if doc_id:
-                doc_ref = self.db.collection(collection).document(doc_id)
-                doc_ref.set(data)
-                return doc_id
-            else:
-                doc_ref = self.db.collection(collection).add(data)
-                return doc_ref[1].id
+            # Limpiar datos en Firebase
+            user_ref = self._get_user_ref(phone)
+            user_ref.set({
+                'state': ConversationState.INICIO,
+                'data': {},
+                'last_activity': datetime.now().isoformat(),
+                'name': None
+            })
+            
+            # Limpiar caché
+            cache_key = f"state_{phone}"
+            if cache_key in self.cache:
+                del self.cache[cache_key]
+                
         except Exception as e:
-            logger.error(f"Error adding document: {str(e)}")
-            raise e
+            logger.error(f"Error reiniciando conversación del usuario {phone}: {str(e)}")
     
-    async def get_document(self, collection: str, doc_id: str):
-        """Get a document by ID"""
+    def save_fingro_score(self, phone: str, score_data: Dict[str, Any]) -> None:
+        """
+        Guarda el Fingro Score y datos financieros del usuario
+        """
         try:
-            doc_ref = self.db.collection(collection).document(doc_id)
-            doc = doc_ref.get()
-            return doc.to_dict() if doc.exists else None
+            user_ref = self._get_user_ref(phone)
+            score_doc = {
+                'score_data': score_data,
+                'calculated_at': datetime.now().isoformat()
+            }
+            user_ref.collection('scores').add(score_doc)
+            
+            # Actualizar datos del usuario
+            user_ref.update({
+                'latest_score': score_data,
+                'score_updated_at': datetime.now().isoformat()
+            })
+            
+            # Actualizar caché
+            cache_key = f"state_{phone}"
+            if cache_key in self.cache:
+                cached_state = self.cache[cache_key]
+                cached_state['latest_score'] = score_data
+                cached_state['score_updated_at'] = datetime.now().isoformat()
+                self.cache[cache_key] = cached_state
+                
         except Exception as e:
-            logger.error(f"Error getting document: {str(e)}")
-            raise e
-    
-    async def update_document(self, collection: str, doc_id: str, data: dict):
-        """Update a document"""
-        try:
-            doc_ref = self.db.collection(collection).document(doc_id)
-            doc_ref.update(data)
-            return True
-        except Exception as e:
-            logger.error(f"Error updating document: {str(e)}")
-            raise e
-    
-    async def delete_document(self, collection: str, doc_id: str):
-        """Delete a document"""
-        try:
-            doc_ref = self.db.collection(collection).document(doc_id)
-            doc_ref.delete()
-            return True
-        except Exception as e:
-            logger.error(f"Error deleting document: {str(e)}")
-            raise e
-    
-    async def query_collection(self, collection: str, field: str, operator: str, value: any):
-        """Query documents in a collection"""
-        try:
-            docs = self.db.collection(collection).where(field, operator, value).stream()
-            return [doc.to_dict() for doc in docs]
-        except Exception as e:
-            logger.error(f"Error querying collection: {str(e)}")
-            raise e
+            logger.error(f"Error guardando Fingro Score para usuario {phone}: {str(e)}")
 
-# Singleton instance
-db = FirebaseDB()
+# Instancia global
+firebase_manager = FirebaseManager()
