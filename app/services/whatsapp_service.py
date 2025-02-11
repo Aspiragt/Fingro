@@ -44,6 +44,12 @@ class WhatsAppService:
             # Obtener o crear usuario
             user = await self._get_or_create_user(from_number)
             
+            # Comando especial para reiniciar
+            if message_data["type"] == "text" and message_data["text"]["body"].lower() == "reiniciar":
+                self.firebase_db.reset_conversation(from_number)
+                await self.send_text_message(from_number, "Conversación reiniciada.")
+                return
+
             # Procesar el mensaje según su tipo
             if message_data["type"] == "text":
                 await self._handle_text_message(user, message_data)
