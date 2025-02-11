@@ -54,10 +54,10 @@ def get_next_state(current_state: ConversationState) -> ConversationState:
 def get_response_for_state(state: ConversationState, user_data: Dict[str, Any]) -> str:
     """Genera la respuesta apropiada según el estado de la conversación"""
     responses = {
-        ConversationState.INICIO: "¡Hola! Soy Fingro , tu asistente para conseguir financiamiento agrícola. ¿Qué te gustaría cultivar?",
+        ConversationState.INICIO: "¡Hola! Soy Fingro 🌱, tu asistente para conseguir financiamiento agrícola. ¿Qué te gustaría cultivar?",
         ConversationState.CULTIVO: f"¡Excelente elección! ¿Cuántas hectáreas planeas cultivar?",
         ConversationState.HECTAREAS: "Entiendo. ¿Qué método de riego utilizas o planeas utilizar?\nPor ejemplo: por goteo, aspersión, o tradicional",
-        ConversationState.RIEGO: "¿Y ya tienes comprador para tu cosecha? ¿A quién le vendes normalmente?",
+        ConversationState.RIEGO: "¿Y ya tienes comprador para tu cosecha? ¿A quién le vendes normalmente?\nPor ejemplo: cooperativa, exportación, mercado local, intermediario, central de mayoreo",
         ConversationState.COMERCIALIZACION: "¿En qué municipio se encuentra o estará tu cultivo?",
         ConversationState.UBICACION: generate_summary(user_data),
         ConversationState.FINALIZADO: "¡Gracias por tu interés! Pronto un asesor se pondrá en contacto contigo."
