@@ -31,7 +31,7 @@ class FirebaseDB:
             logger.error(f"Error inicializando Firebase: {str(e)}")
             raise
     
-    def get_conversation_state(self, phone: str) -> Dict[str, Any]:
+    async def get_conversation_state(self, phone: str) -> Dict[str, Any]:
         """
         Obtiene el estado actual de la conversación
         
