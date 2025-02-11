@@ -128,29 +128,36 @@ async def process_user_message(from_number: str, message: str) -> str:
     try:
         # Obtener estado actual
         conversation_data = await db.get_conversation_state(from_number)
-        current_state = ConversationState(conversation_data.get('state', ConversationState.INICIO))
+        
+        # Si no hay datos de conversación, inicializar con estado INICIO
+        if not conversation_data:
+            conversation_data = {'state': ConversationState.INICIO, 'data': {}}
+            await db.update_conversation_state(from_number, conversation_data)
+        
+        current_state = conversation_data.get('state', ConversationState.INICIO)
+        user_data = conversation_data.get('data', {})
         
         # Si el mensaje es 'reiniciar', volver al inicio
         if message.lower() == 'reiniciar':
-            next_state = ConversationState.INICIO
-            await db.update_conversation_state(from_number, next_state, {})
-            return await get_response_for_state(next_state, {})
+            new_conversation_data = {'state': ConversationState.INICIO, 'data': {}}
+            await db.update_conversation_state(from_number, new_conversation_data)
+            return await get_response_for_state(ConversationState.INICIO, {})
             
         # Procesar mensaje según el estado actual
         if current_state == ConversationState.INICIO:
             # Guardar cultivo y buscar datos
             cultivo = message.strip()
-            conversation_data['cultivo'] = cultivo
+            user_data['cultivo'] = cultivo
             
             try:
                 # Obtener precio del MAGA
                 precio_info = await maga_client.get_precio_cultivo(cultivo)
                 if precio_info:
-                    conversation_data['precio_info'] = precio_info
+                    user_data['precio_info'] = precio_info
                     logger.info(f"Precio encontrado para {cultivo}: {precio_info}")
                 else:
                     # Si no hay precio en MAGA, usar precio por defecto
-                    conversation_data['precio_info'] = {
+                    user_data['precio_info'] = {
                         'precio_actual': 150,  # Precio por defecto
                         'tendencia': 'estable',
                         'unidad_medida': 'quintal'
@@ -159,15 +166,15 @@ async def process_user_message(from_number: str, message: str) -> str:
             except Exception as e:
                 logger.error(f"Error obteniendo precios: {str(e)}")
                 # Si hay error, usar precio por defecto
-                conversation_data['precio_info'] = {
+                user_data['precio_info'] = {
                     'precio_actual': 150,
                     'tendencia': 'estable',
                     'unidad_medida': 'quintal'
                 }
             
-            next_state = ConversationState.CULTIVO
-            await db.update_conversation_state(from_number, next_state, conversation_data)
-            return await get_response_for_state(next_state, conversation_data)
+            new_conversation_data = {'state': ConversationState.CULTIVO, 'data': user_data}
+            await db.update_conversation_state(from_number, new_conversation_data)
+            return await get_response_for_state(ConversationState.CULTIVO, user_data)
             
         elif current_state == ConversationState.CULTIVO:
             try:
@@ -177,30 +184,30 @@ async def process_user_message(from_number: str, message: str) -> str:
             except ValueError:
                 return "Por favor, ingresa un número válido. Por ejemplo: 2.5"
                 
-            conversation_data['hectareas'] = hectareas
-            next_state = ConversationState.HECTAREAS
-            await db.update_conversation_state(from_number, next_state, conversation_data)
-            return await get_response_for_state(next_state, conversation_data)
+            user_data['hectareas'] = hectareas
+            new_conversation_data = {'state': ConversationState.HECTAREAS, 'data': user_data}
+            await db.update_conversation_state(from_number, new_conversation_data)
+            return await get_response_for_state(ConversationState.HECTAREAS, user_data)
         
         elif current_state == ConversationState.HECTAREAS:
-            conversation_data['riego'] = message
-            next_state = ConversationState.RIEGO
-            await db.update_conversation_state(from_number, next_state, conversation_data)
-            return await get_response_for_state(next_state, conversation_data)
+            user_data['riego'] = message
+            new_conversation_data = {'state': ConversationState.RIEGO, 'data': user_data}
+            await db.update_conversation_state(from_number, new_conversation_data)
+            return await get_response_for_state(ConversationState.RIEGO, user_data)
         
         elif current_state == ConversationState.RIEGO:
-            conversation_data['comercializacion'] = message
-            next_state = ConversationState.COMERCIALIZACION
-            await db.update_conversation_state(from_number, next_state, conversation_data)
-            return await get_response_for_state(next_state, conversation_data)
+            user_data['comercializacion'] = message
+            new_conversation_data = {'state': ConversationState.COMERCIALIZACION, 'data': user_data}
+            await db.update_conversation_state(from_number, new_conversation_data)
+            return await get_response_for_state(ConversationState.COMERCIALIZACION, user_data)
         
         elif current_state == ConversationState.COMERCIALIZACION:
-            conversation_data['ubicacion'] = message
-            next_state = ConversationState.FINALIZADO
-            await db.update_conversation_state(from_number, next_state, conversation_data)
+            user_data['ubicacion'] = message
+            new_conversation_data = {'state': ConversationState.FINALIZADO, 'data': user_data}
+            await db.update_conversation_state(from_number, new_conversation_data)
             
             # Generar y enviar el análisis final
-            return await get_response_for_state(next_state, conversation_data)
+            return await get_response_for_state(ConversationState.FINALIZADO, user_data)
         
         elif current_state == ConversationState.FINALIZADO:
             return "Tu análisis ya está listo. Si quieres iniciar una nueva consulta, escribe 'reiniciar'."
