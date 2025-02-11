@@ -27,7 +27,7 @@ class ConversationManager:
             ConversationState.COMPLETED: self._handle_completed_state
         }
     
-    async def handle_message(self, phone: str, message: str) -> Tuple[str, Optional[List[Dict[str, str]]]]:
+    async def handle_message(self, phone: str, message: str) -> str:
         """
         Maneja un mensaje entrante y retorna la respuesta
         
@@ -36,144 +36,127 @@ class ConversationManager:
             message: Mensaje recibido
             
         Returns:
-            Tuple[str, Optional[List[Dict[str, str]]]]: Mensaje de respuesta y archivos adjuntos opcionales
+            str: Mensaje de respuesta
         """
         try:
             # Normalizar mensaje
             message = message.strip().lower()
             
+            # Manejar comando de reinicio
+            if message == "reiniciar":
+                await firebase_manager.reset_user_state(phone)
+                return MESSAGES['welcome']
+            
             # Obtener estado actual
-            state = await firebase_manager.get_conversation_state(phone)
-            if not state:
-                state = ConversationState.INITIAL
-                await firebase_manager.update_user_state(phone, state)
+            conversation_data = firebase_manager.get_conversation_state(phone)
+            current_state = conversation_data.get('state', ConversationState.INITIAL.value)
+            user_data = conversation_data.get('data', {})
             
-            # Obtener manejador para el estado actual
-            handler = self.state_handlers.get(state)
-            if not handler:
-                logger.error(f"No handler found for state: {state}")
-                return MESSAGES['error'], None
-            
-            # Procesar mensaje según el estado
-            return await handler(phone, message)
-            
-        except Exception as e:
-            logger.error(f"Error handling message: {str(e)}")
-            return MESSAGES['error'], None
-    
-    async def _handle_initial_state(self, phone: str, message: str) -> Tuple[str, None]:
-        """Maneja el estado inicial"""
-        await firebase_manager.update_user_state(phone, ConversationState.ASKING_CROP)
-        return MESSAGES['ask_crop'], None
-    
-    async def _handle_crop_state(self, phone: str, message: str) -> Tuple[str, None]:
-        """Maneja el estado de pregunta sobre cultivo"""
-        # Validar cultivo
-        crop = None
-        for crop_name, variations in CROP_VARIATIONS.items():
-            if message in variations:
-                crop = crop_name
-                break
-        
-        if not crop:
-            return "No reconozco ese cultivo. Por favor, elige uno de la lista:\n" + \
-                   "\n".join([f"- {crop}" for crop in CROP_VARIATIONS.keys()]), None
-        
-        # Guardar cultivo y actualizar estado
-        await firebase_manager.update_user_data(phone, {'crop': crop})
-        await firebase_manager.update_user_state(phone, ConversationState.ASKING_AREA)
-        return MESSAGES['ask_area'], None
-    
-    async def _handle_area_state(self, phone: str, message: str) -> Tuple[str, None]:
-        """Maneja el estado de pregunta sobre área"""
-        try:
-            area = float(message.replace(',', '.'))
-            if area <= 0:
-                return MESSAGES['invalid_area'], None
+            # Procesar mensaje según estado
+            if current_state == ConversationState.INITIAL.value:
+                user_data['name'] = message
+                new_state = ConversationState.ASKING_CROP.value
+                response = MESSAGES['ask_crop']
                 
-            await firebase_manager.update_user_data(phone, {'area': area})
-            await firebase_manager.update_user_state(phone, ConversationState.ASKING_IRRIGATION)
-            return MESSAGES['ask_irrigation'], None
+            elif current_state == ConversationState.ASKING_CROP.value:
+                user_data['crop'] = message
+                # Obtener precio del cultivo
+                try:
+                    precio_info = await maga_api.get_precio_cultivo(message)
+                    if precio_info:
+                        user_data['precio_info'] = precio_info
+                        logger.info(f"Precio encontrado para {message}: {precio_info}")
+                except Exception as e:
+                    logger.error(f"Error obteniendo precios: {str(e)}")
+                
+                new_state = ConversationState.ASKING_AREA.value
+                response = MESSAGES['ask_area']
+                
+            elif current_state == ConversationState.ASKING_AREA.value:
+                try:
+                    area = float(message.replace('ha', '').strip())
+                    if area <= 0:
+                        return MESSAGES['invalid_area']
+                    user_data['area'] = area
+                    new_state = ConversationState.ASKING_COMMERCIALIZATION.value
+                    response = MESSAGES['ask_commercialization']
+                except ValueError:
+                    return MESSAGES['invalid_area']
+                
+            elif current_state == ConversationState.ASKING_COMMERCIALIZATION.value:
+                valid_options = ['mercado local', 'exportación', 'intermediario', 'directo']
+                if message not in valid_options:
+                    return (
+                        "❌ Por favor, selecciona una opción válida:\n"
+                        "- Mercado local\n"
+                        "- Exportación\n"
+                        "- Intermediario\n"
+                        "- Directo"
+                    )
+                user_data['commercialization'] = message
+                new_state = ConversationState.ASKING_IRRIGATION.value
+                response = MESSAGES['ask_irrigation']
+                
+            elif current_state == ConversationState.ASKING_IRRIGATION.value:
+                valid_options = ['goteo', 'aspersión', 'gravedad', 'temporal']
+                if message not in valid_options:
+                    return (
+                        "❌ Por favor, selecciona una opción válida:\n"
+                        "- Goteo\n"
+                        "- Aspersión\n"
+                        "- Gravedad\n"
+                        "- Temporal"
+                    )
+                user_data['irrigation'] = message
+                new_state = ConversationState.ASKING_LOCATION.value
+                response = MESSAGES['ask_location']
+                
+            elif current_state == ConversationState.ASKING_LOCATION.value:
+                user_data['location'] = message
+                new_state = ConversationState.ANALYSIS.value
+                
+                # Generar análisis
+                analysis = scoring_service.generate_analysis(user_data)
+                firebase_manager.store_analysis(phone, analysis)
+                
+                # Preparar mensaje de respuesta con el análisis
+                fingro_score = analysis.get('fingro_score', 0)
+                monto_sugerido = analysis.get('monto_sugerido', 0)
+                
+                response = (
+                    f"✅ ¡{user_data['name']}, tu análisis está listo!\n\n"
+                    f"📊 Tu Fingro Score es: {fingro_score}/100\n"
+                    f"💰 Monto sugerido: Q{format_currency(monto_sugerido)}\n\n"
+                    "👨‍💼 Un asesor de FinGro se pondrá en contacto contigo pronto "
+                    "para discutir las opciones de financiamiento disponibles para tu proyecto."
+                )
+                
+            elif current_state == ConversationState.ANALYSIS.value:
+                new_state = ConversationState.COMPLETED.value
+                response = (
+                    "🎉 ¡Gracias por usar FinGro!\n\n"
+                    "Si deseas realizar un nuevo análisis, escribe 'reiniciar'."
+                )
+                
+            else:
+                await firebase_manager.reset_user_state(phone)
+                return MESSAGES['error_restart']
             
-        except ValueError:
-            return MESSAGES['invalid_area'], None
-    
-    async def _handle_irrigation_state(self, phone: str, message: str) -> Tuple[str, None]:
-        """Maneja el estado de pregunta sobre riego"""
-        valid_irrigation = ['goteo', 'aspersion', 'aspersión', 'gravedad', 'temporal']
-        if message not in valid_irrigation:
-            return "Por favor, elige un sistema de riego válido:\n- Goteo\n- Aspersión\n- Gravedad\n- Temporal", None
-        
-        await firebase_manager.update_user_data(phone, {'irrigation': message})
-        await firebase_manager.update_user_state(phone, ConversationState.ASKING_COMMERCIALIZATION)
-        return MESSAGES['ask_commercialization'], None
-    
-    async def _handle_commercialization_state(self, phone: str, message: str) -> Tuple[str, None]:
-        """Maneja el estado de pregunta sobre comercialización"""
-        valid_commercialization = ['mercado local', 'exportacion', 'exportación', 'intermediario', 'directo']
-        if message not in valid_commercialization:
-            return "Por favor, elige un método de comercialización válido:\n- Mercado local\n- Exportación\n- Intermediario\n- Directo", None
-        
-        await firebase_manager.update_user_data(phone, {'commercialization': message})
-        await firebase_manager.update_user_state(phone, ConversationState.ASKING_LOCATION)
-        return MESSAGES['ask_location'], None
-    
-    async def _handle_location_state(self, phone: str, message: str) -> Tuple[str, None]:
-        """Maneja el estado de pregunta sobre ubicación"""
-        await firebase_manager.update_user_data(phone, {'location': message})
-        await firebase_manager.update_user_state(phone, ConversationState.ANALYSIS)
-        return MESSAGES['analysis_ready'], None
-    
-    async def _handle_analysis_state(self, phone: str, message: str) -> Tuple[str, Optional[List[Dict[str, str]]]]:
-        """Maneja el estado de análisis"""
-        try:
-            # Obtener datos del usuario
-            user_data = await firebase_manager.get_user_data(phone)
-            if not user_data:
-                return MESSAGES['error'], None
+            # Actualizar estado
+            await firebase_manager.update_user_state(phone, {
+                'state': new_state,
+                'data': user_data
+            })
             
-            # Obtener precio del cultivo
-            crop_price = await maga_api.get_precio_cultivo(user_data['crop'])
-            
-            # Calcular score y recomendaciones
-            score_data = await scoring_service.calculate_score(user_data, crop_price)
-            
-            # Generar reporte
-            report = (
-                f"✅ *¡Análisis completado!*\n\n"
-                f"📝 *Datos del Proyecto*\n"
-                f"• Cultivo: {user_data['crop']}\n"
-                f"• Área: {user_data['area']} hectáreas\n"
-                f"• Riego: {user_data['irrigation']}\n"
-                f"• Comercialización: {user_data['commercialization']}\n"
-                f"• Ubicación: {user_data['location']}\n\n"
-                f"💰 *Análisis Financiero*\n"
-                f"• Inversión necesaria: {format_currency(score_data['costos_estimados'])}\n"
-                f"• Ingresos proyectados: {format_currency(score_data['ingreso_estimado'])}\n"
-                f"• Ganancia estimada: {format_currency(score_data['ganancia_estimada'])}\n"
-                f"• FinGro Score: {score_data['fingro_score']}%\n\n"
-                f"🎉 *¡Buenas noticias!*\n"
-                f"Calificas para un préstamo de hasta {format_currency(score_data['prestamo_recomendado'])}.\n\n"
-                f"🏦 ¿Listo para solicitar tu préstamo? Escribe 'solicitar' para comenzar el proceso."
-            )
-            
-            await firebase_manager.update_user_state(phone, ConversationState.COMPLETED)
-            return report, None
+            return response
             
         except Exception as e:
-            logger.error(f"Error generating analysis: {str(e)}")
-            return MESSAGES['error'], None
-    
-    async def _handle_completed_state(self, phone: str, message: str) -> Tuple[str, None]:
-        """Maneja el estado completado"""
-        if message == 'solicitar':
-            # TODO: Implementar lógica para iniciar solicitud de préstamo
-            return "Pronto un asesor se pondrá en contacto contigo para continuar con tu solicitud. ¡Gracias por usar FinGro! 🙌", None
-        return "Escribe 'solicitar' para comenzar el proceso de préstamo o 'reiniciar' para comenzar de nuevo.", None
+            logger.error(f"Error en handle_message: {str(e)}")
+            return MESSAGES['error']
 
 def format_currency(amount: float) -> str:
     """Formatea cantidades monetarias"""
-    return f"Q{amount:,.2f}"
+    return f"{amount:,.2f}".replace(",", "x").replace(".", ",").replace("x", ".")
 
 # Instancia global
 conversation_manager = ConversationManager()
