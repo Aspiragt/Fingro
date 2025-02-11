@@ -1,5 +1,5 @@
-from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import JSONResponse, Response
+from fastapi import FastAPI, Request, Response, HTTPException
+from fastapi.responses import JSONResponse
 import logging
 import os
 import json
@@ -8,6 +8,7 @@ from typing import Dict, Any
 from enum import Enum
 from datetime import datetime
 from .database import db
+from .external_apis.maga import maga_client
 
 # Configuración de logging
 logging.basicConfig(
@@ -51,7 +52,7 @@ def get_next_state(current_state: ConversationState) -> ConversationState:
 def get_response_for_state(state: ConversationState, user_data: Dict[str, Any]) -> str:
     """Genera la respuesta apropiada según el estado de la conversación"""
     responses = {
-        ConversationState.INICIO: "¡Hola! Soy Fingro 🌱, tu asistente para conseguir financiamiento agrícola. ¿Qué te gustaría cultivar?",
+        ConversationState.INICIO: "¡Hola! Soy Fingro , tu asistente para conseguir financiamiento agrícola. ¿Qué te gustaría cultivar?",
         ConversationState.CULTIVO: f"¡Excelente elección! ¿Cuántas hectáreas planeas cultivar?",
         ConversationState.HECTAREAS: "Entiendo. ¿Qué método de riego utilizas o planeas utilizar?\nPor ejemplo: por goteo, aspersión, o tradicional",
         ConversationState.RIEGO: "¿Y ya tienes comprador para tu cosecha? ¿A quién le vendes normalmente?\nPor ejemplo: cooperativa, exportación, mercado local, intermediario, central de mayoreo",
@@ -67,14 +68,35 @@ def generate_summary(user_data: Dict[str, Any]) -> str:
     hectareas = user_data.get('hectareas', 'N/A')
     riego = user_data.get('riego', 'N/A')
     municipio = user_data.get('ubicacion', 'N/A')
+    precio_info = user_data.get('precio_info', None)
     
-    return f"""¡Gracias! Con la información que me has dado, puedo decirte que:
+    if precio_info:
+        precio_actual = precio_info.get('precio_actual', 'N/A')
+        unidad_medida = precio_info.get('unidad_medida', 'N/A')
+        tendencia = precio_info.get('tendencia', 'N/A')
+        ultima_actualizacion = precio_info.get('ultima_actualizacion', 'N/A')
+        
+        return f"""¡Gracias! Con la información que me has dado, puedo decirte que:
 
-🌱 Cultivo de {cultivo}
-📐 {hectareas} hectáreas con riego por {riego}
-📍 Ubicación: {municipio}
-💰 Ingresos estimados: Q.80,000 (estimado)
-🚜 Costos estimados: Q.40,000 (estimado)
+ Cultivo de {cultivo}
+ {hectareas} hectáreas con riego por {riego}
+ Ubicación: {municipio}
+ Información del mercado:
+ • Precio actual: Q.{precio_actual}/{unidad_medida}
+ • Tendencia: {tendencia}
+ • Última actualización: {ultima_actualizacion}
+ Ingresos estimados: Q.80,000 (estimado)
+ Costos estimados: Q.40,000 (estimado)
+
+¿Te gustaría saber cuánto financiamiento podrías obtener?"""
+    else:
+        return f"""¡Gracias! Con la información que me has dado, puedo decirte que:
+
+ Cultivo de {cultivo}
+ {hectareas} hectáreas con riego por {riego}
+ Ubicación: {municipio}
+ Ingresos estimados: Q.80,000 (estimado)
+ Costos estimados: Q.40,000 (estimado)
 
 ¿Te gustaría saber cuánto financiamiento podrías obtener?"""
 
@@ -90,45 +112,85 @@ async def process_user_message(from_number: str, message: str) -> str:
             'data': {}
         }
         await db.create_or_update_user(from_number, user_data)
-        return ("¡Bienvenido a Fingro! 🌱\n\n"
+        return ("¡Bienvenido a Fingro! \n\n"
                 "Somos tu aliado financiero en el campo. Te ayudamos a obtener el financiamiento que necesitas para tu cultivo "
                 "de manera rápida y sencilla.\n\n"
                 "En los próximos minutos, te haré algunas preguntas sobre tu proyecto agrícola. "
                 "Con esta información, podremos:\n"
-                "• Calcular el monto de financiamiento 💰\n"
-                "• Estimar los costos de producción 📊\n"
-                "• Proyectar tus ganancias potenciales 📈\n\n"
+                "• Calcular el monto de financiamiento \n"
+                "• Estimar los costos de producción \n"
+                "• Proyectar tus ganancias potenciales \n\n"
                 "Al final, recibirás un resumen detallado y nos pondremos en contacto contigo para discutir las opciones de financiamiento disponibles.\n\n"
-                "¡Empecemos! ¿Qué cultivo estás planeando sembrar? 🌾")
+                "¡Empecemos! ¿Qué cultivo estás planeando sembrar? ")
     
     current_state = ConversationState(user_data.get('estado_conversacion', ConversationState.INICIO))
     conversation_data = user_data.get('data', {})
     
     # Actualizar datos según el estado actual
     if current_state == ConversationState.INICIO:
+        # Obtener información de precios del MAGA
+        precio_info = await maga_client.get_precio_cultivo(message)
+        
+        # Guardar el cultivo
         conversation_data['cultivo'] = message
+        user_data['estado_conversacion'] = ConversationState.CULTIVO
+        
+        # Construir respuesta con información de precios si está disponible
+        response = f"Has seleccionado: {message}\n\n"
+        
+        if precio_info:
+            response += (f" Información del mercado:\n"
+                       f"• Precio actual: Q.{precio_info['precio_actual']}/{precio_info['unidad_medida']}\n"
+                       f"• Tendencia: {precio_info['tendencia']}\n"
+                       f"• Última actualización: {precio_info['ultima_actualizacion']}\n\n")
+        
+        response += "¿Cuántas hectáreas planeas cultivar?"
+        
+        # Actualizar usuario con la información de precios
+        conversation_data['precio_info'] = precio_info if precio_info else None
+        user_data['data'] = conversation_data
+        await db.update_conversation_state(from_number, user_data)
+        
+        return response
+        
     elif current_state == ConversationState.CULTIVO:
         conversation_data['hectareas'] = message
+        user_data['estado_conversacion'] = ConversationState.HECTAREAS
+        user_data['data'] = conversation_data
+        await db.update_conversation_state(from_number, user_data)
+        return get_response_for_state(ConversationState.HECTAREAS, conversation_data)
+    
     elif current_state == ConversationState.HECTAREAS:
         conversation_data['riego'] = message
+        user_data['estado_conversacion'] = ConversationState.RIEGO
+        user_data['data'] = conversation_data
+        await db.update_conversation_state(from_number, user_data)
+        return get_response_for_state(ConversationState.RIEGO, conversation_data)
+    
     elif current_state == ConversationState.RIEGO:
         conversation_data['comercializacion'] = message
+        user_data['estado_conversacion'] = ConversationState.COMERCIALIZACION
+        user_data['data'] = conversation_data
+        await db.update_conversation_state(from_number, user_data)
+        return get_response_for_state(ConversationState.COMERCIALIZACION, conversation_data)
+    
     elif current_state == ConversationState.COMERCIALIZACION:
         conversation_data['ubicacion'] = message
+        user_data['estado_conversacion'] = ConversationState.UBICACION
+        user_data['data'] = conversation_data
+        await db.update_conversation_state(from_number, user_data)
+        return get_response_for_state(ConversationState.UBICACION, conversation_data)
     
-    # Avanzar al siguiente estado
-    next_state = get_next_state(current_state)
+    elif current_state == ConversationState.UBICACION:
+        user_data['estado_conversacion'] = ConversationState.FINALIZADO
+        user_data['data'] = conversation_data
+        await db.update_conversation_state(from_number, user_data)
+        return get_response_for_state(ConversationState.FINALIZADO, conversation_data)
     
-    # Si llegamos al estado FINALIZADO, crear solicitud
-    if next_state == ConversationState.FINALIZADO:
+    elif current_state == ConversationState.FINALIZADO:
         await db.create_solicitud(from_number, conversation_data)
         await db.delete_user_data(from_number)  # Borrar datos después de crear la solicitud
-    
-    # Actualizar estado en la base de datos
-    await db.update_conversation_state(from_number, next_state, conversation_data)
-    
-    # Generar respuesta
-    return get_response_for_state(next_state, conversation_data)
+        return get_response_for_state(ConversationState.FINALIZADO, conversation_data)
 
 async def send_whatsapp_message(to_number: str, message: str) -> Dict:
     """Enviar mensaje usando WhatsApp Cloud API"""
