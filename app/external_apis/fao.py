@@ -2,7 +2,7 @@
 Cliente para la API de FAODATA Explorer
 """
 import httpx
-from typing import Dict, Optional
+from typing import Dict, Optional, Dict
 import logging
 from datetime import datetime
 import json

@@ -2,10 +2,11 @@
 Integración con el Sistema de Información de Mercados del MAGA
 """
 import httpx
-import pandas as pd
 from typing import Dict, List, Optional
+import pandas as pd
 import logging
 from datetime import datetime, timedelta
+import json
 
 logger = logging.getLogger(__name__)
 

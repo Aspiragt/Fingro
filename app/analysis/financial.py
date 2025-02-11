@@ -1,7 +1,7 @@
 """
-Módulo para análisis financiero de cultivos
+Módulo para análisis financiero de proyectos agrícolas
 """
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 from datetime import datetime
 import logging
 from ..external_apis.fao import fao_client
