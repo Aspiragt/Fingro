@@ -58,7 +58,7 @@ def get_response_for_state(state: ConversationState, user_data: Dict[str, Any]) 
         ConversationState.CULTIVO: f"¡Excelente elección! ¿Cuántas hectáreas planeas cultivar?",
         ConversationState.HECTAREAS: "Entiendo. ¿Qué método de riego utilizas o planeas utilizar?\nPor ejemplo: por goteo, aspersión, o tradicional",
         ConversationState.RIEGO: "¿Y ya tienes comprador para tu cosecha? ¿A quién le vendes normalmente?",
-        ConversationState.COMERCIALIZACION: "¿Te gustaría compartir tu ubicación para que pueda darte información más precisa?",
+        ConversationState.COMERCIALIZACION: "¿En qué municipio se encuentra o estará tu cultivo?",
         ConversationState.UBICACION: generate_summary(user_data),
         ConversationState.FINALIZADO: "¡Gracias por tu interés! Pronto un asesor se pondrá en contacto contigo."
     }
@@ -70,11 +70,13 @@ def generate_summary(user_data: Dict[str, Any]) -> str:
     cultivo = user_data.get('cultivo', 'N/A')
     hectareas = user_data.get('hectareas', 'N/A')
     riego = user_data.get('riego', 'N/A')
+    municipio = user_data.get('ubicacion', 'N/A')
     
     return f"""¡Gracias! Con la información que me has dado, puedo decirte que:
 
  Cultivo de {cultivo}
  {hectareas} hectáreas con riego por {riego}
+ Ubicación: {municipio}
  Ingresos estimados: Q.80,000 (estimado)
  Costos estimados: Q.40,000 (estimado)
 
