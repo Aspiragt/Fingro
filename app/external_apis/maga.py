@@ -2,7 +2,7 @@
 Integración con el Sistema de Información de Mercados del MAGA
 """
 import httpx
-from typing import dict, List, Optional
+from typing import List, Optional
 import pandas as pd
 import logging
 from datetime import datetime, timedelta

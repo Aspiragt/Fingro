@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, dict, Any
+from typing import Optional, Any
 from datetime import datetime
 
 class Location(BaseModel):

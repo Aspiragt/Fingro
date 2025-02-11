@@ -1,7 +1,7 @@
 """
 Módulo para interacción con Firebase
 """
-from typing import dict, Any, Optional
+from typing import Any, Optional
 import firebase_admin
 from firebase_admin import credentials, firestore
 import os

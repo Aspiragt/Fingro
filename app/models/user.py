@@ -12,8 +12,8 @@ class Location(BaseModel):
 class FinancialProfile(BaseModel):
     fingro_score: Optional[float] = None
     payment_methods: List[str] = []
-    financing_history: List[dict] = []
-    references: List[dict] = []
+    financing_history: List[Any] = []
+    references: List[Any] = []
     whatsapp_usage: Optional[str] = None
     phone_history: Optional[str] = None
 
@@ -22,7 +22,7 @@ class LanguageProfile(BaseModel):
     spelling_accuracy: float = 0
     vocabulary_size: int = 0
     digital_literacy_score: float = 0
-    common_mistakes: dict[str, dict] = {}
+    common_mistakes: Any = {}
 
 class User(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
