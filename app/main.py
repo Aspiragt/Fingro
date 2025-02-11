@@ -31,6 +31,10 @@ async def send_whatsapp_message(to_number: str, message: str) -> Dict:
     """Enviar mensaje usando WhatsApp Cloud API"""
     logger.info(f"Intentando enviar mensaje a {to_number}")
     
+    # Asegurarse de que el número tenga el formato correcto
+    if to_number.startswith("+"):
+        to_number = to_number[1:]
+    
     headers = {
         "Authorization": f"Bearer {WHATSAPP_TOKEN}",
         "Content-Type": "application/json"
@@ -45,7 +49,6 @@ async def send_whatsapp_message(to_number: str, message: str) -> Dict:
     
     try:
         logger.debug(f"Payload del mensaje: {json.dumps(payload, indent=2)}")
-        logger.debug(f"Headers: {headers}")
         
         async with httpx.AsyncClient() as client:
             logger.info(f"Enviando request a: {WHATSAPP_URL}")
@@ -97,34 +100,72 @@ async def verify_webhook(request: Request):
 async def webhook(request: Request):
     """Recibir mensajes de WhatsApp Cloud API"""
     try:
-        body = await request.json()
+        # Obtener el cuerpo de la petición como texto
+        body_str = await request.body()
+        logger.info(f"Webhook raw body: {body_str}")
+        
+        # Convertir a JSON
+        try:
+            body = json.loads(body_str)
+        except json.JSONDecodeError as e:
+            logger.error(f"Error decodificando JSON: {str(e)}")
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Invalid JSON"}
+            )
+        
         logger.info("Webhook recibido")
         logger.debug(f"Contenido del webhook: {json.dumps(body, indent=2)}")
         
+        # Verificar que es un evento de WhatsApp
         if body.get("object") != "whatsapp_business_account":
-            logger.warning("Evento recibido no es de WhatsApp Business")
+            logger.warning(f"Objeto incorrecto recibido: {body.get('object')}")
             return JSONResponse({"status": "not whatsapp"})
         
         # Procesar mensajes
         messages_processed = 0
-        for entry in body.get("entry", []):
-            for change in entry.get("changes", []):
-                if change.get("value", {}).get("messages"):
-                    for message in change["value"]["messages"]:
+        try:
+            entries = body.get("entry", [])
+            logger.debug(f"Procesando {len(entries)} entries")
+            
+            for entry in entries:
+                changes = entry.get("changes", [])
+                logger.debug(f"Procesando {len(changes)} changes en entry {entry.get('id')}")
+                
+                for change in changes:
+                    value = change.get("value", {})
+                    messages = value.get("messages", [])
+                    logger.debug(f"Procesando {len(messages)} mensajes en change")
+                    
+                    for message in messages:
                         if message.get("type") == "text":
-                            from_number = message["from"]
-                            text = message["text"]["body"]
+                            from_number = message.get("from")
+                            text = message.get("text", {}).get("body", "")
                             logger.info(f"Mensaje de texto recibido - De: {from_number}, Contenido: {text}")
                             
-                            response = "¡Hola! Gracias por tu mensaje. Soy el bot de Fingro 🌱"
-                            await send_whatsapp_message(from_number, response)
-                            messages_processed += 1
+                            # Enviar respuesta
+                            try:
+                                response = "¡Hola! Gracias por tu mensaje. Soy el bot de Fingro 🌱"
+                                await send_whatsapp_message(from_number, response)
+                                messages_processed += 1
+                            except Exception as e:
+                                logger.error(f"Error enviando respuesta: {str(e)}")
         
-        logger.info(f"Procesados {messages_processed} mensajes")
-        return JSONResponse({"status": "processed", "messages": messages_processed})
+        except Exception as e:
+            logger.error(f"Error procesando mensajes: {str(e)}", exc_info=True)
+            return JSONResponse(
+                status_code=500,
+                content={"error": f"Error processing messages: {str(e)}"}
+            )
+        
+        logger.info(f"Procesados {messages_processed} mensajes exitosamente")
+        return JSONResponse({
+            "status": "processed",
+            "messages": messages_processed
+        })
         
     except Exception as e:
-        logger.error(f"Error procesando webhook: {str(e)}", exc_info=True)
+        logger.error(f"Error general en webhook: {str(e)}", exc_info=True)
         return JSONResponse(
             status_code=500,
             content={"error": str(e)}
