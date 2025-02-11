@@ -1,5 +1,5 @@
-from typing import Optional, Dict
-from pydantic import BaseModel, ConfigDict
+from typing import Optional
+from pydantic import BaseModel
 from datetime import datetime
 
 class ProductionMetrics(BaseModel):
@@ -25,7 +25,7 @@ class Crop(BaseModel):
     area: float
     area_unit: str  # hectáreas o cuerdas
     user_id: str
-    location: Optional[Dict[str, float]] = None  # lat, lng
+    location: Optional[dict[str, float]] = None  # lat, lng
     production: Optional[ProductionMetrics] = None
     sales: Optional[SalesInfo] = None
     notes: Optional[str] = None

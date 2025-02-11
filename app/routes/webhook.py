@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Request, Response, HTTPException, Depends
-from typing import Dict, Any
+from typing import Any
 from app.services.whatsapp_service import WhatsAppService
 from app.database.firebase import get_firebase_db
 import logging
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

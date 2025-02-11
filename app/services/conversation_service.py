@@ -1,9 +1,12 @@
-from typing import Optional, Dict, List
+from typing import Optional, List, Any
 from datetime import datetime
+import logging
 import uuid
 from app.database.firebase import db
 from app.models.conversation import Conversation, Message
 from app.models.user import User
+
+logger = logging.getLogger(__name__)
 
 class ConversationService:
     def __init__(self):
@@ -64,24 +67,28 @@ class ConversationService:
         
         return message
     
-    async def update_context(self, conversation_id: str, context_updates: Dict):
+    async def update_context(self, conversation_id: str, context_updates: dict):
         """Update the conversation context"""
-        conv_data = await self.db.get_document('conversations', conversation_id)
-        if not conv_data:
-            raise ValueError(f"Conversation {conversation_id} not found")
-        
-        conversation = Conversation(**conv_data)
-        conversation.context.update(context_updates)
-        conversation.updated_at = datetime.now()
-        
-        await self.db.update_document(
-            'conversations',
-            conversation_id,
-            {'context': conversation.context,
-             'updated_at': conversation.updated_at}
-        )
-        
-        return conversation.context
+        try:
+            conv_data = await self.db.get_document('conversations', conversation_id)
+            if not conv_data:
+                raise ValueError(f"Conversation {conversation_id} not found")
+            
+            conversation = Conversation(**conv_data)
+            conversation.context.update(context_updates)
+            conversation.updated_at = datetime.now()
+            
+            await self.db.update_document(
+                'conversations',
+                conversation_id,
+                {'context': conversation.context,
+                 'updated_at': conversation.updated_at}
+            )
+            
+            return conversation.context
+        except Exception as e:
+            logger.error(f"Error updating context: {str(e)}")
+            raise
     
     async def end_conversation(self, conversation_id: str):
         """End a conversation"""
