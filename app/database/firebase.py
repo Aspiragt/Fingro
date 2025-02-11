@@ -3,24 +3,9 @@ from firebase_admin import credentials, firestore
 from pathlib import Path
 import os
 import json
-from datetime import datetime
 from dotenv import load_dotenv
 
 load_dotenv()
-
-def convert_firebase_object(obj):
-    """Convert Firebase objects to serializable format"""
-    if isinstance(obj, (firestore.DocumentReference, firestore.CollectionReference)):
-        return obj.path
-    elif hasattr(obj, 'seconds') and hasattr(obj, 'nanos'):  # Firebase Timestamp
-        return datetime.fromtimestamp(obj.seconds + obj.nanos/1e9).isoformat()
-    elif isinstance(obj, datetime):
-        return obj.isoformat()
-    elif isinstance(obj, dict):
-        return {k: convert_firebase_object(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [convert_firebase_object(i) for i in obj]
-    return obj
 
 class FirebaseDB:
     _instance = None
@@ -34,15 +19,28 @@ class FirebaseDB:
     def _initialize(self):
         """Initialize Firebase connection"""
         try:
-            # Try to get credentials from environment variable
-            cred_dict = os.getenv('FIREBASE_CREDENTIALS')
-            if cred_dict:
-                cred = credentials.Certificate(json.loads(cred_dict))
-            else:
-                # Fallback to credentials file
-                cred_path = Path(__file__).parent.parent.parent / 'firebase-credentials.json'
-                cred = credentials.Certificate(str(cred_path))
+            # Crear el diccionario de credenciales desde variables de entorno
+            cred_dict = {
+                "type": "service_account",
+                "project_id": os.getenv("FIREBASE_PROJECT_ID"),
+                "private_key_id": os.getenv("FIREBASE_PRIVATE_KEY_ID"),
+                "private_key": os.getenv("FIREBASE_PRIVATE_KEY").replace('\\n', '\n') if os.getenv("FIREBASE_PRIVATE_KEY") else None,
+                "client_email": os.getenv("FIREBASE_CLIENT_EMAIL"),
+                "client_id": os.getenv("FIREBASE_CLIENT_ID"),
+                "auth_uri": os.getenv("FIREBASE_AUTH_URI"),
+                "token_uri": os.getenv("FIREBASE_TOKEN_URI"),
+                "auth_provider_x509_cert_url": os.getenv("FIREBASE_AUTH_PROVIDER_X509_CERT_URL"),
+                "client_x509_cert_url": os.getenv("FIREBASE_CLIENT_X509_CERT_URL")
+            }
             
+            # Verificar que todas las credenciales necesarias están presentes
+            required_fields = ["project_id", "private_key", "client_email"]
+            missing_fields = [field for field in required_fields if not cred_dict.get(field)]
+            if missing_fields:
+                raise ValueError(f"Missing required Firebase credentials: {', '.join(missing_fields)}")
+            
+            # Inicializar Firebase
+            cred = credentials.Certificate(cred_dict)
             firebase_admin.initialize_app(cred)
             self.db = firestore.client()
             print("Firebase initialized successfully")
@@ -58,166 +56,54 @@ class FirebaseDB:
     async def add_document(self, collection: str, data: dict, doc_id: str = None):
         """Add a document to a collection"""
         try:
-            print(f"\n=== AGREGANDO DOCUMENTO ===")
-            print(f"Colección: {collection}")
-            print(f"ID: {doc_id if doc_id else 'auto-generated'}")
-            print(f"Datos: {json.dumps(convert_firebase_object(data), indent=2)}")
-            
             if doc_id:
-                # Si se proporciona ID, crear documento con ese ID
                 doc_ref = self.db.collection(collection).document(doc_id)
                 doc_ref.set(data)
-                print(f"Documento creado con ID: {doc_id}")
-                
-                # Asegurarnos que el ID esté en los datos
-                data['id'] = doc_id
-                return data
+                return doc_id
             else:
-                # Si no se proporciona ID, generar uno automáticamente
-                doc_ref = self.db.collection(collection).add(data)[1]
-                doc_id = doc_ref.id
-                
-                # Actualizar el documento para incluir su ID
-                data['id'] = doc_id
-                doc_ref.update({'id': doc_id})
-                
-                print(f"Documento creado con ID: {doc_id}")
-                return data
-                
+                doc_ref = self.db.collection(collection).add(data)
+                return doc_ref[1].id
         except Exception as e:
-            print(f"Error agregando documento: {str(e)}")
+            print(f"Error adding document: {str(e)}")
             raise e
     
     async def get_document(self, collection: str, doc_id: str):
         """Get a document by ID"""
         try:
-            print(f"\n=== OBTENIENDO DOCUMENTO ===")
-            print(f"Colección: {collection}")
-            print(f"ID: {doc_id}")
-            
             doc_ref = self.db.collection(collection).document(doc_id)
             doc = doc_ref.get()
-            
-            if doc.exists:
-                data = convert_firebase_object(doc.to_dict())
-                print(f"Documento encontrado: {json.dumps(data, indent=2)}")
-                return data
-            else:
-                print("Documento no encontrado")
-                return None
-                
+            return doc.to_dict() if doc.exists else None
         except Exception as e:
-            print(f"Error obteniendo documento: {str(e)}")
+            print(f"Error getting document: {str(e)}")
             raise e
     
     async def update_document(self, collection: str, doc_id: str, data: dict):
         """Update a document"""
         try:
-            print(f"\n=== ACTUALIZANDO DOCUMENTO ===")
-            print(f"Colección: {collection}")
-            print(f"ID: {doc_id}")
-            print(f"Datos: {json.dumps(convert_firebase_object(data), indent=2)}")
-            
             doc_ref = self.db.collection(collection).document(doc_id)
-            
-            # Verificar si el documento existe
-            doc = doc_ref.get()
-            if not doc.exists:
-                print(f"Error: Documento {doc_id} no existe")
-                raise ValueError(f"Document {doc_id} does not exist")
-            
             doc_ref.update(data)
-            print("Documento actualizado exitosamente")
             return True
-            
         except Exception as e:
-            print(f"Error actualizando documento: {str(e)}")
+            print(f"Error updating document: {str(e)}")
             raise e
     
-    async def delete_document(self, collection: str, doc_id: str) -> bool:
-        """Delete a document from a collection"""
+    async def delete_document(self, collection: str, doc_id: str):
+        """Delete a document"""
         try:
-            print(f"\n=== ELIMINANDO DOCUMENTO ===")
-            print(f"Colección: {collection}")
-            print(f"ID: {doc_id}")
-            
-            # Verificar que el documento existe
             doc_ref = self.db.collection(collection).document(doc_id)
-            doc = doc_ref.get()  
-            if not doc.exists:
-                raise ValueError(f"Document {doc_id} does not exist")
-            
-            # Eliminar documento
-            doc_ref.delete()  
-            
-            print("Documento eliminado exitosamente")
+            doc_ref.delete()
             return True
-            
         except Exception as e:
-            print(f"Error eliminando documento: {str(e)}")
-            raise e
-    
-    async def delete_all_documents(self, collection: str) -> bool:
-        """Delete all documents in a collection"""
-        try:
-            print(f"\n=== ELIMINANDO TODOS LOS DOCUMENTOS ===")
-            print(f"Colección: {collection}")
-            
-            # Obtener todos los documentos
-            docs = self.db.collection(collection).get()
-            count = 0
-            
-            # Eliminar cada documento
-            for doc in docs:
-                doc.reference.delete()
-                count += 1
-                
-            print(f"Documentos eliminados: {count}")
-            return True
-            
-        except Exception as e:
-            print(f"Error eliminando documentos: {str(e)}")
-            raise e
-    
-    async def delete_all_collections(self) -> bool:
-        """Delete all documents in all collections"""
-        try:
-            print(f"\n=== LIMPIANDO BASE DE DATOS ===")
-            
-            # Lista de colecciones a limpiar
-            collections = ['users', 'conversations']
-            
-            # Limpiar cada colección
-            for collection in collections:
-                await self.delete_all_documents(collection)
-            
-            print("Base de datos limpiada exitosamente")
-            return True
-            
-        except Exception as e:
-            print(f"Error limpiando base de datos: {str(e)}")
+            print(f"Error deleting document: {str(e)}")
             raise e
     
     async def query_collection(self, collection: str, field: str, operator: str, value: any):
         """Query documents in a collection"""
         try:
-            print(f"\n=== CONSULTANDO COLECCIÓN ===")
-            print(f"Colección: {collection}")
-            print(f"Campo: {field}")
-            print(f"Operador: {operator}")
-            print(f"Valor: {value}")
-            
             docs = self.db.collection(collection).where(field, operator, value).stream()
-            results = [convert_firebase_object(doc.to_dict()) for doc in docs]
-            
-            print(f"Documentos encontrados: {len(results)}")
-            for doc in results:
-                print(f"- {json.dumps(doc, indent=2)}")
-            
-            return results
-            
+            return [doc.to_dict() for doc in docs]
         except Exception as e:
-            print(f"Error consultando colección: {str(e)}")
+            print(f"Error querying collection: {str(e)}")
             raise e
 
 # Singleton instance

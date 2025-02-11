@@ -1,322 +1,233 @@
-from typing import Optional, Dict, Any
-import os
+from typing import Dict, Any, Optional
+import logging
 import json
+from datetime import datetime, timedelta
+from app.utils.exceptions import WhatsAppAPIError, WhatsAppTemplateError, FirebaseError
+from app.utils.text_processing import normalize_text, calculate_text_similarity
 import httpx
-from app.models.user import User
-from app.services.conversation_service import ConversationService
-from app.services.user_service import UserService
+import os
+from cachetools import TTLCache
 
-class WhatsAppCloudAPI:
-    def __init__(self):
-        print("\n=== INICIALIZANDO WHATSAPP API ===")
-        self.phone_number_id = os.getenv('WHATSAPP_PHONE_NUMBER_ID')
-        self.access_token = os.getenv('WHATSAPP_ACCESS_TOKEN')
-        self.api_version = 'v17.0'
-        self.api_url = f"https://graph.facebook.com/{self.api_version}/{self.phone_number_id}/messages"
-        
-        print(f"Phone Number ID: {self.phone_number_id}")
-        print(f"Access Token: {'*' * 20}{self.access_token[-4:] if self.access_token else 'None'}")
-        print(f"API Version: {self.api_version}")
-        print(f"API URL: {self.api_url}")
+logger = logging.getLogger(__name__)
+
+class WhatsAppService:
+    def __init__(self, firebase_db):
+        """Initialize WhatsApp service with Firebase connection"""
+        self.firebase_db = firebase_db
+        self.phone_number_id = os.getenv("WHATSAPP_PHONE_NUMBER_ID")
+        self.access_token = os.getenv("WHATSAPP_ACCESS_TOKEN")
         
         if not self.phone_number_id or not self.access_token:
-            print("ERROR: Missing required environment variables")
-            print(f"WHATSAPP_PHONE_NUMBER_ID: {'Present' if self.phone_number_id else 'Missing'}")
-            print(f"WHATSAPP_ACCESS_TOKEN: {'Present' if self.access_token else 'Missing'}")
-            raise ValueError("Missing required WhatsApp API configuration")
-        
-        self.conversation_service = ConversationService()
-        self.user_service = UserService()
-
-    def send_text_message(self, to_number: str, message: str) -> Dict[str, Any]:
-        """Send a text message to a WhatsApp number"""
-        print(f"\n=== ENVIANDO MENSAJE ===")
-        print(f"To: {to_number}")
-        print(f"Message: {message}")
-        
-        headers = {
+            raise ValueError("WhatsApp credentials not properly configured")
+            
+        self.base_url = "https://graph.facebook.com/v17.0"
+        self.headers = {
             "Authorization": f"Bearer {self.access_token}",
             "Content-Type": "application/json"
         }
         
-        data = {
-            "messaging_product": "whatsapp",
-            "recipient_type": "individual",
-            "to": to_number,
-            "type": "text",
-            "text": {"body": message}
-        }
+        # Cache para almacenar respuestas frecuentes (5 minutos de TTL)
+        self.response_cache = TTLCache(maxsize=100, ttl=300)
         
-        print(f"\nAPI Request:")
-        print(f"URL: {self.api_url}")
-        print(f"Headers: {json.dumps({k: '***' if k == 'Authorization' else v for k, v in headers.items()}, indent=2)}")
-        print(f"Data: {json.dumps(data, indent=2)}")
+        # Cache para almacenar datos de usuario (1 hora de TTL)
+        self.user_cache = TTLCache(maxsize=1000, ttl=3600)
         
+        # Cliente HTTP con timeout y reintentos
+        self.client = httpx.AsyncClient(
+            timeout=30.0,
+            limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)
+        )
+
+    async def process_message(self, from_number: str, message_data: Dict[str, Any]) -> None:
+        """Process incoming WhatsApp message"""
         try:
-            with httpx.Client() as client:
-                response = client.post(
-                    self.api_url,
-                    headers=headers,
-                    json=data,
-                    timeout=30.0
+            # Obtener o crear usuario
+            user = await self._get_or_create_user(from_number)
+            
+            # Procesar el mensaje según su tipo
+            if message_data["type"] == "text":
+                await self._handle_text_message(user, message_data)
+            elif message_data["type"] == "location":
+                await self._handle_location_message(user, message_data)
+            elif message_data["type"] == "interactive":
+                await self._handle_interactive_message(user, message_data)
+            else:
+                await self.send_text_message(
+                    from_number,
+                    "Lo siento, por ahora solo puedo procesar mensajes de texto, ubicación o botones."
                 )
                 
-                print(f"\nAPI Response Status: {response.status_code}")
-                print(f"API Response Headers: {dict(response.headers)}")
-                print(f"API Response Body: {response.text}")
-                
-                try:
-                    response_json = response.json()
-                    print(f"API Response JSON: {json.dumps(response_json, indent=2)}")
-                except json.JSONDecodeError:
-                    print("Response is not JSON")
-                
-                if response.status_code == 401:
-                    print("\nERROR 401: Unauthorized")
-                    print("This usually means:")
-                    print("1. The access token is invalid")
-                    print("2. The access token has expired")
-                    print("3. The access token doesn't have the required permissions")
-                    raise ValueError("WhatsApp API authentication failed")
-                
-                response.raise_for_status()
-                return response.json()
-                
-        except httpx.HTTPStatusError as e:
-            print(f"\nHTTP Error: {str(e)}")
-            print(f"Response: {e.response.text if hasattr(e, 'response') else 'No response'}")
-            raise
-        except httpx.RequestError as e:
-            print(f"\nRequest Error: {str(e)}")
-            raise
         except Exception as e:
-            print(f"\nUnexpected Error: {str(e)}")
-            raise
+            logger.error(f"Error processing message: {str(e)}")
+            await self._handle_error(from_number, e)
 
-    async def process_message(self, from_number: str, message: str) -> str:
-        """Process an incoming message and return the appropriate response"""
-        print(f"\n{'='*50}")
-        print(f"PROCESANDO MENSAJE")
-        print(f"{'='*50}")
-        print(f"De: {from_number}")
-        print(f"Mensaje: {message}")
-        
+    async def _get_or_create_user(self, phone_number: str) -> Dict[str, Any]:
+        """Get or create user with caching"""
         try:
-            # 1. Obtener o crear usuario
-            print(f"\n{'>'*20} PASO 1: Usuario {'<'*20}")
-            user = await self.user_service.get_or_create_user(from_number)
-            print(f"Usuario: {user.model_dump_json(indent=2)}")
+            # Intentar obtener de caché
+            if phone_number in self.user_cache:
+                return self.user_cache[phone_number]
             
-            # 2. Obtener o crear conversación
-            print(f"\n{'>'*20} PASO 2: Conversación {'<'*20}")
-            conversation = await self.conversation_service.get_active_conversation(user.id)
-            if not conversation:
-                print("No hay conversación activa, creando nueva...")
-                conversation = await self.conversation_service.create_conversation(user.id)
-            print(f"Conversación: {conversation.model_dump_json(indent=2)}")
-            
-            # 3. Guardar mensaje del usuario
-            print(f"\n{'>'*20} PASO 3: Guardar Mensaje {'<'*20}")
-            await self.conversation_service.add_message(conversation.id, "user", message)
-            print("Mensaje guardado")
-            
-            # 4. Generar respuesta basada en contexto
-            print(f"\n{'>'*20} PASO 4: Generar Respuesta {'<'*20}")
-            response = await self.get_response_based_on_context(conversation, message, user)
-            print(f"Respuesta: {response}")
-            
-            # 5. Guardar respuesta del bot
-            print(f"\n{'>'*20} PASO 5: Guardar Respuesta {'<'*20}")
-            await self.conversation_service.add_message(conversation.id, "bot", response)
-            print("Respuesta guardada")
-            
-            print(f"\n{'='*50}")
-            print(f"MENSAJE PROCESADO EXITOSAMENTE")
-            print(f"{'='*50}\n")
-            
-            return response
-            
-        except Exception as e:
-            print(f"\n{'!'*50}")
-            print(f"ERROR PROCESANDO MENSAJE")
-            print(f"{'!'*50}")
-            print(f"Error: {str(e)}")
-            import traceback
-            print(traceback.format_exc())
-            return "Lo siento, ha ocurrido un error. Por favor, intenta nuevamente."
-
-    async def get_response_based_on_context(self, conversation, message: str, user: User) -> str:
-        """Generate response based on conversation context"""
-        try:
-            print(f"\n=== GENERANDO RESPUESTA BASADA EN CONTEXTO ===")
-            print(f"Estado actual: {conversation.context.get('state', 'unknown')}")
-            print(f"Mensaje: {message}")
-            
-            # Obtener estado actual y procesar mensaje
-            state = conversation.context.get('state', 'initial')
-            message = message.lower().strip()
-            
-            # Inicializar respuestas si no existen
-            if 'responses' not in conversation.context:
-                conversation.context['responses'] = {}
-            
-            print(f"\nProcesando estado: {state}")
-            print(f"Respuestas anteriores: {json.dumps(conversation.context.get('responses', {}), indent=2)}")
-            
-            if state == 'initial':
-                greetings = ['hola', 'hello', 'hi', '1', 'buenos dias', 'buenas']
-                if any(greeting in message for greeting in greetings):
-                    # Resetear conversación si es necesario
-                    if conversation.context.get('state') != 'initial':
-                        await self.conversation_service.reset_conversation(conversation.id)
-                    
-                    # Actualizar contexto
-                    await self.conversation_service.update_conversation_context(
-                        conversation.id,
-                        {
-                            'state': 'welcome',
-                            'responses': {'greeting': message}
-                        }
-                    )
-                    
-                    name = user.name if user.name else ""
-                    greeting = f", {name}" if name else ""
-                    return (f"¡Hola{greeting}! 🌱\n\n"
-                           f"Soy *Fingro*, tu asistente financiero inteligente. "
-                           f"Te ayudaré a conseguir el financiamiento que necesitas para tu cosecha, "
-                           f"de manera rápida y sin complicaciones.\n\n"
-                           f"¿Te gustaría saber:\n"
-                           f"✨ Cuánto podrías ganar con tu cosecha?\n"
-                           f"💰 Si calificas para financiamiento?\n"
-                           f"📊 Qué opciones de crédito tenemos para ti?\n\n"
-                           f"Responde *SI* para comenzar. 🚀")
-                
-                return ("¡Hola! 🌱\n\n"
-                       "Soy *Fingro*, tu aliado financiero para el campo.\n\n"
-                       "¿Te gustaría conocer las opciones de financiamiento que tenemos para tu cosecha? Salúdame para comenzar. 👋")
-            
-            elif state == 'welcome':
-                confirmations = ['si', 'sí', 'yes', 'ok', 'dale', 'va', 'empezar', 'comenzar', 'claro']
-                if any(confirm in message for confirm in confirmations):
-                    # Guardar respuesta y actualizar estado
-                    responses = conversation.context.get('responses', {})
-                    responses['confirmation'] = message
-                    
-                    await self.conversation_service.update_conversation_context(
-                        conversation.id,
-                        {
-                            'state': 'asking_name',
-                            'responses': responses
-                        }
-                    )
-                    return ("¡Perfecto! 🌟 Para empezar, ¿podrías decirme tu nombre?")
-                else:
-                    return ("Para comenzar el proceso, por favor responde *SI*.\n\n"
-                           "Si no deseas continuar, puedes escribir 'salir' en cualquier momento.")
-
-            elif state == 'asking_name':
-                # Guardar nombre en usuario y en contexto
-                user.name = message.title()
-                await self.user_service.update_user(user)
-                
-                responses = conversation.context.get('responses', {})
-                responses['name'] = user.name
-                
-                await self.conversation_service.update_conversation_context(
-                    conversation.id,
-                    {
-                        'state': 'asking_location',
-                        'responses': responses
-                    }
-                )
-                
-                return (f"¡Gracias {user.name}! 🤝\n\n"
-                       f"¿En qué departamento te encuentras?")
-
-            elif state == 'asking_location':
-                # Procesar ubicación
-                if ',' in message:
-                    country, location = [part.strip() for part in message.split(',')]
-                else:
-                    country = "Guatemala"
-                    location = message.strip().title()
-                
-                # Actualizar usuario
-                user.country = country
-                user.location = location
-                await self.user_service.update_user(user)
-                
-                # Guardar en contexto
-                responses = conversation.context.get('responses', {})
-                responses['location'] = {
-                    'country': country,
-                    'department': location
+            # Obtener de Firebase
+            user = self.firebase_db.get_user(phone_number)
+            if not user:
+                # Crear nuevo usuario
+                user = {
+                    "phone_number": phone_number,
+                    "created_at": datetime.now().isoformat(),
+                    "last_interaction": datetime.now().isoformat(),
+                    "conversation_state": "START",
+                    "data": {}
                 }
-                
-                await self.conversation_service.update_conversation_context(
-                    conversation.id,
-                    {
-                        'state': 'asking_land_ownership',
-                        'responses': responses
-                    }
-                )
-                
-                return ("¡Excelente! 🌎\n\n"
-                       "¿Los terrenos donde cultivas son propios o alquilados?")
-
-            elif state == 'asking_land_ownership':
-                # Determinar tipo de propiedad
-                ownership = 'propio' if 'propi' in message else 'alquilado' if 'alquil' in message else 'mixto'
-                
-                # Actualizar usuario
-                user.land_ownership = ownership
-                await self.user_service.update_user(user)
-                
-                # Guardar en contexto
-                responses = conversation.context.get('responses', {})
-                responses['land_ownership'] = ownership
-                
-                await self.conversation_service.update_conversation_context(
-                    conversation.id,
-                    {
-                        'state': 'asking_crop',
-                        'responses': responses
-                    }
-                )
-                
-                return ("¡Perfecto! 🌱\n\n"
-                       "¿qué cultivas actualmente?")
-
-            elif state == 'asking_crop':
-                # Guardar cultivo
-                responses = conversation.context.get('responses', {})
-                responses['crop'] = message.strip()
-                
-                # Actualizar usuario
-                user.crops.append(message.strip())
-                await self.user_service.update_user(user)
-                
-                await self.conversation_service.update_conversation_context(
-                    conversation.id,
-                    {
-                        'state': 'finished',
-                        'responses': responses
-                    }
-                )
-                
-                return (f"¡Excelente {user.name}! 🎉\n\n"
-                       f"He guardado toda tu información. Pronto un asesor se pondrá en contacto contigo "
-                       f"para discutir las opciones de financiamiento disponibles para tu cultivo de {message.strip()}.\n\n"
-                       f"Si tienes alguna pregunta adicional, no dudes en escribirme.")
+                self.firebase_db.create_user(phone_number, user)
             
-            print("\nNo se encontró un estado válido")
-            return "Lo siento, no entendí tu mensaje. Escribe 'hola' o '1' para comenzar."
-
+            # Actualizar caché
+            self.user_cache[phone_number] = user
+            return user
+            
         except Exception as e:
-            print(f"\n{'!'*50}")
-            print(f"ERROR GENERANDO RESPUESTA")
-            print(f"{'!'*50}")
-            print(f"Error: {str(e)}")
-            import traceback
-            print(traceback.format_exc())
-            return "Lo siento, ha ocurrido un error. Por favor, intenta nuevamente."
+            raise FirebaseError(f"Error getting/creating user: {str(e)}")
+
+    async def send_text_message(self, to_number: str, message: str) -> Dict[str, Any]:
+        """Send text message to WhatsApp"""
+        try:
+            url = f"{self.base_url}/{self.phone_number_id}/messages"
+            
+            payload = {
+                "messaging_product": "whatsapp",
+                "recipient_type": "individual",
+                "to": to_number,
+                "type": "text",
+                "text": {"body": message}
+            }
+            
+            async with self.client as client:
+                response = await client.post(url, json=payload, headers=self.headers)
+                
+            if response.status_code != 200:
+                raise WhatsAppAPIError(
+                    f"Error sending message: {response.text}",
+                    status_code=response.status_code,
+                    response=response.json()
+                )
+                
+            return response.json()
+            
+        except Exception as e:
+            logger.error(f"Error sending message: {str(e)}")
+            raise WhatsAppAPIError(f"Failed to send message: {str(e)}")
+
+    async def send_template_message(self, to_number: str, template_name: str, 
+                                 language_code: str = "es", components: list = None) -> Dict[str, Any]:
+        """Send template message to WhatsApp"""
+        try:
+            url = f"{self.base_url}/{self.phone_number_id}/messages"
+            
+            payload = {
+                "messaging_product": "whatsapp",
+                "recipient_type": "individual",
+                "to": to_number,
+                "type": "template",
+                "template": {
+                    "name": template_name,
+                    "language": {
+                        "code": language_code
+                    }
+                }
+            }
+            
+            if components:
+                payload["template"]["components"] = components
+            
+            async with self.client as client:
+                response = await client.post(url, json=payload, headers=self.headers)
+                
+            if response.status_code != 200:
+                raise WhatsAppTemplateError(
+                    f"Error sending template: {response.text}",
+                    status_code=response.status_code,
+                    response=response.json()
+                )
+                
+            return response.json()
+            
+        except Exception as e:
+            logger.error(f"Error sending template: {str(e)}")
+            raise WhatsAppTemplateError(f"Failed to send template: {str(e)}")
+
+    async def _handle_text_message(self, user: Dict[str, Any], message_data: Dict[str, Any]) -> None:
+        """Handle text message"""
+        text = message_data.get("text", "")
+        state = user.get("conversation_state", "START")
+        
+        # Obtener respuesta del caché si existe
+        cache_key = f"{state}:{normalize_text(text)}"
+        if cache_key in self.response_cache:
+            response = self.response_cache[cache_key]
+        else:
+            # Procesar mensaje según el estado
+            response = await self._get_response_based_on_state(user, text)
+            # Guardar en caché
+            self.response_cache[cache_key] = response
+        
+        # Enviar respuesta
+        await self.send_text_message(user["phone_number"], response)
+        
+        # Actualizar estado del usuario
+        self._update_user_state(user, text)
+
+    async def _handle_location_message(self, user: Dict[str, Any], message_data: Dict[str, Any]) -> None:
+        """Handle location message"""
+        location = message_data.get("location", {})
+        if location:
+            # Guardar ubicación
+            user["data"]["location"] = {
+                "latitude": location.get("latitude"),
+                "longitude": location.get("longitude"),
+                "timestamp": datetime.now().isoformat()
+            }
+            self.firebase_db.update_user(user["phone_number"], user)
+            
+            # Enviar confirmación
+            await self.send_text_message(
+                user["phone_number"],
+                "¡Gracias por compartir tu ubicación! Esto nos ayudará a brindarte un mejor servicio."
+            )
+
+    async def _handle_interactive_message(self, user: Dict[str, Any], message_data: Dict[str, Any]) -> None:
+        """Handle interactive message (buttons/list)"""
+        interactive = message_data.get("interactive", {})
+        if interactive:
+            response_type = interactive.get("type")
+            if response_type == "button_reply":
+                button_id = interactive["button_reply"]["id"]
+                await self._handle_button_response(user, button_id)
+            elif response_type == "list_reply":
+                list_id = interactive["list_reply"]["id"]
+                await self._handle_list_response(user, list_id)
+
+    async def _handle_error(self, phone_number: str, error: Exception) -> None:
+        """Handle errors gracefully"""
+        try:
+            error_message = "Lo siento, ha ocurrido un error. Por favor, intenta nuevamente en unos momentos."
+            await self.send_text_message(phone_number, error_message)
+        except:
+            logger.error("Failed to send error message to user")
+
+    def _update_user_state(self, user: Dict[str, Any], message: str) -> None:
+        """Update user state based on message"""
+        try:
+            user["last_interaction"] = datetime.now().isoformat()
+            # Actualizar estado según el flujo de conversación
+            # TODO: Implementar lógica de estados
+            self.firebase_db.update_user(user["phone_number"], user)
+            self.user_cache[user["phone_number"]] = user
+        except Exception as e:
+            logger.error(f"Error updating user state: {str(e)}")
+
+    async def _get_response_based_on_state(self, user: Dict[str, Any], message: str) -> str:
+        """Get response based on user state and message"""
+        state = user.get("conversation_state", "START")
+        
+        # TODO: Implementar lógica de respuestas según estado
+        return "Gracias por tu mensaje. Pronto implementaremos más funcionalidades."

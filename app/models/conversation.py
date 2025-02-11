@@ -1,39 +1,29 @@
-from typing import Optional, List, Dict
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Optional, List, Dict, Any
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime
-import json
-
-def datetime_to_str(dt: datetime) -> str:
-    return dt.isoformat() if dt else None
+from app.utils.constants import ConversationState
 
 class Message(BaseModel):
-    model_config = ConfigDict(
-        arbitrary_types_allowed=True,
-        json_encoders={datetime: datetime_to_str}
-    )
-    
-    role: str  # 'user' o 'assistant'
+    role: str  # user o assistant
     content: str
-    timestamp: datetime = Field(default_factory=datetime.now)
-    
-    def model_dump_json(self, **kwargs) -> str:
-        """Override to ensure proper datetime serialization"""
-        return json.dumps(self.model_dump(), default=datetime_to_str, **kwargs)
+    original_content: Optional[str] = None
+    metrics: Optional[Dict[str, Any]] = None
+    timestamp: datetime = datetime.now()
+
+class ConversationContext(BaseModel):
+    state: ConversationState = ConversationState.INITIAL
+    collected_data: Dict[str, Any] = {}
+    validation_errors: List[str] = []
+    retry_count: int = 0
+    last_message_timestamp: Optional[datetime] = None
 
 class Conversation(BaseModel):
-    model_config = ConfigDict(
-        arbitrary_types_allowed=True,
-        json_encoders={datetime: datetime_to_str}
-    )
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     
     id: str
     user_id: str
     messages: List[Message] = []
-    context: Dict = {}
+    context: ConversationContext = ConversationContext()
     active: bool = True
-    created_at: datetime = Field(default_factory=datetime.now)
-    updated_at: datetime = Field(default_factory=datetime.now)
-    
-    def model_dump_json(self, **kwargs) -> str:
-        """Override to ensure proper datetime serialization"""
-        return json.dumps(self.model_dump(), default=datetime_to_str, **kwargs)
+    created_at: datetime = datetime.now()
+    updated_at: datetime = datetime.now()

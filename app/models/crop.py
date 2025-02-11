@@ -2,6 +2,20 @@ from typing import Optional, Dict
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 
+class ProductionMetrics(BaseModel):
+    irrigation_type: Optional[str] = None
+    fertilizer_cost: Optional[float] = None
+    fertilizer_frequency: Optional[str] = None
+    estimated_yield: Optional[float] = None
+    yield_unit: Optional[str] = None
+    estimated_income: Optional[float] = None
+
+class SalesInfo(BaseModel):
+    channel: Optional[str] = None
+    frequency: Optional[str] = None
+    average_price: Optional[float] = None
+    price_unit: Optional[str] = None
+
 class Crop(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     
@@ -11,16 +25,9 @@ class Crop(BaseModel):
     area: float
     area_unit: str  # hectáreas o cuerdas
     user_id: str
-    location: Optional[str] = None
-    ownership: Optional[str] = None  # propio, alquilado
-    production_amount: Optional[float] = None
-    production_unit: Optional[str] = None  # quintales, libras, etc.
-    planting_date: Optional[datetime] = None
-    expected_harvest_date: Optional[datetime] = None
-    estimated_yield: Optional[float] = None
-    yield_unit: Optional[str] = None
-    estimated_income: Optional[float] = None
-    costs: Dict[str, float] = {}
+    location: Optional[Dict[str, float]] = None  # lat, lng
+    production: Optional[ProductionMetrics] = None
+    sales: Optional[SalesInfo] = None
     notes: Optional[str] = None
     created_at: datetime = datetime.now()
     updated_at: datetime = datetime.now()

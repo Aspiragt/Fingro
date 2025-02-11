@@ -1,80 +1,134 @@
-# Fingro - Financiamiento Agrícola Inteligente 🌱
+# Fingro WhatsApp Bot 🌱
 
-Sistema de scoring crediticio basado en WhatsApp para productores agrícolas en LATAM.
+Bot de WhatsApp para Fingro, diseñado para ayudar a agricultores a obtener financiamiento de manera rápida y sencilla.
 
-## Características Principales 🚀
+## 🚀 Características
 
-- Interacción vía WhatsApp sin necesidad de apps adicionales
-- Scoring inteligente basado en huella digital
-- Integración con Firebase para almacenamiento seguro
-- Motor de ML para evaluación crediticia
-- API REST para integración con fintechs y cooperativas
+- Integración con WhatsApp Cloud API
+- Base de datos en tiempo real con Firebase
+- Sistema de puntuación (Fingro Score) para evaluación crediticia
+- Manejo de ubicaciones y datos geográficos
+- Caché inteligente para respuestas rápidas
+- Manejo robusto de errores y excepciones
 
-## Configuración Inicial 🛠️
+## 📁 Estructura del Proyecto
 
-1. Crear archivo `.env` con las credenciales:
 ```
-TWILIO_ACCOUNT_SID=your_sid
-TWILIO_AUTH_TOKEN=your_token
-TWILIO_PHONE_NUMBER=your_whatsapp_number
-FIREBASE_CREDENTIALS_PATH=path/to/firebase-credentials.json
+fingro/
+├── app/
+│   ├── database/        # Conexión con Firebase
+│   ├── models/          # Modelos de datos
+│   ├── routes/          # Rutas de la API
+│   ├── schemas/         # Esquemas Pydantic
+│   ├── services/        # Lógica de negocio
+│   ├── utils/           # Utilidades y helpers
+│   └── main.py         # Punto de entrada de la aplicación
+├── tests/              # Tests unitarios y de integración
+├── .env               # Variables de entorno (no versionado)
+├── .env.example       # Ejemplo de variables de entorno
+├── requirements.txt   # Dependencias del proyecto
+└── README.md         # Este archivo
 ```
 
-2. Instalar dependencias:
+## 🛠️ Requisitos
+
+- Python 3.9+
+- Cuenta de WhatsApp Business API
+- Proyecto de Firebase
+- Variables de entorno configuradas
+
+## ⚙️ Configuración
+
+1. Clonar el repositorio:
+```bash
+git clone https://github.com/fingro/whatsapp-bot.git
+cd whatsapp-bot
+```
+
+2. Crear entorno virtual:
+```bash
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+venv\Scripts\activate     # Windows
+```
+
+3. Instalar dependencias:
 ```bash
 pip install -r requirements.txt
 ```
 
-3. Iniciar el servidor:
+4. Configurar variables de entorno:
 ```bash
-python app.py
+cp .env.example .env
+# Editar .env con tus credenciales
 ```
 
-## Despliegue en Render
+## 🚀 Ejecución
 
-1. Crear una cuenta en [Render](https://render.com) si no tienes una
+1. Iniciar el servidor:
+```bash
+uvicorn app.main:app --reload
+```
 
-2. Conectar tu repositorio de GitHub a Render:
-   - Ve a https://dashboard.render.com/
-   - Haz clic en "New +"
-   - Selecciona "Web Service"
-   - Conecta tu repositorio de GitHub
-   - Selecciona el repositorio de Fingro
+2. Acceder a la documentación de la API:
+```
+http://localhost:8000/docs
+```
 
-3. Configurar el servicio:
-   - **Name**: `fingro-whatsapp`
-   - **Environment**: `Python 3`
-   - **Build Command**: `pip install -r requirements.txt`
-   - **Start Command**: `uvicorn app:app --host 0.0.0.0 --port $PORT`
+## 🔑 Variables de Entorno
 
-4. Configurar variables de entorno:
-   - `WHATSAPP_PHONE_NUMBER_ID`
-   - `WHATSAPP_ACCESS_TOKEN`
-   - `WHATSAPP_WEBHOOK_VERIFY_TOKEN`
+```env
+# WhatsApp
+WHATSAPP_PHONE_NUMBER_ID=tu_phone_number_id
+WHATSAPP_ACCESS_TOKEN=tu_access_token
 
-5. Hacer clic en "Create Web Service"
+# Firebase
+FIREBASE_PROJECT_ID=tu_project_id
+FIREBASE_PRIVATE_KEY_ID=tu_private_key_id
+FIREBASE_PRIVATE_KEY=tu_private_key
+FIREBASE_CLIENT_EMAIL=tu_client_email
+FIREBASE_CLIENT_ID=tu_client_id
+FIREBASE_CLIENT_X509_CERT_URL=tu_cert_url
 
-## Configuración de Webhook
+# App
+APP_ENV=development
+DEBUG=true
+LOG_LEVEL=INFO
+```
 
-1. Usar la URL de Render como base para el webhook:
-   `https://fingro-whatsapp.onrender.com/webhook/whatsapp`
+## 📝 API Endpoints
 
-2. En Meta for Developers:
-   - Ir a WhatsApp > Configuration
-   - Configurar Webhook URL y Verify Token
-   - Suscribirse a los eventos de mensajes
+### Webhook
+- `GET /api/v1/webhook`: Verificación del webhook de WhatsApp
+- `POST /api/v1/webhook`: Recepción de mensajes de WhatsApp
 
-## Estructura del Proyecto 📁
+### Health Check
+- `GET /api/v1/health`: Estado del servicio y conexiones
 
-- `/app` - Código principal de la aplicación
-  - `/models` - Modelos de ML y scoring
-  - `/services` - Servicios de WhatsApp y Firebase
-  - `/routes` - Endpoints de la API
-- `/tests` - Tests unitarios y de integración
-- `/docs` - Documentación adicional
+## 🧪 Tests
 
-## Métricas de Éxito 📊
+Ejecutar tests:
+```bash
+pytest
+```
 
-- 50% tasa de completitud de encuesta en WhatsApp
-- Tasa de interés competitiva vs prestamistas informales
-- Feedback positivo sobre facilidad de uso
+## 📦 Despliegue
+
+El proyecto está configurado para despliegue en:
+- Render
+- Heroku
+- Google Cloud Run
+
+Ver `render.yaml` y `Dockerfile` para más detalles.
+
+## 🤝 Contribuir
+
+1. Fork el repositorio
+2. Crear una rama (`git checkout -b feature/amazing_feature`)
+3. Commit los cambios (`git commit -m 'Add amazing feature'`)
+4. Push a la rama (`git push origin feature/amazing_feature`)
+5. Abrir un Pull Request
+
+## 📄 Licencia
+
+Este proyecto está bajo la Licencia MIT. Ver el archivo `LICENSE` para más detalles.

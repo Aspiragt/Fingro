@@ -1,15 +1,13 @@
 services:
   - type: web
-    name: fingro-whatsapp
+    name: fingro-bot
     env: python
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
-      - key: WHATSAPP_PHONE_NUMBER_ID
-        sync: false
       - key: WHATSAPP_ACCESS_TOKEN
         sync: false
-      - key: WHATSAPP_WEBHOOK_VERIFY_TOKEN
+      - key: WHATSAPP_PHONE_NUMBER_ID
         sync: false
       - key: PYTHON_VERSION
-        value: 3.10.12
+        value: 3.10.0

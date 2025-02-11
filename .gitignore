@@ -4,7 +4,6 @@ __pycache__/
 *$py.class
 *.so
 .Python
-env/
 build/
 develop-eggs/
 dist/
@@ -24,9 +23,7 @@ wheels/
 # Virtual Environment
 venv/
 ENV/
-
-# Environment Variables
-.env
+env/
 
 # IDE
 .idea/
@@ -34,9 +31,17 @@ ENV/
 *.swp
 *.swo
 
+# Environment Variables
+.env
+firebase-credentials.json
+
 # Logs
 *.log
+logs/
 
-# Local development
+# Docker
+.docker/
+
+# System Files
 .DS_Store
-firebase-credentials.json
+Thumbs.db

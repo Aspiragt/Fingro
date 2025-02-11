@@ -1,178 +1,119 @@
 from fastapi import FastAPI, Request, HTTPException
-from dotenv import load_dotenv
-from app.services.whatsapp_service import WhatsAppCloudAPI
-import json
+from fastapi.responses import JSONResponse, Response
+import logging
 import os
-import traceback
+import json
+import httpx
+from typing import Dict, Any
 
-load_dotenv()
+# Configuración detallada de logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('debug.log')
+    ]
+)
+logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Fingro API")
-whatsapp = WhatsAppCloudAPI()
+# Inicializar FastAPI
+app = FastAPI(title="Fingro Bot")
 
-# Estado del usuario
-user_states = {}
+# Variables de WhatsApp
+WHATSAPP_TOKEN = os.getenv("WHATSAPP_ACCESS_TOKEN")
+PHONE_NUMBER_ID = os.getenv("WHATSAPP_PHONE_NUMBER_ID")
+WHATSAPP_URL = f"https://graph.facebook.com/v17.0/{PHONE_NUMBER_ID}/messages"
+
+async def send_whatsapp_message(to_number: str, message: str) -> Dict:
+    """Enviar mensaje de WhatsApp"""
+    logger.info(f"Enviando mensaje a {to_number}: {message}")
+    headers = {
+        "Authorization": f"Bearer {WHATSAPP_TOKEN}",
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": to_number,
+        "type": "text",
+        "text": {"body": message}
+    }
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            logger.debug(f"Enviando request a WhatsApp API: {json.dumps(payload, indent=2)}")
+            response = await client.post(WHATSAPP_URL, json=payload, headers=headers)
+            response_json = response.json()
+            logger.info(f"Respuesta de WhatsApp API: {json.dumps(response_json, indent=2)}")
+            return response_json
+    except Exception as e:
+        logger.error(f"Error enviando mensaje: {str(e)}")
+        raise
 
 @app.get("/")
-async def root():
-    return {"message": "Fingro WhatsApp API"}
+async def health_check():
+    """Verificar que el servicio está funcionando"""
+    status = {
+        "status": "healthy",
+        "service": "fingro-bot",
+        "whatsapp_configured": bool(WHATSAPP_TOKEN and PHONE_NUMBER_ID)
+    }
+    logger.info(f"Health check: {json.dumps(status, indent=2)}")
+    return status
 
-@app.delete("/users/{phone_number}/data")
-async def delete_user_data(phone_number: str):
-    """Delete all data for a user"""
-    try:
-        await whatsapp.user_service.delete_user_data(phone_number)
-        return {"status": "success", "message": f"Data deleted for user {phone_number}"}
-    except Exception as e:
-        print(f"Error deleting user data: {str(e)}")
-        print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.delete("/database/clean")
-async def clean_database():
-    """Clean all data from the database"""
-    try:
-        await whatsapp.user_service.db.delete_all_collections()
-        return {"status": "success", "message": "Database cleaned successfully"}
-    except Exception as e:
-        print(f"Error cleaning database: {str(e)}")
-        print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/webhook/whatsapp")
+@app.get("/webhook")
 async def verify_webhook(request: Request):
-    """
-    Endpoint para verificar el webhook con Meta
-    """
+    """Verificar webhook de WhatsApp"""
     try:
         params = dict(request.query_params)
-        verify_token = os.getenv('WHATSAPP_WEBHOOK_VERIFY_TOKEN')
-        
-        print(f"Verificando webhook:")
-        print(f"- Mode: {params.get('hub.mode')}")
-        print(f"- Token: {params.get('hub.verify_token')}")
-        print(f"- Challenge: {params.get('hub.challenge')}")
-        
-        if params.get('hub.mode') == 'subscribe' and params.get('hub.verify_token') == verify_token:
-            challenge = params.get('hub.challenge')
-            return int(challenge)
-        else:
-            print(f"Verificación fallida:")
-            print(f"- Token esperado: {verify_token}")
-            print(f"- Token recibido: {params.get('hub.verify_token')}")
-            raise HTTPException(status_code=403, detail="Verification failed")
-            
+        logger.info(f"Verificación de webhook recibida: {params}")
+        if params.get("hub.mode") == "subscribe":
+            return Response(content=params.get("hub.challenge"), media_type="text/plain")
+        return Response(status_code=403)
     except Exception as e:
-        print(f"Error verificando webhook: {str(e)}")
-        print(traceback.format_exc())
+        logger.error(f"Error en verificación: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/webhook/whatsapp")
-async def whatsapp_webhook(request: Request):
-    """
-    Endpoint para recibir mensajes de WhatsApp
-    """
+@app.post("/webhook")
+async def webhook(request: Request):
+    """Recibir mensajes de WhatsApp"""
     try:
-        print("\n=== NUEVO MENSAJE RECIBIDO ===")
+        body = await request.json()
+        logger.info(f"Webhook recibido: {json.dumps(body, indent=2)}")
         
-        # 1. Obtener y validar el JSON
-        try:
-            data = await request.json()
-            print(f"[1] Raw webhook data:\n{json.dumps(data, indent=2)}")
-        except Exception as e:
-            print(f"[1] Error parsing JSON: {str(e)}")
-            print(traceback.format_exc())
-            return {"status": "error", "detail": "Invalid JSON"}
-        
-        # 2. Validar estructura básica
-        if not isinstance(data, dict):
-            print("[2] Data is not a dictionary")
-            return {"status": "error", "detail": "Invalid data structure"}
-        
-        # 3. Extraer entry
-        if not data.get('entry'):
-            print("[3] No entries found")
-            return {"status": "success"}  # WhatsApp puede enviar pings sin entries
+        # Verificar que es un evento de WhatsApp
+        if body.get("object") != "whatsapp_business_account":
+            logger.warning("Evento no es de WhatsApp Business")
+            return JSONResponse({"status": "not whatsapp"})
             
-        entry = data['entry'][0]
-        print(f"[3] Entry data:\n{json.dumps(entry, indent=2)}")
+        # Procesar mensajes
+        entry = body.get("entry", [{}])[0]
+        changes = entry.get("changes", [{}])[0]
+        value = changes.get("value", {})
+        messages = value.get("messages", [])
         
-        # 4. Extraer changes
-        if not entry.get('changes'):
-            print("[4] No changes found")
-            return {"status": "success"}
+        if not messages:
+            logger.info("No hay mensajes para procesar")
+            return {"status": "no messages"}
             
-        changes = entry['changes'][0]
-        print(f"[4] Changes data:\n{json.dumps(changes, indent=2)}")
+        # Procesar cada mensaje
+        for message in messages:
+            from_number = message.get("from")
+            if message.get("type") == "text":
+                text = message.get("text", {}).get("body", "")
+                logger.info(f"Mensaje recibido de {from_number}: {text}")
+                
+                # Respuesta simple
+                response = "¡Hola! Gracias por tu mensaje. Soy el bot de Fingro 🌱"
+                await send_whatsapp_message(from_number, response)
         
-        # 5. Extraer value
-        if not changes.get('value'):
-            print("[5] No value found")
-            return {"status": "success"}
-            
-        value = changes['value']
-        print(f"[5] Value data:\n{json.dumps(value, indent=2)}")
-        
-        # 6. Extraer messages
-        if not value.get('messages'):
-            print("[6] No messages found")
-            return {"status": "success"}
-            
-        message = value['messages'][0]
-        print(f"[6] Message data:\n{json.dumps(message, indent=2)}")
-        
-        # 7. Validar tipo de mensaje
-        if message.get('type') != 'text':
-            print(f"[7] Message is not text type: {message.get('type')}")
-            return {"status": "success"}
-        
-        # 8. Extraer información del mensaje
-        from_number = message['from']
-        if not message.get('text', {}).get('body'):
-            print("[8] No message body found")
-            return {"status": "success"}
-            
-        message_body = message['text']['body']
-        
-        print(f"\n[8] Mensaje procesado:")
-        print(f"- From: {from_number}")
-        print(f"- Body: {message_body}")
-        
-        # 9. Procesar mensaje
-        try:
-            print("\n[9] Procesando mensaje con WhatsApp service...")
-            response_message = await whatsapp.process_message(from_number, message_body)
-            print(f"[9] Respuesta generada: {response_message}")
-        except Exception as e:
-            print(f"[9] Error processing message: {str(e)}")
-            print(traceback.format_exc())
-            raise
-        
-        # 10. Enviar respuesta
-        try:
-            print("\n[10] Enviando respuesta...")
-            response = whatsapp.send_text_message(
-                to_number=from_number,
-                message=response_message
-            )
-            print(f"[10] Respuesta enviada exitosamente:\n{json.dumps(response, indent=2)}")
-        except Exception as e:
-            print(f"[10] Error sending response: {str(e)}")
-            print(traceback.format_exc())
-            if hasattr(e, 'response'):
-                print(f"Response error: {e.response.text}")
-            raise
-        
-        return {"status": "success"}
+        return {"status": "processed"}
         
     except Exception as e:
-        print(f"\n=== ERROR EN WEBHOOK ===")
-        print(str(e))
-        print(traceback.format_exc())
-        if hasattr(e, 'response'):
-            print(f"Response error: {e.response.text}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+        logger.error(f"Error en webhook: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e)}
+        )
