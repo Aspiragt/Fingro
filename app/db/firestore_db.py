@@ -5,8 +5,8 @@ from app.chat.conversation_flow import ConversationState, ProjectData
 
 class FirestoreDB:
     def __init__(self, db: firestore.Client):
-        self.db = db
-        self.conversations_ref = self.db.collection('conversations')
+        self.firebase_db = db
+        self.conversations_ref = self.firebase_db.collection('conversations')
     
     def get_conversation_state(self, phone_number: str) -> Optional[Dict[str, Any]]:
         """Obtiene el estado de la conversación para un número de teléfono"""
@@ -38,7 +38,7 @@ class FirestoreDB:
     
     def reset_all_conversations(self) -> None:
         """Reinicia todas las conversaciones"""
-        batch = self.db.batch()
+        batch = self.firebase_db.batch()
         docs = self.conversations_ref.stream()
         for doc in docs:
             batch.delete(doc.reference)

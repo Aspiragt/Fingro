@@ -47,7 +47,9 @@ class WhatsAppService:
             # Comando especial para reiniciar
             if message_data["type"] == "text" and message_data["text"]["body"].lower() == "reiniciar":
                 self.firebase_db.reset_conversation(from_number)
-                await self.send_text_message(from_number, "Conversación reiniciada.")
+                from app.chat.conversation_flow import ConversationManager
+                conversation = ConversationManager()
+                await self.send_text_message(from_number, conversation.get_welcome_message())
                 return
 
             # Procesar el mensaje según su tipo
