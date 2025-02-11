@@ -103,10 +103,41 @@ def get_response_for_state(state: ConversationState, user_data: dict[str, Any]) 
 async def process_user_message(from_number: str, message: str) -> str:
     """Procesa el mensaje del usuario y actualiza el estado de la conversación"""
     try:
+        # Verificar si es un comando para reiniciar
+        if message.strip().lower() in ['reiniciar', 'restart', 'comenzar', 'inicio']:
+            # Reiniciar la conversación
+            conversation_data = {}
+            await db.update_conversation_state(from_number, ConversationState.INICIO, conversation_data)
+            return ("¡Bienvenido a Fingro! \n\n"
+                    "Somos tu aliado financiero en el campo. Te ayudamos a obtener el financiamiento que necesitas para tu cultivo "
+                    "de manera rápida y sencilla.\n\n"
+                    "En los próximos minutos, te haré algunas preguntas sobre tu proyecto agrícola. "
+                    "Con esta información, podremos:\n"
+                    "• Calcular el monto de financiamiento \n"
+                    "• Estimar los costos de producción \n"
+                    "• Proyectar tus ganancias potenciales \n\n"
+                    "Al final, recibirás un resumen detallado y nos pondremos en contacto contigo para discutir las opciones de financiamiento disponibles.\n\n"
+                    "¡Empecemos! ¿Qué cultivo estás planeando sembrar?")
+
         # Obtener datos del usuario
         user_data = await db.get_user(from_number) or {}
         current_state = ConversationState(user_data.get('estado_conversacion', ConversationState.INICIO))
         conversation_data = user_data.get('data', {})
+
+        # Si es un usuario nuevo, enviar mensaje de bienvenida
+        if not user_data:
+            conversation_data = {}
+            await db.update_conversation_state(from_number, ConversationState.INICIO, conversation_data)
+            return ("¡Bienvenido a Fingro! \n\n"
+                    "Somos tu aliado financiero en el campo. Te ayudamos a obtener el financiamiento que necesitas para tu cultivo "
+                    "de manera rápida y sencilla.\n\n"
+                    "En los próximos minutos, te haré algunas preguntas sobre tu proyecto agrícola. "
+                    "Con esta información, podremos:\n"
+                    "• Calcular el monto de financiamiento \n"
+                    "• Estimar los costos de producción \n"
+                    "• Proyectar tus ganancias potenciales \n\n"
+                    "Al final, recibirás un resumen detallado y nos pondremos en contacto contigo para discutir las opciones de financiamiento disponibles.\n\n"
+                    "¡Empecemos! ¿Qué cultivo estás planeando sembrar?")
         
         if current_state == ConversationState.INICIO:
             # Procesar cultivo
@@ -167,11 +198,11 @@ async def process_user_message(from_number: str, message: str) -> str:
             return get_response_for_state(next_state, conversation_data)
         
         else:
-            return "Lo siento, no entiendo ese comando. Por favor, empieza de nuevo escribiendo el cultivo que te interesa."
+            return "Lo siento, no entiendo ese comando. Por favor, escribe 'reiniciar' para comenzar de nuevo."
             
     except Exception as e:
         logger.error(f"Error procesando mensaje: {str(e)}")
-        return "Lo siento, hubo un error procesando tu mensaje. Por favor, intenta de nuevo."
+        return "Lo siento, hubo un error procesando tu mensaje. Por favor, escribe 'reiniciar' para comenzar de nuevo."
 
 async def send_whatsapp_message(to_number: str, message: str) -> dict:
     """Enviar mensaje usando WhatsApp Cloud API"""
