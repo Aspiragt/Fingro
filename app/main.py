@@ -7,6 +7,7 @@ import httpx
 from typing import Dict, Any
 from enum import Enum
 from datetime import datetime
+from .database import db
 
 # Configuración de logging
 logging.basicConfig(
@@ -33,10 +34,6 @@ class ConversationState(str, Enum):
     COMERCIALIZACION = "COMERCIALIZACION"
     UBICACION = "UBICACION"
     FINALIZADO = "FINALIZADO"
-
-# Almacenamiento temporal de conversaciones
-# En producción, esto debería estar en una base de datos
-conversations: Dict[str, Dict[str, Any]] = {}
 
 def get_next_state(current_state: ConversationState) -> ConversationState:
     """Determina el siguiente estado de la conversación"""
@@ -66,7 +63,6 @@ def get_response_for_state(state: ConversationState, user_data: Dict[str, Any]) 
 
 def generate_summary(user_data: Dict[str, Any]) -> str:
     """Genera un resumen de la información recopilada"""
-    # TODO: Integrar con APIs para obtener precios y costos reales
     cultivo = user_data.get('cultivo', 'N/A')
     hectareas = user_data.get('hectareas', 'N/A')
     riego = user_data.get('riego', 'N/A')
@@ -74,47 +70,55 @@ def generate_summary(user_data: Dict[str, Any]) -> str:
     
     return f"""¡Gracias! Con la información que me has dado, puedo decirte que:
 
- Cultivo de {cultivo}
- {hectareas} hectáreas con riego por {riego}
- Ubicación: {municipio}
- Ingresos estimados: Q.80,000 (estimado)
- Costos estimados: Q.40,000 (estimado)
+🌱 Cultivo de {cultivo}
+📐 {hectareas} hectáreas con riego por {riego}
+📍 Ubicación: {municipio}
+💰 Ingresos estimados: Q.80,000 (estimado)
+🚜 Costos estimados: Q.40,000 (estimado)
 
 ¿Te gustaría saber cuánto financiamiento podrías obtener?"""
 
-def process_user_message(from_number: str, message: str) -> str:
+async def process_user_message(from_number: str, message: str) -> str:
     """Procesa el mensaje del usuario y actualiza el estado de la conversación"""
-    # Obtener o crear la conversación del usuario
-    if from_number not in conversations:
-        conversations[from_number] = {
-            'state': ConversationState.INICIO,
-            'data': {},
-            'last_update': datetime.now().isoformat()
+    # Obtener o crear usuario
+    user_data = await db.get_user(from_number)
+    
+    if not user_data:
+        # Nuevo usuario
+        user_data = {
+            'estado_conversacion': ConversationState.INICIO,
+            'data': {}
         }
+        await db.create_or_update_user(from_number, user_data)
         return get_response_for_state(ConversationState.INICIO, {})
     
-    conversation = conversations[from_number]
-    current_state = ConversationState(conversation['state'])
+    current_state = ConversationState(user_data.get('estado_conversacion', ConversationState.INICIO))
+    conversation_data = user_data.get('data', {})
     
     # Actualizar datos según el estado actual
     if current_state == ConversationState.INICIO:
-        conversation['data']['cultivo'] = message
+        conversation_data['cultivo'] = message
     elif current_state == ConversationState.CULTIVO:
-        conversation['data']['hectareas'] = message
+        conversation_data['hectareas'] = message
     elif current_state == ConversationState.HECTAREAS:
-        conversation['data']['riego'] = message
+        conversation_data['riego'] = message
     elif current_state == ConversationState.RIEGO:
-        conversation['data']['comercializacion'] = message
+        conversation_data['comercializacion'] = message
     elif current_state == ConversationState.COMERCIALIZACION:
-        conversation['data']['ubicacion'] = message
+        conversation_data['ubicacion'] = message
     
     # Avanzar al siguiente estado
     next_state = get_next_state(current_state)
-    conversation['state'] = next_state
-    conversation['last_update'] = datetime.now().isoformat()
+    
+    # Si llegamos al estado FINALIZADO, crear solicitud
+    if next_state == ConversationState.FINALIZADO:
+        await db.create_solicitud(from_number, conversation_data)
+    
+    # Actualizar estado en la base de datos
+    await db.update_conversation_state(from_number, next_state, conversation_data)
     
     # Generar respuesta
-    return get_response_for_state(next_state, conversation['data'])
+    return get_response_for_state(next_state, conversation_data)
 
 async def send_whatsapp_message(to_number: str, message: str) -> Dict:
     """Enviar mensaje usando WhatsApp Cloud API"""
@@ -234,7 +238,7 @@ async def webhook(request: Request):
                             
                             # Procesar el mensaje y obtener respuesta
                             try:
-                                response = process_user_message(from_number, text)
+                                response = await process_user_message(from_number, text)
                                 await send_whatsapp_message(from_number, response)
                                 messages_processed += 1
                             except Exception as e:
