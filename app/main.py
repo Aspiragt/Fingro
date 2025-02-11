@@ -157,27 +157,17 @@ async def process_user_message(from_number: str, message: str) -> str:
             cultivo = message.strip().lower()
             conversation_data['cultivo'] = cultivo
             
-            # Obtener información de precios
+            # Obtener información de precios (solo guardar, no mostrar)
             try:
                 precio_info = await maga_client.get_market_prices(cultivo)
+                conversation_data['precio_info'] = precio_info if precio_info else None
             except Exception as e:
                 logger.error(f"Error obteniendo precios: {str(e)}")
-                precio_info = None
+                conversation_data['precio_info'] = None
             
-            response = get_response_for_state(ConversationState.CULTIVO, conversation_data)
-            
-            if precio_info:
-                response += (f"\n\nInformación del mercado:\n"
-                           f"• Precio actual: Q.{precio_info['precio_actual']}/{precio_info['unidad_medida']}\n"
-                           f"• Tendencia: {precio_info['tendencia']}\n"
-                           f"• Última actualización: {precio_info['ultima_actualizacion']}")
-            
-            # Actualizar usuario con la información de precios
-            conversation_data['precio_info'] = precio_info if precio_info else None
             next_state = ConversationState.CULTIVO
             await db.update_conversation_state(from_number, next_state, conversation_data)
-            
-            return response
+            return get_response_for_state(next_state, conversation_data)
             
         elif current_state == ConversationState.CULTIVO:
             try:
@@ -206,21 +196,16 @@ async def process_user_message(from_number: str, message: str) -> str:
         
         elif current_state == ConversationState.COMERCIALIZACION:
             conversation_data['ubicacion'] = message
-            next_state = ConversationState.UBICACION
-            await db.update_conversation_state(from_number, next_state, conversation_data)
             
-            # Enviar mensaje de análisis y luego el resumen
-            await send_whatsapp_message(from_number, get_response_for_state(next_state, conversation_data))
-            
-            # Actualizar al estado final y enviar el resumen
+            # Actualizar al estado final directamente
             next_state = ConversationState.FINALIZADO
             await db.update_conversation_state(from_number, next_state, conversation_data)
+            
+            # Generar y enviar el análisis final
             return get_response_for_state(next_state, conversation_data)
         
-        elif current_state == ConversationState.UBICACION:
-            next_state = ConversationState.FINALIZADO
-            await db.update_conversation_state(from_number, next_state, conversation_data)
-            return get_response_for_state(next_state, conversation_data)
+        elif current_state == ConversationState.FINALIZADO:
+            return "Tu análisis ya está listo. Si quieres iniciar una nueva consulta, escribe 'reiniciar'."
         
         else:
             return "Lo siento, no entiendo ese comando. Por favor, escribe 'reiniciar' para comenzar de nuevo."
