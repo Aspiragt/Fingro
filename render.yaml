@@ -17,12 +17,14 @@ services:
         value: "false"
       - key: LOG_LEVEL
         value: "INFO"
+      # WhatsApp
       - key: WHATSAPP_ACCESS_TOKEN
         sync: false
       - key: WHATSAPP_PHONE_NUMBER_ID
         sync: false
       - key: WHATSAPP_WEBHOOK_VERIFY_TOKEN
         sync: false
+      # Firebase
       - key: FIREBASE_PROJECT_ID
         sync: false
       - key: FIREBASE_PRIVATE_KEY_ID
@@ -35,6 +37,33 @@ services:
         sync: false
       - key: FIREBASE_CLIENT_CERT_URL
         sync: false
+      # MAGA API
+      - key: MAGA_CACHE_TTL
+        value: "21600"
+      - key: MAGA_MAX_RETRIES
+        value: "3"
+      # Límites y timeouts
+      - key: REQUEST_TIMEOUT
+        value: "30"
+      - key: CACHE_TTL
+        value: "300"
+      - key: MAX_RETRIES
+        value: "3"
+      - key: MAX_CACHE_SIZE
+        value: "1000"
+      # Análisis financiero
+      - key: MIN_FINGRO_SCORE
+        value: "0.0"
+      - key: MAX_FINGRO_SCORE
+        value: "100.0"
+      - key: MIN_LOAN_AMOUNT
+        value: "1000.0"
+      - key: MAX_LOAN_AMOUNT
+        value: "100000.0"
+      - key: DEFAULT_LOAN_TERM
+        value: "12"
+      - key: DEFAULT_INTEREST_RATE
+        value: "0.15"
     files:
       - name: firebase-credentials
         sync: false

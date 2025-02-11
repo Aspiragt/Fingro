@@ -69,19 +69,57 @@ class Settings(BaseModel):
         default="https://web.maga.gob.gt",
         description="URL base del sitio web del MAGA"
     )
+    MAGA_CACHE_TTL: int = Field(
+        default=int(os.getenv("MAGA_CACHE_TTL", "21600")),  # 6 horas
+        description="Tiempo de vida del caché de precios del MAGA en segundos"
+    )
+    MAGA_MAX_RETRIES: int = Field(
+        default=int(os.getenv("MAGA_MAX_RETRIES", "3")),
+        description="Número máximo de reintentos para requests al MAGA"
+    )
     
     # Límites y timeouts
     REQUEST_TIMEOUT: int = Field(
-        default=30,
+        default=int(os.getenv("REQUEST_TIMEOUT", "30")),
         description="Timeout para requests HTTP en segundos"
     )
     CACHE_TTL: int = Field(
-        default=300,
+        default=int(os.getenv("CACHE_TTL", "300")),
         description="Tiempo de vida del caché en segundos"
     )
     MAX_RETRIES: int = Field(
-        default=3,
+        default=int(os.getenv("MAX_RETRIES", "3")),
         description="Número máximo de reintentos para operaciones fallidas"
+    )
+    MAX_CACHE_SIZE: int = Field(
+        default=int(os.getenv("MAX_CACHE_SIZE", "1000")),
+        description="Tamaño máximo del caché"
+    )
+    
+    # Configuración de análisis financiero
+    MIN_FINGRO_SCORE: float = Field(
+        default=float(os.getenv("MIN_FINGRO_SCORE", "0.0")),
+        description="Puntaje mínimo para aprobar un préstamo"
+    )
+    MAX_FINGRO_SCORE: float = Field(
+        default=float(os.getenv("MAX_FINGRO_SCORE", "100.0")),
+        description="Puntaje máximo del Fingro Score"
+    )
+    MIN_LOAN_AMOUNT: float = Field(
+        default=float(os.getenv("MIN_LOAN_AMOUNT", "1000.0")),
+        description="Monto mínimo de préstamo en quetzales"
+    )
+    MAX_LOAN_AMOUNT: float = Field(
+        default=float(os.getenv("MAX_LOAN_AMOUNT", "100000.0")),
+        description="Monto máximo de préstamo en quetzales"
+    )
+    DEFAULT_LOAN_TERM: int = Field(
+        default=int(os.getenv("DEFAULT_LOAN_TERM", "12")),
+        description="Plazo por defecto del préstamo en meses"
+    )
+    DEFAULT_INTEREST_RATE: float = Field(
+        default=float(os.getenv("DEFAULT_INTEREST_RATE", "0.15")),
+        description="Tasa de interés anual por defecto"
     )
     
     @validator('ENV')
