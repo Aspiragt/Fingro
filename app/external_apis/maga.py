@@ -1,111 +1,241 @@
 """
-Integración con el Sistema de Información de Mercados del MAGA
+Cliente para obtener datos de precios del MAGA (Ministerio de Agricultura, Ganadería y Alimentación)
+https://precios.maga.gob.gt/
 """
 import httpx
-from typing import List, Optional
-import pandas as pd
+from typing import Optional, Dict, Any, List
 import logging
 from datetime import datetime, timedelta
 import json
+from bs4 import BeautifulSoup
+from fake_useragent import UserAgent
+import re
+from difflib import get_close_matches
 
 logger = logging.getLogger(__name__)
 
 class MAGAClient:
-    """Cliente para obtener datos del Sistema de Información de Mercados del MAGA"""
+    """Cliente para obtener datos de precios del MAGA"""
     
-    BASE_URL = "https://precios.maga.gob.gt/datos-abiertos"
+    BASE_URL = "https://precios.maga.gob.gt"
+    CACHE_DURATION = 6 * 60 * 60  # 6 horas en segundos
     
-    # Precios de respaldo (por quintal)
-    BACKUP_PRICES = {
-        'tomate': {'precio_actual': 200, 'tendencia': 'estable', 'unidad_medida': 'caja'},
-        'maiz': {'precio_actual': 180, 'tendencia': 'alza', 'unidad_medida': 'quintal'},
-        'frijol': {'precio_actual': 500, 'tendencia': 'estable', 'unidad_medida': 'quintal'},
-        'papa': {'precio_actual': 300, 'tendencia': 'baja', 'unidad_medida': 'quintal'},
-        'cebolla': {'precio_actual': 250, 'tendencia': 'estable', 'unidad_medida': 'quintal'},
-        'chile': {'precio_actual': 400, 'tendencia': 'alza', 'unidad_medida': 'caja'},
-        'zanahoria': {'precio_actual': 150, 'tendencia': 'estable', 'unidad_medida': 'quintal'},
-        'aguacate': {'precio_actual': 350, 'tendencia': 'alza', 'unidad_medida': 'caja'},
-        'cafe': {'precio_actual': 1200, 'tendencia': 'estable', 'unidad_medida': 'quintal'},
-        'arroz': {'precio_actual': 400, 'tendencia': 'estable', 'unidad_medida': 'quintal'}
+    # Mapeo de cultivos a nombres MAGA
+    CROP_MAPPING = {
+        'tomate': ['tomate de cocina', 'tomate manzano', 'tomate de tierra'],
+        'papa': ['papa', 'papa larga', 'papa revuelta', 'papa suprema'],
+        'maiz': ['maíz blanco', 'maiz blanco', 'maiz amarillo', 'maíz amarillo'],
+        'frijol': ['frijol negro', 'frijol rojo', 'frijol colorado'],
+        'cafe': ['café', 'cafe'],
+        'trigo': ['trigo'],
+        'arroz': ['arroz', 'arroz oro', 'arroz blanco']
     }
     
     def __init__(self):
-        """Inicializa el cliente"""
-        self.session = httpx.AsyncClient()
-        self._precios_cache = {}
-        self._last_update = None
-    
-    async def get_precio_cultivo(self, cultivo: str) -> Optional[dict]:
-        """
-        Obtiene el precio actual y tendencia de un cultivo
+        """Inicializa el cliente de MAGA"""
+        self._cache = {}
+        self._last_update = {}
+        self._user_agent = UserAgent()
         
-        Args:
-            cultivo: Nombre del cultivo a buscar
-            
+    def _get_headers(self) -> Dict[str, str]:
+        """
+        Genera headers aleatorios para evitar bloqueos
         Returns:
-            dict con información del precio o None si no se encuentra
+            Dict con headers HTTP
+        """
+        return {
+            'User-Agent': self._user_agent.random,
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'es-GT,es;q=0.8,en-US;q=0.5,en;q=0.3',
+            'Connection': 'keep-alive',
+        }
+        
+    async def _get_prices(self) -> Optional[List[Dict[str, Any]]]:
+        """
+        Obtiene precios actuales del MAGA
+        Returns:
+            Lista de precios o None si hay error
         """
         try:
-            # Normalizar nombre del cultivo
-            cultivo = cultivo.lower().strip()
+            # Verificar cache
+            cache_key = "prices"
+            now = datetime.now().timestamp()
             
-            # Actualizar cache si es necesario (cada 24 horas)
-            if self._necesita_actualizar_cache():
-                await self._actualizar_cache()
+            if (cache_key in self._cache and 
+                now - self._last_update.get(cache_key, 0) <= self.CACHE_DURATION):
+                return self._cache[cache_key]
             
-            # Primero intentar obtener de la API
-            if cultivo in self._precios_cache:
-                data = self._precios_cache[cultivo]
-                logger.info(f"Precio encontrado en cache para {cultivo}: {data}")
-                return {
-                    'precio_actual': data['precio_actual'],
-                    'tendencia': data['tendencia'],
-                    'unidad_medida': data['unidad_medida'],
-                    'ultima_actualizacion': data['ultima_actualizacion'],
-                    'fuente': 'MAGA'
-                }
+            # Hacer request
+            url = f"{self.BASE_URL}/diarios/diarios.html"
+            
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                logger.info(f"Obteniendo precios de {url}")
+                response = await client.get(url, headers=self._get_headers())
                 
-            # Si no está en cache, buscar en precios de respaldo
-            if cultivo in self.BACKUP_PRICES:
-                data = self.BACKUP_PRICES[cultivo]
-                logger.info(f"Usando precio de respaldo para {cultivo}: {data}")
-                return {
-                    **data,
-                    'ultima_actualizacion': datetime.now().strftime('%Y-%m-%d'),
-                    'fuente': 'histórico'
-                }
-                
-            # Si no se encuentra en ninguna fuente
-            logger.warning(f"No se encontró precio para {cultivo}")
-            return None
-            
+                if response.status_code == 200:
+                    # Parsear HTML
+                    soup = BeautifulSoup(response.text, 'html.parser')
+                    
+                    # Obtener fecha
+                    date_text = soup.find('h5')
+                    if not date_text:
+                        logger.error("No se encontró la fecha en el HTML")
+                        return None
+                        
+                    date_text = date_text.text.strip()
+                    logger.info(f"Fecha encontrada: {date_text}")
+                    date = datetime.strptime(date_text, '%d/%m/%Y')
+                    
+                    # Obtener tabla de precios
+                    prices = []
+                    rows = soup.find_all('tr')
+                    
+                    for row in rows:
+                        cols = row.find_all('td')
+                        if len(cols) >= 4:  # Producto, Mercado, Medida, Precio
+                            # Limpiar y normalizar texto
+                            product = cols[0].text.strip().lower()
+                            market = cols[1].text.strip()
+                            unit = cols[2].text.strip()
+                            price_text = cols[3].text.strip().replace('Q', '').replace(',', '')
+                            
+                            try:
+                                price = float(price_text)
+                            except ValueError:
+                                logger.warning(f"No se pudo convertir precio: {price_text}")
+                                continue
+                                
+                            prices.append({
+                                'producto': product,
+                                'mercado': market,
+                                'unidad': unit,
+                                'precio': price,
+                                'fecha': date.strftime('%Y-%m-%d')
+                            })
+                    
+                    logger.info(f"Total de precios encontrados: {len(prices)}")
+                    
+                    # Guardar en cache
+                    self._cache[cache_key] = prices
+                    self._last_update[cache_key] = now
+                    
+                    return prices
+                else:
+                    logger.error(f"Error {response.status_code} obteniendo precios: {response.text}")
+                    return None
+                    
         except Exception as e:
-            logger.error(f"Error obteniendo precio para {cultivo}: {str(e)}")
-            
-            # En caso de error, intentar usar precio de respaldo
-            if cultivo in self.BACKUP_PRICES:
-                data = self.BACKUP_PRICES[cultivo]
-                logger.info(f"Usando precio de respaldo después de error para {cultivo}: {data}")
-                return {
-                    **data,
-                    'ultima_actualizacion': datetime.now().strftime('%Y-%m-%d'),
-                    'fuente': 'histórico'
-                }
+            logger.error(f"Error obteniendo precios: {str(e)}", exc_info=True)
             return None
             
-    def _necesita_actualizar_cache(self) -> bool:
-        """Verifica si es necesario actualizar el cache"""
-        if not self._last_update:
-            return True
-        return datetime.now() - self._last_update > timedelta(hours=24)
+    def _find_matching_products(self, crop_name: str, prices: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Encuentra productos que coincidan con el cultivo
+        Args:
+            crop_name: Nombre del cultivo
+            prices: Lista de precios
+        Returns:
+            Lista de precios que coinciden
+        """
+        # Obtener variantes del cultivo
+        crop_variants = self.CROP_MAPPING.get(crop_name, [crop_name])
+        logger.info(f"Buscando coincidencias para: {crop_name} (variantes: {crop_variants})")
         
-    async def _actualizar_cache(self):
-        """Actualiza el cache de precios desde la API"""
+        # Buscar coincidencias
+        matches = []
+        for price in prices:
+            product = price['producto']
+            
+            # Verificar coincidencia exacta
+            if any(variant in product for variant in crop_variants):
+                logger.debug(f"Coincidencia exacta: {product}")
+                matches.append(price)
+                continue
+                
+            # Verificar coincidencia aproximada
+            for variant in crop_variants:
+                if get_close_matches(variant, [product], n=1, cutoff=0.8):
+                    logger.debug(f"Coincidencia aproximada: {product}")
+                    matches.append(price)
+                    break
+                    
+        logger.info(f"Encontradas {len(matches)} coincidencias para {crop_name}")
+        return matches
+            
+    async def get_crop_price(self, crop_name: str) -> Optional[Dict[str, Any]]:
+        """
+        Obtiene el precio más reciente de un cultivo
+        Args:
+            crop_name: Nombre del cultivo en español
+        Returns:
+            Dict con datos del precio o None si hay error
+        """
         try:
-            # TODO: Implementar llamada real a la API
-            pass
+            # Normalizar nombre
+            crop_name = crop_name.lower().strip()
+            
+            # Obtener precios
+            prices = await self._get_prices()
+            if not prices:
+                logger.error(f"No se pudieron obtener precios del MAGA")
+                return None
+                
+            # Buscar coincidencias
+            matches = self._find_matching_products(crop_name, prices)
+            if not matches:
+                logger.warning(f"No se encontró el cultivo '{crop_name}' en MAGA")
+                return None
+                
+            # Obtener precio promedio del día
+            total = sum(m['precio'] for m in matches)
+            avg_price = total / len(matches)
+            
+            # Usar el primer match como base
+            price_data = {
+                'producto': matches[0]['producto'],
+                'mercado': matches[0]['mercado'],
+                'unidad': matches[0]['unidad'],
+                'precio': avg_price,
+                'fecha': matches[0]['fecha'],
+                'metadata': {
+                    'total_matches': len(matches),
+                    'variants': self.CROP_MAPPING.get(crop_name, [crop_name]),
+                    'all_prices': [m['precio'] for m in matches],
+                    'all_markets': list(set(m['mercado'] for m in matches))
+                }
+            }
+            
+            return price_data
+                
         except Exception as e:
-            logger.error(f"Error actualizando cache: {str(e)}")
+            logger.error(f"Error obteniendo precio de {crop_name}: {str(e)}", exc_info=True)
+            return None
+            
+    async def get_historical_prices(self, crop_name: str, days: int = 30) -> Optional[List[Dict[str, Any]]]:
+        """
+        Obtiene precios históricos de un cultivo
+        Args:
+            crop_name: Nombre del cultivo en español
+            days: Número de días hacia atrás (máximo 30)
+        Returns:
+            Lista de precios históricos o None si hay error
+        """
+        # Por ahora solo retornamos el precio actual ya que necesitaríamos
+        # implementar scraping del histórico
+        try:
+            price = await self.get_crop_price(crop_name)
+            return [price] if price else None
+        except Exception as e:
+            logger.error(f"Error obteniendo precios históricos: {str(e)}", exc_info=True)
+            return None
+            
+    async def get_available_crops(self) -> Optional[List[str]]:
+        """
+        Obtiene lista de cultivos disponibles
+        Returns:
+            Lista de cultivos o None si hay error
+        """
+        return list(self.CROP_MAPPING.keys())
 
 # Cliente global
 maga_client = MAGAClient()

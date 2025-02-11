@@ -1,39 +1,38 @@
-from typing import Optional, List, Any
-from pydantic import BaseModel
+from typing import Optional, List, Any, Dict
+from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime
+from app.utils.constants import ConversationState
 
 class Location(BaseModel):
     latitude: float
     longitude: float
+    timestamp: datetime = Field(default_factory=datetime.now)
     country: Optional[str] = None
     region: Optional[str] = None
     city: Optional[str] = None
 
 class FinancialProfile(BaseModel):
-    fingro_score: Optional[float] = None
-    payment_methods: List[str] = []
-    financing_history: List[Any] = []
-    references: List[Any] = []
-    whatsapp_usage: Optional[str] = None
-    phone_history: Optional[str] = None
+    fingro_score: float = Field(0.0, ge=0.0, le=1000.0)
+    last_calculated: datetime = Field(default_factory=datetime.now)
+    factors: Dict[str, Any] = Field(default_factory=dict)
+    payment_methods: List[str] = Field(default_factory=list)
+    financing_history: List[Any] = Field(default_factory=list)
+    references: List[Any] = Field(default_factory=list)
 
-class LanguageProfile(BaseModel):
-    avg_message_length: float = 0
-    spelling_accuracy: float = 0
-    vocabulary_size: int = 0
-    digital_literacy_score: float = 0
-    common_mistakes: Any = {}
+class ConversationState(BaseModel):
+    state: ConversationState = Field(default=ConversationState.START)
+    collected_data: Dict[str, Any] = Field(default_factory=dict)
+    last_message_timestamp: datetime = Field(default_factory=datetime.now)
+    retry_count: int = Field(default=0)
 
 class User(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     
-    id: str
     phone_number: str
     name: Optional[str] = None
     location: Optional[Location] = None
     financial_profile: Optional[FinancialProfile] = None
-    language_profile: Optional[LanguageProfile] = None
-    crops: List[str] = []
-    active_conversation: Optional[str] = None
-    created_at: datetime = datetime.now()
-    updated_at: datetime = datetime.now()
+    conversation_state: ConversationState = Field(default_factory=ConversationState)
+    crops: List[str] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(default_factory=datetime.now)

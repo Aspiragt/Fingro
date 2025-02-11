@@ -1,14 +1,15 @@
-# Estados de conversación
-CONVERSATION_STATES = {
-    "START": "start",
-    "WAITING_LOCATION": "waiting_location",
-    "ASKING_CROP": "asking_crop",
-    "ASKING_AREA": "asking_area",
-    "ASKING_IRRIGATION": "asking_irrigation",
-    "ASKING_COSTS": "asking_costs",
-    "ASKING_SALES": "asking_sales",
-    "SHOWING_RESULTS": "showing_results"
-}
+from enum import Enum
+
+class ConversationState(Enum):
+    START = "start"
+    WAITING_LOCATION = "waiting_location"
+    ASKING_CROP = "asking_crop"
+    ASKING_AREA = "asking_area"
+    ASKING_IRRIGATION = "asking_irrigation"
+    ASKING_COSTS = "asking_costs"
+    ASKING_SALES = "asking_sales"
+    SHOWING_RESULTS = "showing_results"
+    FINISHED = "finished"
 
 # Mensajes del bot
 MESSAGES = {

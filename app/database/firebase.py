@@ -1,67 +1,102 @@
-"""Firebase database connection module"""
+import os
+from typing import Optional, Dict, Any, List
 import firebase_admin
 from firebase_admin import credentials, firestore
-from pathlib import Path
-import os
-import json
-from dotenv import load_dotenv
+from datetime import datetime
+from functools import lru_cache
 import logging
 
-load_dotenv()
 logger = logging.getLogger(__name__)
 
 class FirebaseDB:
     _instance = None
     _initialized = False
-    _cred_dict = None
     
     def __new__(cls):
         if cls._instance is None:
-            cls._instance = super(FirebaseDB, cls).__new__(cls)
+            cls._instance = super().__new__(cls)
         return cls._instance
-    
+
     def __init__(self):
         if not self._initialized:
-            self._initialize()
-            self.__class__._initialized = True
-    
-    def _initialize(self):
+            self._initialize_firebase()
+            self._initialized = True
+
+    @lru_cache(maxsize=1)
+    def _get_credentials(self) -> Dict[str, str]:
+        """Get Firebase credentials from environment variables"""
+        required_vars = [
+            'FIREBASE_PROJECT_ID',
+            'FIREBASE_PRIVATE_KEY',
+            'FIREBASE_CLIENT_EMAIL'
+        ]
+        
+        missing = [var for var in required_vars if not os.getenv(var)]
+        if missing:
+            raise ValueError(f"Missing required environment variables: {', '.join(missing)}")
+            
+        return {
+            'type': 'service_account',
+            'project_id': os.getenv('FIREBASE_PROJECT_ID'),
+            'private_key': os.getenv('FIREBASE_PRIVATE_KEY').replace('\\n', '\n'),
+            'client_email': os.getenv('FIREBASE_CLIENT_EMAIL'),
+            'token_uri': 'https://oauth2.googleapis.com/token'
+        }
+
+    def _initialize_firebase(self) -> None:
         """Initialize Firebase connection"""
         try:
-            # Solo crear el diccionario de credenciales si no existe
-            if not self.__class__._cred_dict:
-                self.__class__._cred_dict = {
-                    "type": "service_account",
-                    "project_id": os.getenv("FIREBASE_PROJECT_ID"),
-                    "private_key_id": os.getenv("FIREBASE_PRIVATE_KEY_ID"),
-                    "private_key": os.getenv("FIREBASE_PRIVATE_KEY").replace('\\n', '\n') if os.getenv("FIREBASE_PRIVATE_KEY") else None,
-                    "client_email": os.getenv("FIREBASE_CLIENT_EMAIL"),
-                    "client_id": os.getenv("FIREBASE_CLIENT_ID"),
-                    "auth_uri": os.getenv("FIREBASE_AUTH_URI"),
-                    "token_uri": os.getenv("FIREBASE_TOKEN_URI"),
-                    "auth_provider_x509_cert_url": os.getenv("FIREBASE_AUTH_PROVIDER_X509_CERT_URL"),
-                    "client_x509_cert_url": os.getenv("FIREBASE_CLIENT_X509_CERT_URL")
-                }
-            
-            # Verificar credenciales solo si no está inicializado
             if not firebase_admin._apps:
-                # Verificar que todas las credenciales necesarias están presentes
-                required_fields = ["project_id", "private_key", "client_email"]
-                missing_fields = [field for field in required_fields if not self.__class__._cred_dict.get(field)]
-                if missing_fields:
-                    raise ValueError(f"Missing required Firebase credentials: {', '.join(missing_fields)}")
-                
-                # Inicializar Firebase solo si no está inicializado
-                cred = credentials.Certificate(self.__class__._cred_dict)
+                cred = credentials.Certificate(self._get_credentials())
                 firebase_admin.initialize_app(cred)
-                logger.info("Firebase initialized successfully")
-            
             self.db = firestore.client()
-            
+            logger.info("Firebase initialized successfully")
         except Exception as e:
             logger.error(f"Error initializing Firebase: {str(e)}")
-            raise e
-    
+            raise
+
+    def get_user(self, phone_number: str) -> Optional[Dict[str, Any]]:
+        """Get user data"""
+        doc = self.db.collection('users').document(phone_number).get()
+        return doc.to_dict() if doc.exists else None
+
+    def create_user(self, phone_number: str, data: Dict[str, Any]) -> None:
+        """Create new user"""
+        self.db.collection('users').document(phone_number).set(data)
+
+    def update_user(self, phone_number: str, data: Dict[str, Any]) -> None:
+        """Update user data"""
+        self.db.collection('users').document(phone_number).set(data, merge=True)
+
+    def get_conversation_state(self, phone_number: str) -> Optional[Dict[str, Any]]:
+        """Get conversation state"""
+        user = self.get_user(phone_number)
+        return user.get('conversation_state') if user else None
+
+    def update_conversation_state(self, phone_number: str, state: Dict[str, Any]) -> None:
+        """Update conversation state"""
+        self.update_user(phone_number, {'conversation_state': state})
+
+    def reset_conversation(self, phone_number: str) -> None:
+        """Reset conversation state"""
+        from app.models.user import ConversationState
+        self.update_conversation_state(phone_number, ConversationState().dict())
+
+    def add_message(self, phone_number: str, message: Dict[str, Any]) -> None:
+        """Add message to conversation history"""
+        message['timestamp'] = firestore.SERVER_TIMESTAMP
+        self.db.collection('conversations').document(phone_number).collection('messages').add(message)
+
+    def get_messages(self, phone_number: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """Get conversation history"""
+        messages = (self.db.collection('conversations')
+                   .document(phone_number)
+                   .collection('messages')
+                   .order_by('timestamp', direction=firestore.Query.DESCENDING)
+                   .limit(limit)
+                   .stream())
+        return [msg.to_dict() for msg in messages]
+
     def collection(self, name: str):
         """Get a collection reference"""
         return self.db.collection(name)

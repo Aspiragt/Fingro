@@ -1,9 +1,10 @@
-from typing import Any, Optional
+from typing import Any, Optional, Dict
 import logging
-import json
-from datetime import datetime, timedelta
-from app.utils.exceptions import WhatsAppAPIError, WhatsAppTemplateError, FirebaseError
-from app.utils.text_processing import normalize_text, calculate_text_similarity
+from datetime import datetime
+from app.utils.exceptions import WhatsAppAPIError, FirebaseError
+from app.utils.constants import ConversationState, MESSAGES
+from app.models.user import User, ConversationState as UserConversationState
+from app.database.firebase import FirebaseDB
 import httpx
 import os
 from cachetools import TTLCache
@@ -11,9 +12,9 @@ from cachetools import TTLCache
 logger = logging.getLogger(__name__)
 
 class WhatsAppService:
-    def __init__(self, firebase_db):
-        """Initialize WhatsApp service with Firebase connection"""
-        self.firebase_db = firebase_db
+    def __init__(self):
+        """Initialize WhatsApp service"""
+        self.firebase_db = FirebaseDB()
         self.phone_number_id = os.getenv("WHATSAPP_PHONE_NUMBER_ID")
         self.access_token = os.getenv("WHATSAPP_ACCESS_TOKEN")
         
@@ -38,20 +39,18 @@ class WhatsAppService:
             limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)
         )
 
-    async def process_message(self, from_number: str, message_data: dict[str, Any]) -> None:
+    async def process_message(self, from_number: str, message_data: Dict[str, Any]) -> None:
         """Process incoming WhatsApp message"""
         try:
+            # Comando especial para reiniciar
+            if message_data.get("type") == "text" and message_data["text"]["body"].lower() == "reiniciar":
+                self.firebase_db.reset_conversation(from_number)
+                await self.send_text_message(from_number, MESSAGES["welcome"])
+                return
+
             # Obtener o crear usuario
             user = await self._get_or_create_user(from_number)
             
-            # Comando especial para reiniciar
-            if message_data["type"] == "text" and message_data["text"]["body"].lower() == "reiniciar":
-                self.firebase_db.reset_conversation(from_number)
-                from app.chat.conversation_flow import ConversationManager
-                conversation = ConversationManager()
-                await self.send_text_message(from_number, conversation.get_welcome_message())
-                return
-
             # Procesar el mensaje según su tipo
             if message_data["type"] == "text":
                 await self._handle_text_message(user, message_data)
@@ -69,7 +68,7 @@ class WhatsAppService:
             logger.error(f"Error processing message: {str(e)}")
             await self._handle_error(from_number, e)
 
-    async def _get_or_create_user(self, phone_number: str) -> dict[str, Any]:
+    async def _get_or_create_user(self, phone_number: str) -> User:
         """Get or create user with caching"""
         try:
             # Intentar obtener de caché
@@ -77,17 +76,18 @@ class WhatsAppService:
                 return self.user_cache[phone_number]
             
             # Obtener de Firebase
-            user = self.firebase_db.get_user(phone_number)
-            if not user:
+            user_data = self.firebase_db.get_user(phone_number)
+            if not user_data:
                 # Crear nuevo usuario
-                user = {
-                    "phone_number": phone_number,
-                    "created_at": datetime.now().isoformat(),
-                    "last_interaction": datetime.now().isoformat(),
-                    "conversation_state": "START",
-                    "data": {}
-                }
-                self.firebase_db.create_user(phone_number, user)
+                user = User(
+                    phone_number=phone_number,
+                    conversation_state=UserConversationState(
+                        state=ConversationState.START
+                    )
+                )
+                self.firebase_db.create_user(phone_number, user.dict())
+            else:
+                user = User(**user_data)
             
             # Actualizar caché
             self.user_cache[phone_number] = user
@@ -96,11 +96,10 @@ class WhatsAppService:
         except Exception as e:
             raise FirebaseError(f"Error getting/creating user: {str(e)}")
 
-    async def send_text_message(self, to_number: str, message: str) -> dict[str, Any]:
+    async def send_text_message(self, to_number: str, message: str) -> Dict[str, Any]:
         """Send text message to WhatsApp"""
         try:
             url = f"{self.base_url}/{self.phone_number_id}/messages"
-            
             payload = {
                 "messaging_product": "whatsapp",
                 "recipient_type": "individual",
@@ -111,98 +110,49 @@ class WhatsAppService:
             
             async with self.client as client:
                 response = await client.post(url, json=payload, headers=self.headers)
+                response.raise_for_status()
+                return response.json()
                 
-            if response.status_code != 200:
-                raise WhatsAppAPIError(
-                    f"Error sending message: {response.text}",
-                    status_code=response.status_code,
-                    response=response.json()
-                )
-                
-            return response.json()
-            
         except Exception as e:
-            logger.error(f"Error sending message: {str(e)}")
-            raise WhatsAppAPIError(f"Failed to send message: {str(e)}")
+            raise WhatsAppAPIError(f"Error sending message: {str(e)}")
 
-    async def send_template_message(self, to_number: str, template_name: str, 
-                                 language_code: str = "es", components: list = None) -> dict[str, Any]:
-        """Send template message to WhatsApp"""
-        try:
-            url = f"{self.base_url}/{self.phone_number_id}/messages"
-            
-            payload = {
-                "messaging_product": "whatsapp",
-                "recipient_type": "individual",
-                "to": to_number,
-                "type": "template",
-                "template": {
-                    "name": template_name,
-                    "language": {
-                        "code": language_code
-                    }
-                }
-            }
-            
-            if components:
-                payload["template"]["components"] = components
-            
-            async with self.client as client:
-                response = await client.post(url, json=payload, headers=self.headers)
-                
-            if response.status_code != 200:
-                raise WhatsAppTemplateError(
-                    f"Error sending template: {response.text}",
-                    status_code=response.status_code,
-                    response=response.json()
-                )
-                
-            return response.json()
-            
-        except Exception as e:
-            logger.error(f"Error sending template: {str(e)}")
-            raise WhatsAppTemplateError(f"Failed to send template: {str(e)}")
-
-    async def _handle_text_message(self, user: dict[str, Any], message_data: dict[str, Any]) -> None:
+    async def _handle_text_message(self, user: User, message_data: Dict[str, Any]) -> None:
         """Handle text message"""
-        text = message_data.get("text", "")
-        state = user.get("conversation_state", "START")
+        text = message_data["text"]["body"]
+        state = user.conversation_state.state
         
-        # Obtener respuesta del caché si existe
-        cache_key = f"{state}:{normalize_text(text)}"
-        if cache_key in self.response_cache:
-            response = self.response_cache[cache_key]
-        else:
-            # Procesar mensaje según el estado
-            response = await self._get_response_based_on_state(user, text)
-            # Guardar en caché
-            self.response_cache[cache_key] = response
+        # Actualizar datos según el estado
+        if state == ConversationState.ASKING_CROP:
+            user.crops.append(text)
+            user.conversation_state.state = ConversationState.ASKING_AREA
+        elif state == ConversationState.ASKING_AREA:
+            user.conversation_state.collected_data["area"] = text
+            user.conversation_state.state = ConversationState.ASKING_IRRIGATION
+        # ... más estados ...
         
-        # Enviar respuesta
-        await self.send_text_message(user["phone_number"], response)
+        # Guardar cambios
+        self.firebase_db.update_user(user.phone_number, user.dict())
         
-        # Actualizar estado del usuario
-        self._update_user_state(user, text)
+        # Enviar siguiente mensaje
+        await self.send_text_message(user.phone_number, MESSAGES[user.conversation_state.state.value])
 
-    async def _handle_location_message(self, user: dict[str, Any], message_data: dict[str, Any]) -> None:
+    async def _handle_location_message(self, user: User, message_data: Dict[str, Any]) -> None:
         """Handle location message"""
-        location = message_data.get("location", {})
-        if location:
-            # Guardar ubicación
-            user["data"]["location"] = {
-                "latitude": location.get("latitude"),
-                "longitude": location.get("longitude"),
-                "timestamp": datetime.now().isoformat()
+        if user.conversation_state.state == ConversationState.WAITING_LOCATION:
+            user.location = {
+                "latitude": message_data["location"]["latitude"],
+                "longitude": message_data["location"]["longitude"],
+                "timestamp": datetime.now()
             }
-            self.firebase_db.update_user(user["phone_number"], user)
+            user.conversation_state.state = ConversationState.ASKING_CROP
             
-            # Enviar confirmación
-            await self.send_text_message(
-                user["phone_number"],
-                "¡Gracias por compartir tu ubicación! Esto nos ayudará a brindarte un mejor servicio."
-            )
+            # Guardar cambios
+            self.firebase_db.update_user(user.phone_number, user.dict())
+            
+            # Enviar siguiente mensaje
+            await self.send_text_message(user.phone_number, MESSAGES["crop_request"])
 
-    async def _handle_interactive_message(self, user: dict[str, Any], message_data: dict[str, Any]) -> None:
+    async def _handle_interactive_message(self, user: User, message_data: Dict[str, Any]) -> None:
         """Handle interactive message (buttons/list)"""
         interactive = message_data.get("interactive", {})
         if interactive:
@@ -215,27 +165,17 @@ class WhatsAppService:
                 await self._handle_list_response(user, list_id)
 
     async def _handle_error(self, phone_number: str, error: Exception) -> None:
-        """Handle errors gracefully"""
-        try:
-            error_message = "Lo siento, ha ocurrido un error. Por favor, intenta nuevamente en unos momentos."
-            await self.send_text_message(phone_number, error_message)
-        except:
-            logger.error("Failed to send error message to user")
+        """Handle error in message processing"""
+        error_message = MESSAGES.get("error", "Lo siento, ha ocurrido un error. Por favor escribe 'reiniciar' para comenzar de nuevo.")
+        await self.send_text_message(phone_number, error_message)
+        logger.error(f"Error processing message for {phone_number}: {str(error)}")
 
-    def _update_user_state(self, user: dict[str, Any], message: str) -> None:
-        """Update user state based on message"""
-        try:
-            user["last_interaction"] = datetime.now().isoformat()
-            # Actualizar estado según el flujo de conversación
-            # TODO: Implementar lógica de estados
-            self.firebase_db.update_user(user["phone_number"], user)
-            self.user_cache[user["phone_number"]] = user
-        except Exception as e:
-            logger.error(f"Error updating user state: {str(e)}")
+    async def _handle_button_response(self, user: User, button_id: str) -> None:
+        """Handle button response"""
+        # TODO: Implementar lógica para manejar respuestas de botones
+        pass
 
-    async def _get_response_based_on_state(self, user: dict[str, Any], message: str) -> str:
-        """Get response based on user state and message"""
-        state = user.get("conversation_state", "START")
-        
-        # TODO: Implementar lógica de respuestas según estado
-        return "Gracias por tu mensaje. Pronto implementaremos más funcionalidades."
+    async def _handle_list_response(self, user: User, list_id: str) -> None:
+        """Handle list response"""
+        # TODO: Implementar lógica para manejar respuestas de listas
+        pass
