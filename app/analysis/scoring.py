@@ -35,6 +35,27 @@ class FingroScoring:
         'intermediario': 0.6
     }
     
+    # Costos base por hectárea (en quetzales)
+    COSTOS_BASE = {
+        'semillas': 1500,
+        'fertilizantes': 2000,
+        'mano_obra': 3000,
+        'riego': {
+            'goteo': 5000,
+            'aspersión': 4000,
+            'gravedad': 2000,
+            'temporal': 0
+        }
+    }
+    
+    # Factores de ajuste de costos por tipo de comercialización
+    FACTOR_COMERCIALIZACION = {
+        'exportación': 1.3,  # 30% más caro por estándares de calidad
+        'mercado local': 1.0,
+        'directo': 0.9,     # 10% más barato por menos intermediarios
+        'intermediario': 1.1 # 10% más caro por comisiones
+    }
+    
     @staticmethod
     def calculate_area_score(hectareas: float) -> float:
         """Calcula score basado en área"""
@@ -92,17 +113,32 @@ class FingroScoring:
             final_score = sum(score * cls.WEIGHTS[factor] 
                             for factor, score in scores.items())
             
-            # Calcular monto recomendado de préstamo
-            precio_actual = float(precio_info.get('precio_actual', 150))
-            produccion_estimada = hectareas * 40  # Estimado de 40 quintales por hectárea
-            ingreso_estimado = produccion_estimada * precio_actual
-            prestamo_recomendado = ingreso_estimado * 0.4  # 40% del ingreso estimado
+            # Calcular costos
+            costo_riego = cls.COSTOS_BASE['riego'].get(riego, 2000)
+            costos_base = sum(cost for key, cost in cls.COSTOS_BASE.items() if key != 'riego')
+            costos_por_hectarea = costos_base + costo_riego
+            
+            # Ajustar por comercialización
+            factor = cls.FACTOR_COMERCIALIZACION.get(comercializacion, 1.0)
+            costos_totales = costos_por_hectarea * hectareas * factor
+            
+            # Calcular ingresos (estimado conservador)
+            precio_promedio = 150  # Precio promedio por quintal
+            produccion_por_hectarea = 40  # Quintales por hectárea
+            ingreso_total = hectareas * produccion_por_hectarea * precio_promedio
+            
+            # Calcular ganancia
+            ganancia = ingreso_total - costos_totales
+            
+            # Calcular préstamo recomendado (40% de costos totales)
+            prestamo = costos_totales * 0.4
             
             return {
                 'fingro_score': round(final_score * 100, 2),
-                'prestamo_recomendado': round(prestamo_recomendado, 2),
-                'produccion_estimada': round(produccion_estimada, 2),
-                'ingreso_estimado': round(ingreso_estimado, 2),
+                'prestamo_recomendado': round(prestamo, 2),
+                'costos_estimados': round(costos_totales, 2),
+                'ingreso_estimado': round(ingreso_total, 2),
+                'ganancia_estimada': round(ganancia, 2),
                 'scores_detallados': {
                     k: round(v * 100, 2) for k, v in scores.items()
                 },

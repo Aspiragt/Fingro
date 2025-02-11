@@ -15,7 +15,17 @@ class ConversationState(str, Enum):
 
 # Mensajes del bot
 MESSAGES = {
-    ConversationState.INICIO: "👋 ¡Hola! Soy FinGro, tu asistente para financiamiento agrícola.\n\n🌱 ¿Qué cultivo planeas sembrar?",
+    ConversationState.INICIO: (
+        "👋 ¡Hola! Soy FinGro, tu aliado financiero para el campo.\n\n"
+        "🌱 Te ayudaré a conseguir el financiamiento que necesitas para tu cultivo.\n\n"
+        "✨ *Beneficios de FinGro:*\n"
+        "• Análisis financiero GRATIS\n"
+        "• Préstamos desde Q5,000 hasta Q100,000\n"
+        "• Tasas preferenciales para agricultores\n"
+        "• Respuesta en 24 horas\n\n"
+        "🚀 *¿Empezamos?*\n"
+        "¿Qué cultivo planeas sembrar?"
+    ),
     
     ConversationState.CULTIVO: "🌿 ¿Cuántas hectáreas planeas cultivar?\n\nPor favor, ingresa solo el número (ejemplo: 2.5)",
     
@@ -28,17 +38,27 @@ MESSAGES = {
     ConversationState.UBICACION: "⌛ Analizando tu proyecto...",
     
     ConversationState.FINALIZADO: lambda data: (
-        f"✅ ¡Análisis completado!\n\n"
-        f"🌱 Cultivo: {data['cultivo']}\n"
-        f"📏 Área: {data['hectareas']} hectáreas\n"
-        f"💧 Riego: {data['riego']}\n"
-        f"🏪 Comercialización: {data['comercializacion']}\n"
-        f"📍 Ubicación: {data['ubicacion']}\n\n"
-        f"💰 Precio actual: Q{data['precio_info']['precio_actual']}/{data['precio_info']['unidad_medida']}\n"
-        f"📈 Tendencia: {data['precio_info']['tendencia']}\n\n"
+        f"✅ *¡Análisis completado!*\n\n"
+        f"📝 *Datos del Proyecto*\n"
+        f"• Cultivo: {data['cultivo']}\n"
+        f"• Área: {data['hectareas']} hectáreas\n"
+        f"• Riego: {data['riego']}\n"
+        f"• Comercialización: {data['comercializacion']}\n"
+        f"• Ubicación: {data['ubicacion']}\n\n"
+        f"💰 *Análisis Financiero*\n"
+        f"• Inversión necesaria: {format_currency(data['score_data']['costos_estimados'])}\n"
+        f"• Ingresos proyectados: {format_currency(data['score_data']['ingreso_estimado'])}\n"
+        f"• Ganancia estimada: {format_currency(data['score_data']['ganancia_estimada'])}\n"
+        f"• FinGro Score: {data['score_data']['fingro_score']}%\n\n"
+        f"🎉 *¡Buenas noticias!*\n"
+        f"Calificas para un préstamo de hasta {format_currency(data['score_data']['prestamo_recomendado'])}.\n\n"
         f"🏦 ¿Listo para solicitar tu préstamo? Escribe 'solicitar' para comenzar el proceso."
     )
 }
+
+def format_currency(amount: float) -> str:
+    """Formatea cantidades monetarias"""
+    return f"Q{amount:,.2f}"
 
 # Variaciones de escritura comunes
 CROP_VARIATIONS = {
