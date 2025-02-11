@@ -3,12 +3,16 @@ Configuración de la aplicación
 """
 import os
 import json
+from pathlib import Path
 from typing import Dict, Any
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
+# Obtener la ruta base del proyecto
+BASE_DIR = Path(__file__).resolve().parent.parent
+
 # Cargar variables de entorno
-load_dotenv()
+load_dotenv(BASE_DIR / ".env")
 
 class Settings(BaseModel):
     """Configuración de la aplicación"""
@@ -20,16 +24,20 @@ class Settings(BaseModel):
     WHATSAPP_WEBHOOK_VERIFY_TOKEN: str = os.getenv("WHATSAPP_WEBHOOK_VERIFY_TOKEN", "")
     
     # Firebase
-    FIREBASE_CREDENTIALS_PATH: str = os.getenv("FIREBASE_CREDENTIALS_PATH", "")
+    FIREBASE_CREDENTIALS_PATH: str = os.getenv("FIREBASE_CREDENTIALS_PATH", str(BASE_DIR / "firebase-credentials.json"))
     
     @property
     def FIREBASE_CREDENTIALS(self) -> Dict[str, Any]:
         """Lee las credenciales de Firebase desde el archivo"""
         try:
-            with open(self.FIREBASE_CREDENTIALS_PATH) as f:
+            creds_path = Path(self.FIREBASE_CREDENTIALS_PATH)
+            if not creds_path.is_absolute():
+                creds_path = BASE_DIR / creds_path
+            
+            with open(creds_path) as f:
                 return json.load(f)
         except Exception as e:
-            raise ValueError(f"Error leyendo credenciales de Firebase: {str(e)}")
+            raise ValueError(f"Error leyendo credenciales de Firebase desde {creds_path}: {str(e)}")
     
     # MAGA API
     MAGA_BASE_URL: str = "https://precios.maga.gob.gt"
