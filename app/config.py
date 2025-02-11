@@ -2,39 +2,52 @@
 Configuración de la aplicación
 """
 import os
+from typing import Dict, Any
+from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
-from typing import Any
 
 # Cargar variables de entorno
 load_dotenv()
 
-class Config:
-    """Configuración global de la aplicación"""
+class Settings(BaseSettings):
+    """Configuración de la aplicación"""
     
-    # API Keys
-    WHATSAPP_ACCESS_TOKEN = os.getenv('WHATSAPP_ACCESS_TOKEN')
-    WHATSAPP_PHONE_NUMBER_ID = os.getenv('WHATSAPP_PHONE_NUMBER_ID')
-    WHATSAPP_VERIFY_TOKEN = os.getenv('WHATSAPP_VERIFY_TOKEN')
-    FAOSTAT_API_KEY = os.getenv('FAOSTAT_API_KEY')
-    APIFARMER_KEY = os.getenv('APIFARMER_KEY')
-    COMMODITIES_API_KEY = os.getenv('COMMODITIES_API_KEY')
+    # WhatsApp API
+    WHATSAPP_API_URL: str = "https://graph.facebook.com/v17.0"
+    WHATSAPP_TOKEN: str = os.getenv("WHATSAPP_TOKEN", "")
+    WHATSAPP_PHONE_NUMBER_ID: str = os.getenv("WHATSAPP_PHONE_NUMBER_ID", "")
     
     # Firebase
-    FIREBASE_CREDENTIALS = os.getenv('FIREBASE_CREDENTIALS')
+    FIREBASE_CREDENTIALS: Dict[str, Any] = {
+        "type": "service_account",
+        "project_id": os.getenv("FIREBASE_PROJECT_ID", ""),
+        "private_key_id": os.getenv("FIREBASE_PRIVATE_KEY_ID", ""),
+        "private_key": os.getenv("FIREBASE_PRIVATE_KEY", "").replace("\\n", "\n"),
+        "client_email": os.getenv("FIREBASE_CLIENT_EMAIL", ""),
+        "client_id": os.getenv("FIREBASE_CLIENT_ID", ""),
+        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+        "token_uri": "https://oauth2.googleapis.com/token",
+        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+        "client_x509_cert_url": os.getenv("FIREBASE_CLIENT_CERT_URL", "")
+    }
     
-    # Cache settings
-    CACHE_DURATION = 24 * 60 * 60  # 24 horas
+    # MAGA API
+    MAGA_BASE_URL: str = "https://precios.maga.gob.gt"
+    MAGA_CACHE_TTL: int = 21600  # 6 horas en segundos
     
-    @classmethod
-    def get_all(cls) -> dict[str, Any]:
-        """Retorna todas las configuraciones como diccionario"""
-        return {
-            'WHATSAPP_ACCESS_TOKEN': cls.WHATSAPP_ACCESS_TOKEN,
-            'WHATSAPP_PHONE_NUMBER_ID': cls.WHATSAPP_PHONE_NUMBER_ID,
-            'WHATSAPP_VERIFY_TOKEN': cls.WHATSAPP_VERIFY_TOKEN,
-            'FAOSTAT_API_KEY': cls.FAOSTAT_API_KEY,
-            'APIFARMER_KEY': cls.APIFARMER_KEY,
-            'COMMODITIES_API_KEY': cls.COMMODITIES_API_KEY,
-            'FIREBASE_CREDENTIALS': cls.FIREBASE_CREDENTIALS,
-            'CACHE_DURATION': cls.CACHE_DURATION
-        }
+    # Configuración de la aplicación
+    DEBUG: bool = os.getenv("DEBUG", "False").lower() == "true"
+    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
+    
+    # Límites y configuraciones
+    MAX_CACHE_SIZE: int = 1000
+    REQUEST_TIMEOUT: int = 30
+    MAX_RETRIES: int = 3
+    
+    class Config:
+        """Configuración de Pydantic"""
+        env_file = ".env"
+        case_sensitive = True
+
+# Instancia global de configuración
+settings = Settings()
