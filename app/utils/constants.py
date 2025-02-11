@@ -1,58 +1,37 @@
 from enum import Enum
 
-class ConversationState(Enum):
-    START = "start"
-    WAITING_LOCATION = "waiting_location"
-    ASKING_CROP = "asking_crop"
-    ASKING_AREA = "asking_area"
-    ASKING_IRRIGATION = "asking_irrigation"
-    ASKING_COSTS = "asking_costs"
-    ASKING_SALES = "asking_sales"
-    SHOWING_RESULTS = "showing_results"
-    FINISHED = "finished"
+class ConversationState(str, Enum):
+    INICIO = "INICIO"
+    CULTIVO = "CULTIVO"
+    HECTAREAS = "HECTAREAS"
+    RIEGO = "RIEGO"
+    COMERCIALIZACION = "COMERCIALIZACION"
+    UBICACION = "UBICACION"
+    FINALIZADO = "FINALIZADO"
 
 # Mensajes del bot
 MESSAGES = {
-    "welcome": """¡Hola! 👋 Soy el asistente de Fingro.
-Te ayudaré a conseguir financiamiento para tu cultivo.
-Por ejemplo, {name} de {region} recibió {amount} para su cultivo de {crop}.""",
-
-    "location_request": """Para empezar, necesito saber dónde estás.
-Por favor, comparte tu ubicación usando el botón de abajo 📍""",
-
-    "crop_request": """¡Gracias! Ahora cuéntame, ¿qué cultivas?
-Puedes seleccionar de la lista o escribir tu cultivo.""",
-
-    "area_request": """¿Cuánta área tienes cultivada?
-Por ejemplo: 2 hectáreas, 5 manzanas, etc.""",
-
-    "irrigation_request": """¿Qué sistema de riego utilizas?
-- Goteo 💧
-- Aspersión 🚿
-- Lluvia 🌧️""",
-
-    "costs_request": """¿Cuánto inviertes en tu cultivo {crop}?
-Incluye costos de:
-- Semillas 🌱
-- Fertilizantes 🧪
-- Mano de obra 👨‍🌾
-- Riego 💧""",
-
-    "sales_request": """¿Cómo vendes tu cosecha?
-- Mercado local 🏪
-- Exportador 🚢
-- Intermediario 🤝""",
-
-    "error": """Lo siento, ha ocurrido un error.
-Por favor, intenta nuevamente en unos momentos.""",
-
-    "success": """¡Excelente! Basado en tu información:
-- Cultivo: {crop}
-- Área: {area}
-- Score Fingro: {score}
-- Financiamiento disponible: Q{amount}
-
-¿Te gustaría conocer las opciones disponibles?"""
+    ConversationState.INICIO: "👋 ¡Hola! Soy FinGro, tu asistente para financiamiento agrícola.\n\n🌱 ¿Qué cultivo planeas sembrar?",
+    
+    ConversationState.CULTIVO: "🌿 ¿Cuántas hectáreas planeas cultivar?\n\nPor favor, ingresa solo el número (ejemplo: 2.5)",
+    
+    ConversationState.HECTAREAS: "💧 ¿Qué sistema de riego utilizarás?\n\nEscribe una de estas opciones:\n- Goteo\n- Aspersión\n- Gravedad\n- Temporal",
+    
+    ConversationState.RIEGO: "🏪 ¿Cómo planeas comercializar tu cosecha?\n\nEscribe una opción:\n- Mercado local\n- Exportación\n- Intermediario\n- Directo",
+    
+    ConversationState.COMERCIALIZACION: "📍 ¿En qué municipio y departamento está ubicada tu parcela?\n\nEjemplo: San Juan Sacatepéquez, Guatemala",
+    
+    ConversationState.FINALIZADO: lambda data: (
+        f"✅ ¡Análisis completado!\n\n"
+        f"🌱 Cultivo: {data['cultivo']}\n"
+        f"📏 Área: {data['hectareas']} hectáreas\n"
+        f"💧 Riego: {data['riego']}\n"
+        f"🏪 Comercialización: {data['comercializacion']}\n"
+        f"📍 Ubicación: {data['ubicacion']}\n\n"
+        f"💰 Precio actual: Q{data['precio_info']['precio_actual']}/{data['precio_info']['unidad_medida']}\n"
+        f"📈 Tendencia: {data['precio_info']['tendencia']}\n\n"
+        f"🏦 ¿Listo para solicitar tu préstamo? Escribe 'solicitar' para comenzar el proceso."
+    )
 }
 
 # Variaciones de escritura comunes
