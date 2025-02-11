@@ -1,9 +1,13 @@
-from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, ConfigDict
+"""
+Modelos para conversaciones
+"""
+from typing import Optional, List, Any
+from pydantic import BaseModel
 from datetime import datetime
 from app.utils.constants import ConversationState
 
 class Message(BaseModel):
+    """Modelo para mensajes"""
     role: str  # user o assistant
     content: str
     original_content: Optional[str] = None

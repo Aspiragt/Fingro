@@ -1,5 +1,5 @@
-from typing import Optional, List, dict
-from pydantic import BaseModel, ConfigDict
+from typing import Optional, List, Any
+from pydantic import BaseModel
 from datetime import datetime
 
 class Location(BaseModel):
