@@ -27,8 +27,14 @@ class Settings(BaseModel):
     """Configuración de la aplicación"""
     
     # Entorno
-    ENV: str = Field(default="development", description="Entorno de ejecución")
-    DEBUG: bool = Field(default=False, description="Modo debug")
+    ENV: str = Field(
+        default=os.getenv("ENV", "development"),
+        description="Entorno de ejecución"
+    )
+    DEBUG: bool = Field(
+        default=os.getenv("DEBUG", "false").lower() == "true",
+        description="Modo debug"
+    )
     
     # WhatsApp API
     WHATSAPP_API_URL: str = Field(
@@ -36,21 +42,21 @@ class Settings(BaseModel):
         description="URL base de la API de WhatsApp"
     )
     WHATSAPP_TOKEN: str = Field(
-        default="",
+        default=os.getenv("WHATSAPP_ACCESS_TOKEN", ""),
         description="Token de acceso para la API de WhatsApp"
     )
     WHATSAPP_PHONE_NUMBER_ID: str = Field(
-        default="",
+        default=os.getenv("WHATSAPP_PHONE_NUMBER_ID", ""),
         description="ID del número de teléfono de WhatsApp"
     )
     WHATSAPP_WEBHOOK_VERIFY_TOKEN: str = Field(
-        default="",
+        default=os.getenv("WHATSAPP_WEBHOOK_VERIFY_TOKEN", ""),
         description="Token de verificación para el webhook de WhatsApp"
     )
     
     # Firebase
     FIREBASE_CREDENTIALS_PATH: str = Field(
-        default=str(BASE_DIR / "firebase-credentials.json"),
+        default=os.getenv("FIREBASE_CREDENTIALS_PATH", str(BASE_DIR / "firebase-credentials.json")),
         description="Ruta al archivo de credenciales de Firebase"
     )
     
@@ -77,6 +83,7 @@ class Settings(BaseModel):
     @validator('ENV')
     def validate_env(cls, v: str) -> str:
         """Valida el entorno"""
+        v = v.lower()
         if v not in ['development', 'staging', 'production']:
             raise ValueError("ENV debe ser 'development', 'staging' o 'production'")
         return v
@@ -90,8 +97,14 @@ class Settings(BaseModel):
             Dict[str, Any]: Credenciales de Firebase
         """
         try:
-            # En producción, usar variables de entorno
-            if self.ENV == "production":
+            # Forzar uso de variables de entorno si estamos en Render
+            is_render = os.getenv("RENDER", "").lower() == "true"
+            is_production = self.ENV.lower() == "production"
+            
+            logger.info(f"Ambiente: ENV={self.ENV}, RENDER={is_render}")
+            
+            if is_production or is_render:
+                logger.info("Usando credenciales de Firebase desde variables de entorno")
                 private_key = os.getenv("FIREBASE_PRIVATE_KEY", "")
                 if not private_key:
                     raise ValueError("FIREBASE_PRIVATE_KEY no está configurada")
@@ -137,6 +150,7 @@ class Settings(BaseModel):
                 
                 return creds
             
+            logger.info("Usando credenciales de Firebase desde archivo")
             # En desarrollo, leer del archivo
             creds_path = Path(self.FIREBASE_CREDENTIALS_PATH)
             if not creds_path.exists():
@@ -155,12 +169,12 @@ class Settings(BaseModel):
     @property
     def IS_PRODUCTION(self) -> bool:
         """Indica si el entorno es producción"""
-        return self.ENV == "production"
+        return self.ENV.lower() == "production" or os.getenv("RENDER", "").lower() == "true"
     
     @property
     def IS_DEVELOPMENT(self) -> bool:
         """Indica si el entorno es desarrollo"""
-        return self.ENV == "development"
+        return not self.IS_PRODUCTION
     
     class Config:
         """Configuración del modelo"""
@@ -171,6 +185,7 @@ class Settings(BaseModel):
 try:
     settings = Settings()
     logger.info(f"Configuración cargada para entorno: {settings.ENV}")
+    logger.info(f"¿Es producción? {settings.IS_PRODUCTION}")
 except Exception as e:
     logger.error(f"Error cargando configuración: {str(e)}")
     raise
