@@ -53,7 +53,7 @@ def get_next_state(current_state: ConversationState) -> ConversationState:
     }
     return state_flow.get(current_state, ConversationState.INICIO)
 
-def get_response_for_state(state: ConversationState, user_data: dict[str, Any]) -> str:
+async def get_response_for_state(state: ConversationState, user_data: dict[str, Any]) -> str:
     """Genera la respuesta apropiada según el estado de la conversación"""
     responses = {
         ConversationState.INICIO: "¡Hola! Soy Fingro, tu asistente para conseguir financiamiento agrícola. ¿Qué te gustaría cultivar?",
@@ -175,7 +175,7 @@ async def process_user_message(from_number: str, message: str) -> str:
             
             next_state = ConversationState.CULTIVO
             await db.update_conversation_state(from_number, next_state, conversation_data)
-            return get_response_for_state(next_state, conversation_data)
+            return await get_response_for_state(next_state, conversation_data)
             
         elif current_state == ConversationState.CULTIVO:
             try:
@@ -188,19 +188,19 @@ async def process_user_message(from_number: str, message: str) -> str:
             conversation_data['hectareas'] = hectareas
             next_state = ConversationState.HECTAREAS
             await db.update_conversation_state(from_number, next_state, conversation_data)
-            return get_response_for_state(next_state, conversation_data)
+            return await get_response_for_state(next_state, conversation_data)
         
         elif current_state == ConversationState.HECTAREAS:
             conversation_data['riego'] = message
             next_state = ConversationState.RIEGO
             await db.update_conversation_state(from_number, next_state, conversation_data)
-            return get_response_for_state(next_state, conversation_data)
+            return await get_response_for_state(next_state, conversation_data)
         
         elif current_state == ConversationState.RIEGO:
             conversation_data['comercializacion'] = message
             next_state = ConversationState.COMERCIALIZACION
             await db.update_conversation_state(from_number, next_state, conversation_data)
-            return get_response_for_state(next_state, conversation_data)
+            return await get_response_for_state(next_state, conversation_data)
         
         elif current_state == ConversationState.COMERCIALIZACION:
             conversation_data['ubicacion'] = message
@@ -210,7 +210,7 @@ async def process_user_message(from_number: str, message: str) -> str:
             await db.update_conversation_state(from_number, next_state, conversation_data)
             
             # Generar y enviar el análisis final
-            return get_response_for_state(next_state, conversation_data)
+            return await get_response_for_state(next_state, conversation_data)
         
         elif current_state == ConversationState.FINALIZADO:
             return "Tu análisis ya está listo. Si quieres iniciar una nueva consulta, escribe 'reiniciar'."
