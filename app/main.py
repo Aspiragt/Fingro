@@ -32,6 +32,9 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Instanciar servicios
+whatsapp = WhatsAppService()
+
 async def process_user_message(from_number: str, message: str) -> None:
     """
     Procesa el mensaje del usuario y actualiza el estado de la conversación
@@ -45,7 +48,7 @@ async def process_user_message(from_number: str, message: str) -> None:
         # Si el mensaje es "reiniciar", volver al estado inicial
         if message.lower() == "reiniciar":
             firebase_manager.reset_user_state(from_number)
-            await WhatsAppService.send_message(from_number, MESSAGES['welcome'])
+            await whatsapp.send_message(from_number, MESSAGES['welcome'])
             return
             
         # Procesar mensaje según el estado actual
@@ -53,7 +56,7 @@ async def process_user_message(from_number: str, message: str) -> None:
             # Mensaje de bienvenida
             user_data['name'] = message
             new_state = ConversationState.ASKING_CROP.value
-            await WhatsAppService.send_message(from_number, MESSAGES['ask_crop'])
+            await whatsapp.send_message(from_number, MESSAGES['ask_crop'])
             
         elif current_state == ConversationState.ASKING_CROP.value:
             # Guardar cultivo y obtener precio
@@ -68,7 +71,7 @@ async def process_user_message(from_number: str, message: str) -> None:
                 logger.error(f"Error obteniendo precios: {str(e)}")
             
             new_state = ConversationState.ASKING_AREA.value
-            await WhatsAppService.send_message(from_number, MESSAGES['ask_area'])
+            await whatsapp.send_message(from_number, MESSAGES['ask_area'])
             
         elif current_state == ConversationState.ASKING_AREA.value:
             # Guardar área
@@ -76,22 +79,22 @@ async def process_user_message(from_number: str, message: str) -> None:
                 area = float(message.replace('ha', '').strip())
                 user_data['area'] = area
                 new_state = ConversationState.ASKING_COMMERCIALIZATION.value
-                await WhatsAppService.send_message(from_number, MESSAGES['ask_commercialization'])
+                await whatsapp.send_message(from_number, MESSAGES['ask_commercialization'])
             except ValueError:
-                await WhatsAppService.send_message(from_number, MESSAGES['invalid_area'])
+                await whatsapp.send_message(from_number, MESSAGES['invalid_area'])
                 return
                 
         elif current_state == ConversationState.ASKING_COMMERCIALIZATION.value:
             # Guardar método de comercialización
             user_data['commercialization'] = message
             new_state = ConversationState.ASKING_IRRIGATION.value
-            await WhatsAppService.send_message(from_number, MESSAGES['ask_irrigation'])
+            await whatsapp.send_message(from_number, MESSAGES['ask_irrigation'])
             
         elif current_state == ConversationState.ASKING_IRRIGATION.value:
             # Guardar sistema de riego
             user_data['irrigation'] = message
             new_state = ConversationState.ASKING_LOCATION.value
-            await WhatsAppService.send_message(from_number, MESSAGES['ask_location'])
+            await whatsapp.send_message(from_number, MESSAGES['ask_location'])
             
         elif current_state == ConversationState.ASKING_LOCATION.value:
             # Guardar ubicación y generar análisis
@@ -103,12 +106,12 @@ async def process_user_message(from_number: str, message: str) -> None:
             firebase_manager.store_analysis(from_number, analysis)
             
             # Enviar resultados
-            await WhatsAppService.send_message(from_number, MESSAGES['analysis_ready'])
+            await whatsapp.send_message(from_number, MESSAGES['analysis_ready'])
             
         else:
             # Estado no reconocido, reiniciar
             firebase_manager.reset_user_state(from_number)
-            await WhatsAppService.send_message(from_number, MESSAGES['error_restart'])
+            await whatsapp.send_message(from_number, MESSAGES['error_restart'])
             return
             
         # Actualizar estado en Firebase
@@ -119,7 +122,20 @@ async def process_user_message(from_number: str, message: str) -> None:
         
     except Exception as e:
         logger.error(f"Error procesando mensaje: {str(e)}")
-        await WhatsAppService.send_message(from_number, MESSAGES['error'])
+        await whatsapp.send_message(from_number, MESSAGES['error'])
+
+@app.get("/")
+async def root():
+    """
+    Ruta raíz que muestra información básica de la API
+    """
+    return {
+        "name": "FinGro API",
+        "version": "1.0.0",
+        "status": "running",
+        "environment": settings.ENV,
+        "docs_url": "/docs"
+    }
 
 @app.post("/webhook/whatsapp")
 async def webhook(request: Request):

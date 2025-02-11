@@ -31,7 +31,7 @@ class FirebaseDB:
             logger.error(f"Error inicializando Firebase: {str(e)}")
             raise
     
-    async def get_conversation_state(self, phone: str) -> Optional[ConversationState]:
+    def get_conversation_state(self, phone: str) -> Dict[str, Any]:
         """
         Obtiene el estado actual de la conversación
         
@@ -39,7 +39,7 @@ class FirebaseDB:
             phone: Número de teléfono del usuario
             
         Returns:
-            Optional[ConversationState]: Estado actual de la conversación
+            Dict[str, Any]: Estado actual de la conversación y datos del usuario
         """
         try:
             # Intentar obtener del caché
@@ -49,19 +49,31 @@ class FirebaseDB:
             
             # Si no está en caché, obtener de Firebase
             user_ref = self.db.collection('users').document(phone)
-            user_doc = user_ref.get()
+            doc = user_ref.get()
             
-            if user_doc.exists:
-                state = user_doc.to_dict().get('state')
-                if state:
-                    self.cache[cache_key] = state
-                    return state
+            if doc.exists:
+                data = doc.to_dict()
+            else:
+                # Si no existe, crear estado inicial
+                data = {
+                    'state': ConversationState.INITIAL.value,
+                    'data': {},
+                    'created_at': datetime.utcnow().isoformat(),
+                    'updated_at': datetime.utcnow().isoformat()
+                }
+                user_ref.set(data)
             
-            return None
+            # Guardar en caché
+            self.cache[cache_key] = data
+            return data
             
         except Exception as e:
             logger.error(f"Error obteniendo estado de conversación: {str(e)}")
-            return None
+            # Retornar estado inicial en caso de error
+            return {
+                'state': ConversationState.INITIAL.value,
+                'data': {}
+            }
     
     async def update_user_state(self, phone: str, state: ConversationState) -> bool:
         """
