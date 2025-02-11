@@ -104,12 +104,12 @@ async def process_user_message(from_number: str, message: str) -> str:
     """
     try:
         # Obtener estado actual
-        conversation_data = await db.get_conversation_state(from_number)
+        conversation_data = db.get_conversation_state(from_number)
         
         # Si no hay datos de conversación, inicializar con estado INICIO
         if not conversation_data:
             conversation_data = {'state': ConversationState.INICIO, 'data': {}}
-            await db.update_conversation_state(from_number, conversation_data)
+            db.update_conversation_state(from_number, conversation_data)
         
         current_state = conversation_data.get('state', ConversationState.INICIO)
         user_data = conversation_data.get('data', {})
@@ -117,7 +117,7 @@ async def process_user_message(from_number: str, message: str) -> str:
         # Si el mensaje es 'reiniciar', volver al inicio
         if message.lower() == 'reiniciar':
             new_conversation_data = {'state': ConversationState.INICIO, 'data': {}}
-            await db.update_conversation_state(from_number, new_conversation_data)
+            db.update_conversation_state(from_number, new_conversation_data)
             return await get_response_for_state(ConversationState.INICIO, {})
             
         # Procesar mensaje según el estado actual
@@ -150,7 +150,7 @@ async def process_user_message(from_number: str, message: str) -> str:
                 }
             
             new_conversation_data = {'state': ConversationState.CULTIVO, 'data': user_data}
-            await db.update_conversation_state(from_number, new_conversation_data)
+            db.update_conversation_state(from_number, new_conversation_data)
             return await get_response_for_state(ConversationState.CULTIVO, user_data)
             
         elif current_state == ConversationState.CULTIVO:
@@ -163,25 +163,25 @@ async def process_user_message(from_number: str, message: str) -> str:
                 
             user_data['hectareas'] = hectareas
             new_conversation_data = {'state': ConversationState.HECTAREAS, 'data': user_data}
-            await db.update_conversation_state(from_number, new_conversation_data)
+            db.update_conversation_state(from_number, new_conversation_data)
             return await get_response_for_state(ConversationState.HECTAREAS, user_data)
         
         elif current_state == ConversationState.HECTAREAS:
             user_data['riego'] = message
             new_conversation_data = {'state': ConversationState.RIEGO, 'data': user_data}
-            await db.update_conversation_state(from_number, new_conversation_data)
+            db.update_conversation_state(from_number, new_conversation_data)
             return await get_response_for_state(ConversationState.RIEGO, user_data)
         
         elif current_state == ConversationState.RIEGO:
             user_data['comercializacion'] = message
             new_conversation_data = {'state': ConversationState.COMERCIALIZACION, 'data': user_data}
-            await db.update_conversation_state(from_number, new_conversation_data)
+            db.update_conversation_state(from_number, new_conversation_data)
             return await get_response_for_state(ConversationState.COMERCIALIZACION, user_data)
         
         elif current_state == ConversationState.COMERCIALIZACION:
             user_data['ubicacion'] = message
             new_conversation_data = {'state': ConversationState.FINALIZADO, 'data': user_data}
-            await db.update_conversation_state(from_number, new_conversation_data)
+            db.update_conversation_state(from_number, new_conversation_data)
             
             # Generar y enviar el análisis final
             return await get_response_for_state(ConversationState.FINALIZADO, user_data)
