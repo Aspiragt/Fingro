@@ -16,16 +16,7 @@ class ConversationManager:
     
     def __init__(self):
         """Inicializa el manejador de conversación"""
-        self.state_handlers = {
-            ConversationState.INITIAL: self._handle_initial_state,
-            ConversationState.ASKING_CROP: self._handle_crop_state,
-            ConversationState.ASKING_AREA: self._handle_area_state,
-            ConversationState.ASKING_IRRIGATION: self._handle_irrigation_state,
-            ConversationState.ASKING_COMMERCIALIZATION: self._handle_commercialization_state,
-            ConversationState.ASKING_LOCATION: self._handle_location_state,
-            ConversationState.ANALYSIS: self._handle_analysis_state,
-            ConversationState.COMPLETED: self._handle_completed_state
-        }
+        pass
     
     async def handle_message(self, phone: str, message: str) -> str:
         """
@@ -95,6 +86,19 @@ class ConversationManager:
                         "- Directo"
                     )
                 user_data['commercialization'] = message
+                new_state = ConversationState.ASKING_PAYMENT_METHOD.value
+                response = MESSAGES['ask_payment_method']
+                
+            elif current_state == ConversationState.ASKING_PAYMENT_METHOD.value:
+                valid_options = ['efectivo', 'transferencia', 'cheque']
+                if message not in valid_options:
+                    return (
+                        "❌ Por favor, selecciona una opción válida:\n"
+                        "- Efectivo\n"
+                        "- Transferencia\n"
+                        "- Cheque"
+                    )
+                user_data['payment_method'] = message
                 new_state = ConversationState.ASKING_IRRIGATION.value
                 response = MESSAGES['ask_irrigation']
                 
@@ -118,26 +122,30 @@ class ConversationManager:
                 
                 # Generar análisis
                 analysis = scoring_service.generate_analysis(user_data)
-                firebase_manager.store_analysis(phone, analysis)
+                await firebase_manager.store_analysis(phone, analysis)
                 
                 # Preparar mensaje de respuesta con el análisis
                 fingro_score = analysis.get('fingro_score', 0)
                 monto_sugerido = analysis.get('monto_sugerido', 0)
                 
-                response = (
-                    f"✅ ¡{user_data['name']}, tu análisis está listo!\n\n"
-                    f"📊 Tu Fingro Score es: {fingro_score}/100\n"
-                    f"💰 Monto sugerido: Q{format_currency(monto_sugerido)}\n\n"
-                    "👨‍💼 Un asesor de FinGro se pondrá en contacto contigo pronto "
-                    "para discutir las opciones de financiamiento disponibles para tu proyecto."
+                response = MESSAGES['analysis_ready'].format(
+                    score=fingro_score,
+                    monto=format_currency(monto_sugerido)
                 )
                 
             elif current_state == ConversationState.ANALYSIS.value:
-                new_state = ConversationState.COMPLETED.value
-                response = (
-                    "🎉 ¡Gracias por usar FinGro!\n\n"
-                    "Si deseas realizar un nuevo análisis, escribe 'reiniciar'."
-                )
+                new_state = ConversationState.ASKING_LOAN_INTEREST.value
+                response = MESSAGES['ask_loan_interest']
+                
+            elif current_state == ConversationState.ASKING_LOAN_INTEREST.value:
+                if message == 'si':
+                    new_state = ConversationState.COMPLETED.value
+                    response = MESSAGES['loan_yes']
+                elif message == 'no':
+                    new_state = ConversationState.COMPLETED.value
+                    response = MESSAGES['loan_no']
+                else:
+                    return "❌ Por favor responde 'si' o 'no'"
                 
             else:
                 await firebase_manager.reset_user_state(phone)
@@ -146,7 +154,8 @@ class ConversationManager:
             # Actualizar estado
             await firebase_manager.update_user_state(phone, {
                 'state': new_state,
-                'data': user_data
+                'data': user_data,
+                'updated_at': datetime.utcnow().isoformat()
             })
             
             return response
