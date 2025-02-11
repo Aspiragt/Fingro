@@ -90,7 +90,16 @@ async def process_user_message(from_number: str, message: str) -> str:
             'data': {}
         }
         await db.create_or_update_user(from_number, user_data)
-        return "¡Bienvenido a Fingro! 🌱\n\n¿Qué te gustaría cultivar?"
+        return ("¡Bienvenido a Fingro! 🌱\n\n"
+                "Somos tu aliado financiero en el campo. Te ayudamos a obtener el financiamiento que necesitas para tu cultivo "
+                "de manera rápida y sencilla.\n\n"
+                "En los próximos minutos, te haré algunas preguntas sobre tu proyecto agrícola. "
+                "Con esta información, podremos:\n"
+                "• Calcular el monto de financiamiento 💰\n"
+                "• Estimar los costos de producción 📊\n"
+                "• Proyectar tus ganancias potenciales 📈\n\n"
+                "Al final, recibirás un resumen detallado y nos pondremos en contacto contigo para discutir las opciones de financiamiento disponibles.\n\n"
+                "¡Empecemos! ¿Qué cultivo estás planeando sembrar? 🌾")
     
     current_state = ConversationState(user_data.get('estado_conversacion', ConversationState.INICIO))
     conversation_data = user_data.get('data', {})
