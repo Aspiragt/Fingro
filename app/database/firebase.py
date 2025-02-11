@@ -49,19 +49,15 @@ class FirebaseDB:
             user_ref = self._get_user_ref(phone)
             user_doc = user_ref.get()
             
-            if not user_doc.exists:
-                # Usuario nuevo
+            if user_doc.exists:
+                state = user_doc.to_dict()
+            else:
                 state = {
-                    'state': ConversationState.INICIO,
+                    'state': ConversationState.INITIAL.value,
                     'data': {},
-                    'last_activity': datetime.now().isoformat(),
-                    'name': None
+                    'last_update': datetime.utcnow().isoformat()
                 }
                 user_ref.set(state)
-            else:
-                state = user_doc.to_dict()
-                # Actualizar última actividad
-                user_ref.update({'last_activity': datetime.now().isoformat()})
             
             # Guardar en caché
             self.cache[cache_key] = state
@@ -70,38 +66,68 @@ class FirebaseDB:
         except Exception as e:
             logger.error(f"Error obteniendo estado del usuario {phone}: {str(e)}")
             return {
-                'state': ConversationState.INICIO,
+                'state': ConversationState.INITIAL.value,
                 'data': {},
-                'last_activity': datetime.now().isoformat(),
-                'name': None
+                'last_update': datetime.utcnow().isoformat()
             }
     
-    def update_user_state(self, phone: str, new_state: str, data: Dict[str, Any] = None) -> None:
+    def get_conversation_state(self, phone: str) -> Dict[str, Any]:
+        """
+        Obtiene el estado de la conversación del usuario
+        """
+        return self.get_user_state(phone)
+    
+    def update_user_state(self, phone: str, state: Dict[str, Any]) -> None:
         """
         Actualiza el estado del usuario en Firebase y caché
         """
         try:
-            user_ref = self._get_user_ref(phone)
-            update_data = {
-                'state': new_state,
-                'last_activity': datetime.now().isoformat()
-            }
-            
-            if data:
-                update_data['data'] = data
+            # Actualizar timestamp
+            state['last_update'] = datetime.utcnow().isoformat()
             
             # Actualizar en Firebase
-            user_ref.update(update_data)
+            user_ref = self._get_user_ref(phone)
+            user_ref.set(state, merge=True)
             
             # Actualizar caché
             cache_key = f"state_{phone}"
-            if cache_key in self.cache:
-                cached_state = self.cache[cache_key]
-                cached_state.update(update_data)
-                self.cache[cache_key] = cached_state
-                
+            self.cache[cache_key] = state
+            
         except Exception as e:
             logger.error(f"Error actualizando estado del usuario {phone}: {str(e)}")
+            raise
+    
+    def reset_user_state(self, phone: str) -> None:
+        """
+        Reinicia el estado del usuario a inicial
+        """
+        try:
+            initial_state = {
+                'state': ConversationState.INITIAL.value,
+                'data': {},
+                'last_update': datetime.utcnow().isoformat()
+            }
+            self.update_user_state(phone, initial_state)
+            
+        except Exception as e:
+            logger.error(f"Error reiniciando estado del usuario {phone}: {str(e)}")
+            raise
+    
+    def store_analysis(self, phone: str, analysis_data: Dict[str, Any]) -> None:
+        """
+        Almacena los resultados del análisis financiero
+        """
+        try:
+            analysis_ref = self.db.collection('analysis').document()
+            analysis_data.update({
+                'user_phone': phone,
+                'created_at': datetime.utcnow().isoformat()
+            })
+            analysis_ref.set(analysis_data)
+            
+        except Exception as e:
+            logger.error(f"Error almacenando análisis para usuario {phone}: {str(e)}")
+            raise
     
     def update_user_name(self, phone: str, name: str) -> None:
         """
@@ -129,9 +155,9 @@ class FirebaseDB:
             # Limpiar datos en Firebase
             user_ref = self._get_user_ref(phone)
             user_ref.set({
-                'state': ConversationState.INICIO,
+                'state': ConversationState.INITIAL.value,
                 'data': {},
-                'last_activity': datetime.now().isoformat(),
+                'last_update': datetime.utcnow().isoformat(),
                 'name': None
             })
             
@@ -151,14 +177,14 @@ class FirebaseDB:
             user_ref = self._get_user_ref(phone)
             score_doc = {
                 'score_data': score_data,
-                'calculated_at': datetime.now().isoformat()
+                'calculated_at': datetime.utcnow().isoformat()
             }
             user_ref.collection('scores').add(score_doc)
             
             # Actualizar datos del usuario
             user_ref.update({
                 'latest_score': score_data,
-                'score_updated_at': datetime.now().isoformat()
+                'score_updated_at': datetime.utcnow().isoformat()
             })
             
             # Actualizar caché
@@ -166,7 +192,7 @@ class FirebaseDB:
             if cache_key in self.cache:
                 cached_state = self.cache[cache_key]
                 cached_state['latest_score'] = score_data
-                cached_state['score_updated_at'] = datetime.now().isoformat()
+                cached_state['score_updated_at'] = datetime.utcnow().isoformat()
                 self.cache[cache_key] = cached_state
                 
         except Exception as e:
