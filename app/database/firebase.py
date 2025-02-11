@@ -5,7 +5,9 @@ import logging
 from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
 from cachetools import TTLCache
-from firebase_admin import firestore
+import firebase_admin
+from firebase_admin import credentials, firestore
+from app.config import settings
 from app.utils.constants import ConversationState
 
 logger = logging.getLogger(__name__)
@@ -15,9 +17,19 @@ class FirebaseDB:
     
     def __init__(self):
         """Inicializa el cliente de Firestore y el caché"""
-        self.db = firestore.client()
-        # Caché con tiempo de vida de 5 minutos
-        self.cache = TTLCache(maxsize=100, ttl=300)
+        try:
+            # Inicializar Firebase Admin
+            if not firebase_admin._apps:
+                cred = credentials.Certificate(settings.FIREBASE_CREDENTIALS)
+                firebase_admin.initialize_app(cred)
+            
+            self.db = firestore.client()
+            # Caché con tiempo de vida de 5 minutos
+            self.cache = TTLCache(maxsize=100, ttl=300)
+            
+        except Exception as e:
+            logger.error(f"Error inicializando Firebase: {str(e)}")
+            raise
         
     def _get_user_ref(self, phone: str) -> firestore.DocumentReference:
         """Obtiene la referencia al documento del usuario"""
