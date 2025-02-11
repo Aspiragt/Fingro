@@ -75,7 +75,7 @@ async def root():
         "whatsapp_configured": bool(WHATSAPP_TOKEN and PHONE_NUMBER_ID)
     }
 
-@app.get("/webhook")
+@app.get("/webhook/whatsapp")
 async def verify_webhook(request: Request):
     """Verificar webhook de WhatsApp Cloud API"""
     try:
@@ -96,7 +96,7 @@ async def verify_webhook(request: Request):
         logger.error(f"Error en verificación: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/webhook")
+@app.post("/webhook/whatsapp")
 async def webhook(request: Request):
     """Recibir mensajes de WhatsApp Cloud API"""
     try:
