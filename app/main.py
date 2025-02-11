@@ -75,8 +75,8 @@ def generate_summary(user_data: Dict[str, Any]) -> str:
 
  Cultivo de {cultivo}
  {hectareas} hectáreas con riego por {riego}
- Ingresos estimados: $10,000 (estimado)
- Costos estimados: $5,000 (estimado)
+ Ingresos estimados: Q.80,000 (estimado)
+ Costos estimados: Q.40,000 (estimado)
 
 ¿Te gustaría saber cuánto financiamiento podrías obtener?"""
 
