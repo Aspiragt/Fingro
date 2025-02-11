@@ -89,6 +89,7 @@ def process_user_message(from_number: str, message: str) -> str:
             'data': {},
             'last_update': datetime.now().isoformat()
         }
+        return get_response_for_state(ConversationState.INICIO, {})
     
     conversation = conversations[from_number]
     current_state = ConversationState(conversation['state'])
