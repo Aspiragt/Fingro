@@ -68,19 +68,25 @@ def get_response_for_state(state: ConversationState, user_data: dict[str, Any]) 
     if state != ConversationState.FINALIZADO:
         return responses[state]
     
-    # Si es el estado FINALIZADO, generar resumen
-    cultivo = user_data.get('cultivo', 'N/A')
-    hectareas = float(user_data.get('hectareas', 0))
-    riego = user_data.get('riego', 'tradicional')
-    comercializacion = user_data.get('comercializacion', 'N/A')
-    municipio = user_data.get('ubicacion', 'N/A')
-    precio_info = user_data.get('precio_info', {})
-    
-    # Realizar análisis financiero
-    precio_actual = precio_info.get('precio_actual', 150)  # Precio por defecto si no hay datos del MAGA
-    analisis = financial_analyzer.analizar_proyecto(cultivo, hectareas, precio_actual, riego)
-    
-    if analisis:
+    try:
+        # Si es el estado FINALIZADO, generar resumen
+        cultivo = user_data.get('cultivo', 'N/A')
+        hectareas = float(user_data.get('hectareas', 0))
+        riego = user_data.get('riego', 'tradicional')
+        comercializacion = user_data.get('comercializacion', 'N/A')
+        municipio = user_data.get('ubicacion', 'N/A')
+        precio_info = user_data.get('precio_info', {})
+        
+        # Realizar análisis financiero
+        precio_actual = precio_info.get('precio_actual', 150)  # Precio por defecto si no hay datos del MAGA
+        logger.info(f"Iniciando análisis financiero para cultivo={cultivo}, hectareas={hectareas}, precio={precio_actual}, riego={riego}")
+        
+        analisis = await financial_analyzer.analizar_proyecto(cultivo, hectareas, precio_actual, riego)
+        if not analisis:
+            logger.error(f"No se pudo obtener análisis financiero para el cultivo: {cultivo}")
+            return ("Lo siento, no pudimos analizar este cultivo en este momento. "
+                   "Por favor, escribe 'reiniciar' para intentar con otro cultivo o contacta a nuestro equipo de soporte.")
+        
         resumen = analisis['resumen_financiero']
         detalle = analisis['analisis_detallado']
         
@@ -110,8 +116,10 @@ def get_response_for_state(state: ConversationState, user_data: dict[str, Any]) 
                 f"   • Comprobante de domicilio\n"
                 f"   • Título de propiedad o contrato de arrendamiento\n\n"
                 f"Si tienes preguntas o quieres iniciar una nueva consulta, escribe 'reiniciar'.")
-    else:
-        return ("Lo siento, hubo un error al analizar tu proyecto. Por favor, escribe 'reiniciar' para intentar de nuevo.")
+    except Exception as e:
+        logger.error(f"Error generando análisis financiero: {str(e)}")
+        return ("Lo siento, hubo un error al analizar tu proyecto. "
+               "Por favor, escribe 'reiniciar' para intentar de nuevo o contacta a nuestro equipo de soporte.")
 
 async def process_user_message(from_number: str, message: str) -> str:
     """Procesa el mensaje del usuario y actualiza el estado de la conversación"""
