@@ -2,9 +2,10 @@ import os
 from typing import Optional, Dict, Any, List
 import firebase_admin
 from firebase_admin import credentials, firestore
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import lru_cache
 import logging
+from cachetools import TTLCache, cached
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,10 @@ class FirebaseDB:
         if not self._initialized:
             self._initialize_firebase()
             self._initialized = True
+            # Caché para estados de conversación (TTL de 1 hora)
+            self._conversation_cache = TTLCache(maxsize=1000, ttl=3600)
+            # Caché para datos de usuario (TTL de 24 horas)
+            self._user_cache = TTLCache(maxsize=1000, ttl=86400)
 
     @lru_cache(maxsize=1)
     def _get_credentials(self) -> Dict[str, str]:
@@ -56,33 +61,51 @@ class FirebaseDB:
             raise
 
     def get_user(self, phone_number: str) -> Optional[Dict[str, Any]]:
-        """Get user data"""
+        """Get user data with caching"""
+        # Intentar obtener del caché primero
+        if phone_number in self._user_cache:
+            logger.debug(f"Cache hit for user {phone_number}")
+            return self._user_cache[phone_number]
+
+        # Si no está en caché, obtener de Firebase
         doc = self.db.collection('users').document(phone_number).get()
-        return doc.to_dict() if doc.exists else None
+        if doc.exists:
+            user_data = doc.to_dict()
+            self._user_cache[phone_number] = user_data
+            return user_data
+        return None
 
     def create_user(self, phone_number: str, data: Dict[str, Any]) -> None:
         """Create new user"""
         self.db.collection('users').document(phone_number).set(data)
+        # Actualizar caché
+        self._user_cache[phone_number] = data
 
     def update_user(self, phone_number: str, data: Dict[str, Any]) -> None:
         """Update user data"""
         self.db.collection('users').document(phone_number).set(data, merge=True)
+        # Actualizar caché
+        if phone_number in self._user_cache:
+            self._user_cache[phone_number].update(data)
 
     def get_conversation_state(self, phone_number: str) -> Optional[Dict[str, Any]]:
-        """Get conversation state"""
-        try:
-            user_ref = self.db.collection('users').document(phone_number)
-            doc = user_ref.get()
-            if doc.exists:
-                user_data = doc.to_dict()
-                return user_data.get('conversation_state')
-            return None
-        except Exception as e:
-            logger.error(f"Error getting conversation state: {str(e)}")
-            return None
+        """Get conversation state with caching"""
+        # Intentar obtener del caché primero
+        if phone_number in self._conversation_cache:
+            logger.debug(f"Cache hit for conversation state {phone_number}")
+            return self._conversation_cache[phone_number]
+
+        # Si no está en caché, obtener del usuario
+        user = self.get_user(phone_number)
+        if user:
+            state = user.get('conversation_state')
+            if state:
+                self._conversation_cache[phone_number] = state
+            return state
+        return None
 
     def update_conversation_state(self, phone_number: str, conversation_data: Dict[str, Any]) -> None:
-        """Update conversation state"""
+        """Update conversation state with caching"""
         try:
             user_ref = self.db.collection('users').document(phone_number)
             doc = user_ref.get()
@@ -97,6 +120,10 @@ class FirebaseDB:
                     'created_at': firestore.SERVER_TIMESTAMP,
                     'conversation_state': conversation_data
                 })
+            
+            # Actualizar caché
+            self._conversation_cache[phone_number] = conversation_data
+            
         except Exception as e:
             logger.error(f"Error updating conversation state: {str(e)}")
             raise
@@ -109,6 +136,9 @@ class FirebaseDB:
                 'data': {}
             }
             self.update_conversation_state(phone_number, initial_state)
+            # Limpiar caché
+            if phone_number in self._conversation_cache:
+                del self._conversation_cache[phone_number]
         except Exception as e:
             logger.error(f"Error resetting conversation: {str(e)}")
             raise

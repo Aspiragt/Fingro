@@ -13,9 +13,14 @@ from app.utils.constants import ConversationState, MESSAGES
 from app.services.whatsapp_service import WhatsAppService
 from app.database.firebase import FirebaseDB
 from app.external_apis.maga import maga_client
+from app.analysis.scoring import scoring
+from app.views.financial_report import report_generator
 
 # Configurar logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 # Crear la aplicación FastAPI
@@ -33,71 +38,24 @@ WHATSAPP_URL = f"https://graph.facebook.com/{WHATSAPP_API_VERSION}/{PHONE_NUMBER
 
 async def get_response_for_state(state: ConversationState, user_data: dict[str, Any]) -> str:
     """Genera la respuesta apropiada según el estado de la conversación"""
-    responses = {
-        ConversationState.INICIO: "¡Hola! Soy Fingro, tu asistente para conseguir financiamiento agrícola. ¿Qué te gustaría cultivar?",
-        ConversationState.CULTIVO: "¡Excelente elección! ¿Cuántas hectáreas planeas cultivar?",
-        ConversationState.HECTAREAS: "Entiendo. ¿Qué método de riego utilizas o planeas utilizar?\nPor ejemplo: por goteo, aspersión, o tradicional",
-        ConversationState.RIEGO: "¿Y ya tienes comprador para tu cosecha? ¿A quién le vendes normalmente?\nPor ejemplo: cooperativa, exportación, mercado local, intermediario, central de mayoreo",
-        ConversationState.COMERCIALIZACION: "¿En qué municipio está o estará ubicado el cultivo?",
-        ConversationState.UBICACION: "¡Perfecto! Dame un momento para analizar tu proyecto...",
-        ConversationState.FINALIZADO: None  # Se genera dinámicamente
-    }
-    
-    if state != ConversationState.FINALIZADO:
-        return responses[state]
-    
     try:
-        # Si es el estado FINALIZADO, generar resumen
-        cultivo = user_data.get('cultivo', 'N/A')
-        hectareas = float(user_data.get('hectareas', 0))
-        riego = user_data.get('riego', 'tradicional')
-        comercializacion = user_data.get('comercializacion', 'N/A')
-        municipio = user_data.get('ubicacion', 'N/A')
-        precio_info = user_data.get('precio_info', {})
-        
-        # Realizar análisis financiero
-        precio_actual = precio_info.get('precio_actual', 150)  # Precio por defecto si no hay datos del MAGA
-        logger.info(f"Iniciando análisis financiero para cultivo={cultivo}, hectareas={hectareas}, precio={precio_actual}, riego={riego}")
-        
-        analisis = await financial_analyzer.analizar_proyecto(cultivo, hectareas, precio_actual, riego)
-        if not analisis:
-            logger.error(f"No se pudo obtener análisis financiero para el cultivo: {cultivo}")
-            return ("Lo siento, no pudimos analizar este cultivo en este momento. "
-                   "Por favor, escribe 'reiniciar' para intentar con otro cultivo o contacta a nuestro equipo de soporte.")
-        
-        resumen = analisis['resumen_financiero']
-        detalle = analisis['analisis_detallado']
-        
-        # Calcular valores simplificados
-        costo_total = resumen['inversion_requerida']
-        produccion_total = detalle['rendimiento_total_min']  # Usamos el mínimo para ser conservadores
-        venta_total = produccion_total * precio_actual
-        ganancia = venta_total - costo_total
-        margen = (ganancia / venta_total) * 100 if venta_total > 0 else 0
-        
-        return (f"¡Excelente! Aquí está el análisis de tu proyecto:\n\n"
-                f"📊 Resumen del Proyecto:\n"
-                f"• Cultivo: {cultivo}\n"
-                f"• Área: {hectareas} hectáreas\n"
-                f"• Riego: {riego}\n"
-                f"• Comercialización: {comercializacion}\n"
-                f"• Ubicación: {municipio}\n\n"
-                f"💰 Análisis Financiero:\n"
-                f"• Inversión Requerida: Q.{costo_total:,.2f}\n"
-                f"• Venta Proyectada: Q.{venta_total:,.2f}\n"
-                f"• Ganancia Estimada: Q.{ganancia:,.2f}\n"
-                f"• Margen de Ganancia: {margen:.1f}%\n\n"
-                f"🌱 Próximos Pasos:\n"
-                f"1. Nuestro equipo se pondrá en contacto contigo pronto para discutir las opciones de financiamiento.\n"
-                f"2. Prepara los siguientes documentos:\n"
-                f"   • DPI\n"
-                f"   • Comprobante de domicilio\n"
-                f"   • Título de propiedad o contrato de arrendamiento\n\n"
-                f"Si tienes preguntas o quieres iniciar una nueva consulta, escribe 'reiniciar'.")
+        if state == ConversationState.FINALIZADO:
+            # Calcular Fingro Score
+            score_data = scoring.calculate_score(user_data)
+            if not score_data:
+                return "❌ Lo siento, hubo un error al analizar tu proyecto. Por favor, escribe 'reiniciar' para intentar de nuevo."
+            
+            # Generar reporte detallado
+            return report_generator.generate_detailed_report(user_data, score_data)
+        else:
+            # Usar mensajes predefinidos para otros estados
+            message = MESSAGES.get(state)
+            if callable(message):
+                return message(user_data)
+            return message
     except Exception as e:
-        logger.error(f"Error generando análisis financiero: {str(e)}")
-        return ("Lo siento, hubo un error al analizar tu proyecto. "
-               "Por favor, escribe 'reiniciar' para intentar de nuevo o contacta a nuestro equipo de soporte.")
+        logger.error(f"Error generando respuesta: {str(e)}")
+        return "❌ Lo siento, ocurrió un error. Por favor, escribe 'reiniciar' para intentar de nuevo."
 
 async def process_user_message(from_number: str, message: str) -> str:
     """
