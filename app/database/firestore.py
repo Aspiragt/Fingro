@@ -75,5 +75,22 @@ class FirestoreDB:
         solicitud_ref.set(solicitud_data)
         return solicitud_ref.id
 
+    async def delete_user_data(self, phone_number: str):
+        """Borra todos los datos asociados a un usuario"""
+        try:
+            # Borrar documento del usuario
+            user_ref = self.db.collection('users').document(phone_number)
+            user_ref.delete()
+            
+            # Borrar solicitudes asociadas
+            solicitudes = self.db.collection('solicitudes').where('user_id', '==', phone_number).stream()
+            for solicitud in solicitudes:
+                solicitud.reference.delete()
+            
+            return True
+        except Exception as e:
+            print(f"Error borrando datos del usuario: {str(e)}")
+            return False
+
 # Instancia global de la base de datos
 db = FirestoreDB()

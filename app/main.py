@@ -113,6 +113,7 @@ async def process_user_message(from_number: str, message: str) -> str:
     # Si llegamos al estado FINALIZADO, crear solicitud
     if next_state == ConversationState.FINALIZADO:
         await db.create_solicitud(from_number, conversation_data)
+        await db.delete_user_data(from_number)  # Borrar datos después de crear la solicitud
     
     # Actualizar estado en la base de datos
     await db.update_conversation_state(from_number, next_state, conversation_data)
