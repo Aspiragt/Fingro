@@ -38,18 +38,30 @@ class FinancialAnalyzer:
             dict con el análisis financiero completo
         """
         try:
+            logger.info(f"Iniciando análisis para cultivo='{cultivo}', hectareas={hectareas}, "
+                       f"precio={precio_actual}, riego='{metodo_riego}'")
+            
             # Obtener datos del cultivo de FAO
+            logger.info("Obteniendo datos de FAO...")
             datos_cultivo = await fao_client.get_crop_data(cultivo)
             if not datos_cultivo:
                 logger.error(f"No se encontraron datos para el cultivo: {cultivo}")
                 return None
             
-            factor_riego = self.FACTOR_RIEGO.get(metodo_riego.lower(), 1.0)
+            logger.info(f"Datos obtenidos de FAO: {datos_cultivo}")
+            
+            # Normalizar método de riego y obtener factor
+            metodo_riego = metodo_riego.lower().strip()
+            factor_riego = self.FACTOR_RIEGO.get(metodo_riego, 1.0)
+            logger.info(f"Factor de riego para {metodo_riego}: {factor_riego}")
             
             # Calcular rendimiento ajustado por riego
             rendimiento_min = datos_cultivo['rendimiento_min'] * factor_riego
             rendimiento_max = datos_cultivo['rendimiento_max'] * factor_riego
             rendimiento_promedio = (rendimiento_min + rendimiento_max) / 2
+            
+            logger.info(f"Rendimientos calculados: min={rendimiento_min}, max={rendimiento_max}, "
+                       f"promedio={rendimiento_promedio}")
             
             # Calcular costos totales
             costos_fijos_ha = sum(datos_cultivo['costos_fijos'].values())
@@ -58,10 +70,16 @@ class FinancialAnalyzer:
             
             costos_totales = costos_totales_ha * hectareas
             
+            logger.info(f"Costos calculados: fijos={costos_fijos_ha}/ha, "
+                       f"variables={costos_variables_ha}/ha, total={costos_totales}")
+            
             # Calcular ingresos
             ingresos_min = rendimiento_min * hectareas * precio_actual
             ingresos_max = rendimiento_max * hectareas * precio_actual
             ingresos_promedio = (ingresos_min + ingresos_max) / 2
+            
+            logger.info(f"Ingresos calculados: min={ingresos_min}, max={ingresos_max}, "
+                       f"promedio={ingresos_promedio}")
             
             # Calcular utilidad
             utilidad_min = ingresos_min - costos_totales
@@ -74,6 +92,10 @@ class FinancialAnalyzer:
             
             # Ajustar por factor de riesgo
             utilidad_ajustada = utilidad_promedio * (1 - datos_cultivo['riesgos'])
+            
+            logger.info(f"Indicadores finales: ROI={roi_promedio}%, "
+                       f"punto_equilibrio={punto_equilibrio_qq}qq, "
+                       f"utilidad_ajustada={utilidad_ajustada}")
             
             return {
                 'analisis_detallado': {
@@ -103,7 +125,7 @@ class FinancialAnalyzer:
             }
             
         except Exception as e:
-            logger.error(f"Error en análisis financiero: {str(e)}")
+            logger.error(f"Error en análisis financiero: {str(e)}", exc_info=True)
             return None
 
 # Instancia global
