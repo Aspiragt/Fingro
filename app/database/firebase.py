@@ -129,19 +129,53 @@ class FirebaseDB:
             raise
 
     def reset_conversation(self, phone_number: str) -> None:
-        """Reset conversation state"""
+        """
+        Reinicia completamente la conversación y limpia todos los datos del usuario
+        """
         try:
+            # Limpiar estado de conversación
             initial_state = {
                 'state': 'INICIO',
                 'data': {}
             }
-            self.update_conversation_state(phone_number, initial_state)
-            # Limpiar caché
+            
+            # Actualizar documento del usuario
+            user_ref = self.db.collection('users').document(phone_number)
+            user_ref.set({
+                'phone_number': phone_number,
+                'conversation_state': initial_state,
+                'updated_at': firestore.SERVER_TIMESTAMP
+            }, merge=False)  # merge=False para sobrescribir todo el documento
+            
+            # Eliminar mensajes anteriores
+            messages_ref = self.db.collection('conversations').document(phone_number).collection('messages')
+            self._delete_collection(messages_ref, 100)
+            
+            # Limpiar cachés
             if phone_number in self._conversation_cache:
                 del self._conversation_cache[phone_number]
+            if phone_number in self._user_cache:
+                del self._user_cache[phone_number]
+                
+            logger.info(f"Conversación reiniciada para {phone_number}")
+            
         except Exception as e:
             logger.error(f"Error resetting conversation: {str(e)}")
             raise
+
+    def _delete_collection(self, coll_ref, batch_size):
+        """
+        Elimina una colección por lotes
+        """
+        docs = coll_ref.limit(batch_size).stream()
+        deleted = 0
+
+        for doc in docs:
+            doc.reference.delete()
+            deleted = deleted + 1
+
+        if deleted >= batch_size:
+            return self._delete_collection(coll_ref, batch_size)
 
     def add_message(self, phone_number: str, message: Dict[str, Any]) -> None:
         """Add message to conversation history"""

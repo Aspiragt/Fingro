@@ -145,3 +145,31 @@ class ConversationManager:
             self.project_data.irrigation_type,
             self.project_data.location
         ])
+
+    async def handle_special_command(self, phone_number: str, command: str) -> str:
+        """
+        Maneja comandos especiales como 'reiniciar' o 'ayuda'
+        """
+        try:
+            if command == 'reiniciar':
+                # Reiniciar completamente la conversación
+                await db.reset_conversation(phone_number)
+                logger.info(f"Conversación reiniciada para {phone_number}")
+                return "🔄 Conversación reiniciada.\n\n" + MESSAGES[ConversationState.INIT]
+                
+            elif command == 'ayuda':
+                return ("🤖 *Comandos disponibles:*\n" +
+                        "\n".join([f"• {cmd}: {desc}" for cmd, desc in SPECIAL_COMMANDS.items()]))
+                        
+            elif command == 'solicitar':
+                return ("🏦 Para solicitar tu préstamo, necesitaremos:\n\n"
+                        "📄 1. DPI\n"
+                        "📝 2. Comprobante de domicilio\n"
+                        "🏡 3. Título de propiedad o contrato de arrendamiento\n\n"
+                        "Un asesor se pondrá en contacto contigo pronto. 👋")
+                        
+            return "❓ Comando no reconocido. Escribe 'ayuda' para ver los comandos disponibles."
+            
+        except Exception as e:
+            logger.error(f"Error en handle_special_command: {str(e)}")
+            return "❌ Lo siento, ocurrió un error. Por favor, intenta nuevamente."
