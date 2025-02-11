@@ -20,7 +20,12 @@ from app.config import settings
 logging.basicConfig(level=settings.LOG_LEVEL)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="FinGro API")
+# Crear la app FastAPI
+app = FastAPI(
+    title="FinGro API",
+    description="API para el chatbot de FinGro",
+    version="1.0.0"
+)
 
 async def process_user_message(from_number: str, message: str) -> None:
     """
@@ -179,3 +184,24 @@ async def health_check():
     Endpoint para verificar el estado del servicio
     """
     return {"status": "healthy"}
+
+if __name__ == "__main__":
+    import uvicorn
+    
+    # Obtener puerto de Render o usar 8000 por defecto
+    port = int(os.getenv("PORT", 8000))
+    
+    # En producción, bind a 0.0.0.0
+    if settings.IS_PRODUCTION:
+        host = "0.0.0.0"
+        logger.info(f"Iniciando servidor en modo producción: {host}:{port}")
+    else:
+        host = "127.0.0.1"
+        logger.info(f"Iniciando servidor en modo desarrollo: {host}:{port}")
+    
+    uvicorn.run(
+        "app.main:app",
+        host=host,
+        port=port,
+        reload=not settings.IS_PRODUCTION
+    )
