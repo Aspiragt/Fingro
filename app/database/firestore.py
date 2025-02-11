@@ -1,15 +1,29 @@
 from firebase_admin import credentials, firestore, initialize_app
 from datetime import datetime
 import os
+import json
 from typing import Dict, Any, Optional
 
 class FirestoreDB:
     def __init__(self):
         """Inicializa la conexión con Firestore"""
-        cred = credentials.Certificate(os.getenv('FIREBASE_CREDENTIALS_PATH', 'firebase-credentials.json'))
-        initialize_app(cred)
-        self.db = firestore.client()
-        
+        try:
+            # Intentar obtener credenciales desde variable de entorno
+            cred_json = os.getenv('FIREBASE_CREDENTIALS')
+            if cred_json:
+                cred_dict = json.loads(cred_json)
+                cred = credentials.Certificate(cred_dict)
+            else:
+                # Fallback a archivo local
+                cred_path = os.getenv('FIREBASE_CREDENTIALS_PATH', 'firebase-credentials.json')
+                cred = credentials.Certificate(cred_path)
+            
+            initialize_app(cred)
+            self.db = firestore.client()
+        except Exception as e:
+            print(f"Error inicializando Firebase: {str(e)}")
+            raise
+
     async def get_user(self, phone_number: str) -> Optional[Dict[str, Any]]:
         """Obtiene los datos de un usuario por su número de teléfono"""
         doc_ref = self.db.collection('users').document(phone_number)

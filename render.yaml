@@ -11,8 +11,8 @@ services:
         sync: false
       - key: PYTHON_VERSION
         value: 3.10.0
-      - key: FIREBASE_CREDENTIALS_PATH
-        value: firebase-credentials.json
+      - key: FIREBASE_CREDENTIALS
+        sync: false
     files:
       - name: firebase-credentials
         sync: false
