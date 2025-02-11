@@ -1,6 +1,6 @@
 """
-Módulo para interacción con Firebase
+Inicialización del módulo de base de datos
 """
-from .firestore import db
+from .firebase import firebase_manager
 
-__all__ = ['db']
+__all__ = ['firebase_manager']
