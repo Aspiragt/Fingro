@@ -2,7 +2,7 @@
 Integración con el Sistema de Información de Mercados del MAGA
 """
 import httpx
-from typing import Dict, List, Optional
+from typing import dict, List, Optional
 import pandas as pd
 import logging
 from datetime import datetime, timedelta
@@ -21,7 +21,7 @@ class MAGAClient:
         self._precios_cache = {}
         self._last_update = None
     
-    async def get_precio_cultivo(self, cultivo: str) -> Optional[Dict]:
+    async def get_precio_cultivo(self, cultivo: str) -> Optional[dict]:
         """
         Obtiene el precio actual y tendencia de un cultivo
         
@@ -29,7 +29,7 @@ class MAGAClient:
             cultivo: Nombre del cultivo a buscar
             
         Returns:
-            Dict con información del precio o None si no se encuentra
+            dict con información del precio o None si no se encuentra
         """
         try:
             # Actualizar cache si es necesario (cada 24 horas)

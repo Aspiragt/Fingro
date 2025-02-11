@@ -1,10 +1,11 @@
 """
 Módulo para análisis financiero de proyectos agrícolas
 """
-from typing import Dict, Optional, List
+from typing import Optional, List
 from datetime import datetime
 import logging
 from ..external_apis.fao import fao_client
+from ..external_apis.maga import maga_client
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,7 @@ class FinancialAnalyzer:
         pass
     
     async def analizar_proyecto(self, cultivo: str, hectareas: float, 
-                              precio_actual: float, metodo_riego: str) -> Dict:
+                              precio_actual: float, metodo_riego: str) -> dict:
         """
         Realiza un análisis financiero completo del proyecto
         
@@ -34,7 +35,7 @@ class FinancialAnalyzer:
             metodo_riego: Método de riego a utilizar
             
         Returns:
-            Dict con el análisis financiero completo
+            dict con el análisis financiero completo
         """
         try:
             # Obtener datos del cultivo de FAO

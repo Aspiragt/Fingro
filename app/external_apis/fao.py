@@ -2,7 +2,7 @@
 Cliente para la API de FAODATA Explorer
 """
 import httpx
-from typing import Dict, Optional, Dict
+from typing import dict, Optional
 import logging
 from datetime import datetime
 import json
@@ -28,7 +28,7 @@ class FAOClient:
         self._cache = {}
         self._last_update = {}
     
-    async def get_crop_data(self, crop_name: str) -> Optional[Dict]:
+    async def get_crop_data(self, crop_name: str) -> Optional[dict]:
         """
         Obtiene datos de un cultivo de FAO
         
@@ -36,7 +36,7 @@ class FAOClient:
             crop_name: Nombre del cultivo en español
             
         Returns:
-            Dict con información del cultivo o None si no se encuentra
+            dict con información del cultivo o None si no se encuentra
         """
         try:
             # Normalizar nombre del cultivo
@@ -107,7 +107,7 @@ class FAOClient:
             logger.error(f"Error obteniendo datos de cultivo de FAO: {str(e)}")
             return self._get_backup_data(crop_name)
     
-    def _process_faodata(self, raw_data: Dict) -> Dict:
+    def _process_faodata(self, raw_data: dict) -> dict:
         """
         Procesa datos crudos de FAODATA al formato que necesitamos
         """
@@ -163,7 +163,7 @@ class FAOClient:
             logger.error(f"Error procesando datos de FAODATA: {str(e)}")
             return None
     
-    def _get_backup_data(self, crop_name: str) -> Optional[Dict]:
+    def _get_backup_data(self, crop_name: str) -> Optional[dict]:
         """
         Datos de respaldo cuando la API falla o no tiene datos
         Basado en promedios históricos de Guatemala

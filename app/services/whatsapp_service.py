@@ -1,4 +1,4 @@
-from typing import Dict, Any, Optional
+from typing import Any, Optional
 import logging
 import json
 from datetime import datetime, timedelta
@@ -38,7 +38,7 @@ class WhatsAppService:
             limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)
         )
 
-    async def process_message(self, from_number: str, message_data: Dict[str, Any]) -> None:
+    async def process_message(self, from_number: str, message_data: dict[str, Any]) -> None:
         """Process incoming WhatsApp message"""
         try:
             # Obtener o crear usuario
@@ -61,7 +61,7 @@ class WhatsAppService:
             logger.error(f"Error processing message: {str(e)}")
             await self._handle_error(from_number, e)
 
-    async def _get_or_create_user(self, phone_number: str) -> Dict[str, Any]:
+    async def _get_or_create_user(self, phone_number: str) -> dict[str, Any]:
         """Get or create user with caching"""
         try:
             # Intentar obtener de caché
@@ -88,7 +88,7 @@ class WhatsAppService:
         except Exception as e:
             raise FirebaseError(f"Error getting/creating user: {str(e)}")
 
-    async def send_text_message(self, to_number: str, message: str) -> Dict[str, Any]:
+    async def send_text_message(self, to_number: str, message: str) -> dict[str, Any]:
         """Send text message to WhatsApp"""
         try:
             url = f"{self.base_url}/{self.phone_number_id}/messages"
@@ -118,7 +118,7 @@ class WhatsAppService:
             raise WhatsAppAPIError(f"Failed to send message: {str(e)}")
 
     async def send_template_message(self, to_number: str, template_name: str, 
-                                 language_code: str = "es", components: list = None) -> Dict[str, Any]:
+                                 language_code: str = "es", components: list = None) -> dict[str, Any]:
         """Send template message to WhatsApp"""
         try:
             url = f"{self.base_url}/{self.phone_number_id}/messages"
@@ -155,7 +155,7 @@ class WhatsAppService:
             logger.error(f"Error sending template: {str(e)}")
             raise WhatsAppTemplateError(f"Failed to send template: {str(e)}")
 
-    async def _handle_text_message(self, user: Dict[str, Any], message_data: Dict[str, Any]) -> None:
+    async def _handle_text_message(self, user: dict[str, Any], message_data: dict[str, Any]) -> None:
         """Handle text message"""
         text = message_data.get("text", "")
         state = user.get("conversation_state", "START")
@@ -176,7 +176,7 @@ class WhatsAppService:
         # Actualizar estado del usuario
         self._update_user_state(user, text)
 
-    async def _handle_location_message(self, user: Dict[str, Any], message_data: Dict[str, Any]) -> None:
+    async def _handle_location_message(self, user: dict[str, Any], message_data: dict[str, Any]) -> None:
         """Handle location message"""
         location = message_data.get("location", {})
         if location:
@@ -194,7 +194,7 @@ class WhatsAppService:
                 "¡Gracias por compartir tu ubicación! Esto nos ayudará a brindarte un mejor servicio."
             )
 
-    async def _handle_interactive_message(self, user: Dict[str, Any], message_data: Dict[str, Any]) -> None:
+    async def _handle_interactive_message(self, user: dict[str, Any], message_data: dict[str, Any]) -> None:
         """Handle interactive message (buttons/list)"""
         interactive = message_data.get("interactive", {})
         if interactive:
@@ -214,7 +214,7 @@ class WhatsAppService:
         except:
             logger.error("Failed to send error message to user")
 
-    def _update_user_state(self, user: Dict[str, Any], message: str) -> None:
+    def _update_user_state(self, user: dict[str, Any], message: str) -> None:
         """Update user state based on message"""
         try:
             user["last_interaction"] = datetime.now().isoformat()
@@ -225,7 +225,7 @@ class WhatsAppService:
         except Exception as e:
             logger.error(f"Error updating user state: {str(e)}")
 
-    async def _get_response_based_on_state(self, user: Dict[str, Any], message: str) -> str:
+    async def _get_response_based_on_state(self, user: dict[str, Any], message: str) -> str:
         """Get response based on user state and message"""
         state = user.get("conversation_state", "START")
         

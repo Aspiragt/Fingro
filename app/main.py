@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Request, Response, HTTPException
 from fastapi.responses import JSONResponse
-from typing import Dict, Any, Optional
+from typing import Any, Optional
 import logging
 import os
 import json
@@ -50,7 +50,7 @@ def get_next_state(current_state: ConversationState) -> ConversationState:
     }
     return state_flow.get(current_state, ConversationState.INICIO)
 
-def get_response_for_state(state: ConversationState, user_data: Dict[str, Any]) -> str:
+def get_response_for_state(state: ConversationState, user_data: dict[str, Any]) -> str:
     """Genera la respuesta apropiada según el estado de la conversación"""
     responses = {
         ConversationState.INICIO: "¡Hola! Soy Fingro, tu asistente para conseguir financiamiento agrícola. ¿Qué te gustaría cultivar?",
@@ -192,7 +192,7 @@ async def process_user_message(from_number: str, message: str) -> str:
         await db.delete_user_data(from_number)  # Borrar datos después de crear la solicitud
         return get_response_for_state(ConversationState.FINALIZADO, conversation_data)
 
-async def send_whatsapp_message(to_number: str, message: str) -> Dict:
+async def send_whatsapp_message(to_number: str, message: str) -> dict:
     """Enviar mensaje usando WhatsApp Cloud API"""
     logger.info(f"Intentando enviar mensaje a {to_number}")
     
