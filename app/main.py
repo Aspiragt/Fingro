@@ -17,8 +17,13 @@ from app.analysis.scoring import scoring_service
 from app.config import settings
 
 # Configurar logging
-logging.basicConfig(level=settings.LOG_LEVEL)
+logging.basicConfig(
+    level=getattr(logging, settings.LOG_LEVEL),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
 logger = logging.getLogger(__name__)
+logger.info(f"Iniciando FinGro Bot en modo: {settings.ENV}")
 
 # Crear la app FastAPI
 app = FastAPI(

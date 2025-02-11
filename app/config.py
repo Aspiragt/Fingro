@@ -35,6 +35,10 @@ class Settings(BaseModel):
         default=os.getenv("DEBUG", "false").lower() == "true",
         description="Modo debug"
     )
+    LOG_LEVEL: str = Field(
+        default=os.getenv("LOG_LEVEL", "INFO").upper(),
+        description="Nivel de logging"
+    )
     
     # WhatsApp API
     WHATSAPP_API_URL: str = Field(
