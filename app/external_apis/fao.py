@@ -2,11 +2,12 @@
 Cliente para la API de FAOSTAT
 """
 import httpx
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import logging
 from datetime import datetime
 import json
 import os
+from difflib import get_close_matches
 from ..config import Config
 
 logger = logging.getLogger(__name__)
@@ -27,27 +28,115 @@ class FAOClient:
         )
         self._cache = {}
         self._last_update = {}
+        self._crops_cache = None
+        self._crops_last_update = 0
         
-    def _normalize_crop_name(self, name: str) -> str:
-        """Normaliza el nombre del cultivo"""
-        name = name.lower().strip()
-        # Mapeo de nombres comunes a códigos FAOSTAT
-        name_map = {
-            'maíz': '56',  # Maize
-            'maiz': '56',
-            'frijoles': '176',  # Beans, dry
-            'fríjol': '176',
-            'frijol': '176',
-            'frijol negro': '176',
-            'tomates': '388',  # Tomatoes
-            'tomate': '388',
-            'papa': '116',  # Potatoes
-            'papas': '116',
-            'arroz': '27',  # Rice, paddy
-            'café': '656',  # Coffee, green
-            'cafe': '656'
-        }
-        return name_map.get(name, name)
+    async def _get_all_crops(self) -> Dict[str, str]:
+        """
+        Obtiene la lista completa de cultivos de FAOSTAT
+        Returns:
+            Dict[str, str]: Mapeo de nombres de cultivos a códigos
+        """
+        try:
+            now = datetime.now().timestamp()
+            
+            # Verificar cache
+            if self._crops_cache and now - self._crops_last_update < self.CACHE_DURATION:
+                return self._crops_cache
+            
+            # Obtener lista de cultivos de FAOSTAT
+            async with self.session as client:
+                response = await client.get(
+                    f"{self.BASE_URL}/definitions/items",
+                    params={
+                        'domain_code': 'QCL',  # Production domain
+                        'language': 'es',      # Spanish
+                        'show_codes': True,
+                        'output_type': 'json'
+                    }
+                )
+                response.raise_for_status()
+                data = response.json()
+                
+                # Procesar y limpiar nombres
+                crops = {}
+                for item in data.get('data', []):
+                    name = item.get('itemName', '').lower()
+                    code = str(item.get('itemCode', ''))
+                    if name and code and self._is_valid_crop(name):
+                        # Agregar variaciones comunes del nombre
+                        crops[name] = code
+                        crops[name.replace(' ', '')] = code  # sin espacios
+                        crops[name.replace('á', 'a').replace('é', 'e').replace('í', 'i').replace('ó', 'o').replace('ú', 'u')] = code  # sin acentos
+                        
+                        # Agregar nombres alternativos comunes
+                        if 'maíz' in name:
+                            crops['maiz'] = code
+                        elif 'frijol' in name:
+                            crops['frijoles'] = code
+                            crops['fríjol'] = code
+                        elif 'café' in name:
+                            crops['cafe'] = code
+                
+                # Guardar en cache
+                self._crops_cache = crops
+                self._crops_last_update = now
+                
+                return crops
+                
+        except Exception as e:
+            logger.error(f"Error obteniendo lista de cultivos: {str(e)}")
+            return {}
+    
+    def _is_valid_crop(self, name: str) -> bool:
+        """
+        Verifica si el nombre corresponde a un cultivo válido
+        Excluye categorías generales, productos procesados, etc.
+        """
+        invalid_keywords = [
+            'total', 'otros', 'procesado', 'producto', 'categoría',
+            'subproducto', 'residuo', 'mezcla', 'preparado'
+        ]
+        return not any(keyword in name.lower() for keyword in invalid_keywords)
+    
+    async def find_crop_code(self, crop_name: str) -> Optional[str]:
+        """
+        Busca el código de un cultivo por nombre
+        Usa coincidencia aproximada si no encuentra exacta
+        
+        Args:
+            crop_name: Nombre del cultivo en español
+            
+        Returns:
+            str: Código del cultivo o None si no se encuentra
+        """
+        try:
+            # Normalizar nombre
+            crop_name = crop_name.lower().strip()
+            
+            # Obtener lista de cultivos
+            crops = await self._get_all_crops()
+            if not crops:
+                logger.error("No se pudo obtener la lista de cultivos")
+                return None
+            
+            # Buscar coincidencia exacta
+            if crop_name in crops:
+                return crops[crop_name]
+            
+            # Buscar coincidencia aproximada
+            matches = get_close_matches(crop_name, crops.keys(), n=1, cutoff=0.6)
+            if matches:
+                matched_name = matches[0]
+                logger.info(f"Cultivo '{crop_name}' coincide con '{matched_name}'")
+                return crops[matched_name]
+            
+            logger.warning(f"No se encontró coincidencia para el cultivo: {crop_name}")
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error buscando código de cultivo: {str(e)}")
+            return None
     
     async def get_crop_data(self, crop_name: str) -> Optional[dict]:
         """
@@ -60,19 +149,19 @@ class FAOClient:
             dict con información del cultivo o None si no se encuentra
         """
         try:
-            # Normalizar nombre del cultivo a código FAOSTAT
-            crop_code = self._normalize_crop_name(crop_name)
-            if not crop_code.isdigit():
-                logger.error(f"Cultivo no soportado: {crop_name}")
+            # Buscar código del cultivo
+            crop_code = await self.find_crop_code(crop_name)
+            if not crop_code:
+                logger.error(f"No se encontró código para el cultivo: {crop_name}")
                 return None
-                
+            
             # Verificar cache
             now = datetime.now().timestamp()
             if crop_code in self._cache and \
                now - self._last_update.get(crop_code, 0) < self.CACHE_DURATION:
                 return self._cache[crop_code]
             
-            # Construir queries para diferentes datos
+            # Obtener datos
             production_data = await self._get_production_data(crop_code)
             if not production_data:
                 return None
@@ -80,13 +169,12 @@ class FAOClient:
             price_data = await self._get_price_data(crop_code)
             if not price_data:
                 logger.warning(f"No se encontraron datos de precios para {crop_name}")
-                
-            # Procesar y combinar datos
-            processed_data = self._process_faostat_data(production_data, price_data)
             
-            # Guardar en cache
-            self._cache[crop_code] = processed_data
-            self._last_update[crop_code] = now
+            # Procesar datos
+            processed_data = self._process_faostat_data(production_data, price_data)
+            if processed_data:
+                self._cache[crop_code] = processed_data
+                self._last_update[crop_code] = now
             
             return processed_data
                 
