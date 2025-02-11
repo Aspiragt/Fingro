@@ -92,48 +92,62 @@ class Settings(BaseModel):
         try:
             # En producción, usar variables de entorno
             if self.ENV == "production":
+                private_key = os.getenv("FIREBASE_PRIVATE_KEY", "")
+                if not private_key:
+                    raise ValueError("FIREBASE_PRIVATE_KEY no está configurada")
+                    
+                # Asegurarse de que la clave privada esté formateada correctamente
+                if "\\n" in private_key:
+                    private_key = private_key.replace("\\n", "\n")
+                
                 creds = {
                     "type": "service_account",
-                    "project_id": os.getenv("FIREBASE_PROJECT_ID", ""),
-                    "private_key_id": os.getenv("FIREBASE_PRIVATE_KEY_ID", ""),
-                    "private_key": os.getenv("FIREBASE_PRIVATE_KEY", "").replace("\\n", "\n"),
-                    "client_email": os.getenv("FIREBASE_CLIENT_EMAIL", ""),
-                    "client_id": os.getenv("FIREBASE_CLIENT_ID", ""),
+                    "project_id": os.getenv("FIREBASE_PROJECT_ID"),
+                    "private_key_id": os.getenv("FIREBASE_PRIVATE_KEY_ID"),
+                    "private_key": private_key,
+                    "client_email": os.getenv("FIREBASE_CLIENT_EMAIL"),
+                    "client_id": os.getenv("FIREBASE_CLIENT_ID"),
                     "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                     "token_uri": "https://oauth2.googleapis.com/token",
                     "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-                    "client_x509_cert_url": os.getenv("FIREBASE_CLIENT_CERT_URL", ""),
+                    "client_x509_cert_url": os.getenv("FIREBASE_CLIENT_CERT_URL"),
                     "universe_domain": "googleapis.com"
                 }
                 
-                # Validar credenciales
-                required_fields = [
-                    "project_id", "private_key_id", "private_key",
-                    "client_email", "client_id", "client_x509_cert_url"
-                ]
+                # Validar credenciales requeridas
+                required_fields = {
+                    "project_id": "FIREBASE_PROJECT_ID",
+                    "private_key_id": "FIREBASE_PRIVATE_KEY_ID",
+                    "private_key": "FIREBASE_PRIVATE_KEY",
+                    "client_email": "FIREBASE_CLIENT_EMAIL",
+                    "client_id": "FIREBASE_CLIENT_ID",
+                    "client_x509_cert_url": "FIREBASE_CLIENT_CERT_URL"
+                }
                 
-                missing_fields = [
-                    field for field in required_fields
-                    if not creds.get(field)
-                ]
+                missing_fields = []
+                for field, env_var in required_fields.items():
+                    if not creds.get(field):
+                        missing_fields.append(f"{env_var} ({field})")
                 
                 if missing_fields:
                     raise ValueError(
-                        f"Faltan las siguientes credenciales de Firebase: {', '.join(missing_fields)}"
+                        "Faltan las siguientes variables de entorno para Firebase:\n" +
+                        "\n".join(f"- {field}" for field in missing_fields)
                     )
                 
                 return creds
-                
+            
             # En desarrollo, leer del archivo
             creds_path = Path(self.FIREBASE_CREDENTIALS_PATH)
             if not creds_path.exists():
                 raise FileNotFoundError(
-                    f"No se encontró el archivo de credenciales en {creds_path}"
+                    f"No se encontró el archivo de credenciales en {creds_path}\n"
+                    "En producción, configura las variables de entorno FIREBASE_*"
                 )
-                
+            
             with open(creds_path) as f:
                 return json.load(f)
-                
+            
         except Exception as e:
             logger.error(f"Error cargando credenciales de Firebase: {str(e)}")
             raise
