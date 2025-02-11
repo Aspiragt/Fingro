@@ -1,4 +1,4 @@
-from typing import Dict, Optional
+from typing import Optional
 import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
 
@@ -7,7 +7,7 @@ class FingroScore:
         self.base_score = 500
         self.max_score = 1000
         
-    def calculate_score(self, user_data: Dict) -> Dict:
+    def calculate_score(self, user_data: dict) -> dict:
         """
         Calcula el Fingro Score basado en múltiples factores
         """
@@ -84,18 +84,18 @@ class WhatsAppFeatureExtractor(BaseEstimator, TransformerMixin):
             })
         return np.array(features)
     
-    def _calculate_avg_response_time(self, conversation: Dict) -> float:
+    def _calculate_avg_response_time(self, conversation: dict) -> float:
         # Implementar lógica de cálculo de tiempo de respuesta promedio
         pass
     
-    def _calculate_avg_message_length(self, conversation: Dict) -> float:
+    def _calculate_avg_message_length(self, conversation: dict) -> float:
         # Implementar lógica de cálculo de longitud promedio de mensajes
         pass
     
-    def _count_business_messages(self, conversation: Dict) -> int:
+    def _count_business_messages(self, conversation: dict) -> int:
         # Implementar lógica de conteo de mensajes relacionados con negocios
         pass
     
-    def _calculate_completion_rate(self, conversation: Dict) -> float:
+    def _calculate_completion_rate(self, conversation: dict) -> float:
         # Implementar lógica de cálculo de tasa de completitud de la conversación
         pass

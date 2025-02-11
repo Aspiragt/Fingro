@@ -2,7 +2,7 @@ from firebase_admin import credentials, firestore, initialize_app
 from datetime import datetime
 import os
 import json
-from typing import Dict, Any, Optional
+from typing import Any, Optional
 
 class FirestoreDB:
     def __init__(self):
@@ -24,13 +24,13 @@ class FirestoreDB:
             print(f"Error inicializando Firebase: {str(e)}")
             raise
 
-    async def get_user(self, phone_number: str) -> Optional[Dict[str, Any]]:
+    async def get_user(self, phone_number: str) -> Optional[dict[str, Any]]:
         """Obtiene los datos de un usuario por su número de teléfono"""
         doc_ref = self.db.collection('users').document(phone_number)
         doc = doc_ref.get()
         return doc.to_dict() if doc.exists else None
         
-    async def create_or_update_user(self, phone_number: str, data: Dict[str, Any]) -> None:
+    async def create_or_update_user(self, phone_number: str, data: dict[str, Any]) -> None:
         """Crea o actualiza los datos de un usuario"""
         doc_ref = self.db.collection('users').document(phone_number)
         current_time = datetime.now().isoformat()
@@ -49,7 +49,7 @@ class FirestoreDB:
                 'updated_at': current_time
             })
             
-    async def update_conversation_state(self, phone_number: str, state: str, conversation_data: Dict[str, Any]) -> None:
+    async def update_conversation_state(self, phone_number: str, state: str, conversation_data: dict[str, Any]) -> None:
         """Actualiza el estado de la conversación y los datos recopilados"""
         doc_ref = self.db.collection('users').document(phone_number)
         current_time = datetime.now().isoformat()
@@ -60,7 +60,7 @@ class FirestoreDB:
             'updated_at': current_time
         })
         
-    async def create_solicitud(self, phone_number: str, data: Dict[str, Any]) -> str:
+    async def create_solicitud(self, phone_number: str, data: dict[str, Any]) -> str:
         """Crea una nueva solicitud de financiamiento"""
         solicitud_ref = self.db.collection('solicitudes').document()
         current_time = datetime.now().isoformat()

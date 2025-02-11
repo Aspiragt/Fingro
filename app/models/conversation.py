@@ -7,12 +7,12 @@ class Message(BaseModel):
     role: str  # user o assistant
     content: str
     original_content: Optional[str] = None
-    metrics: Optional[Dict[str, Any]] = None
+    metrics: Optional[dict[str, Any]] = None
     timestamp: datetime = datetime.now()
 
 class ConversationContext(BaseModel):
     state: ConversationState = ConversationState.INITIAL
-    collected_data: Dict[str, Any] = {}
+    collected_data: dict[str, Any] = {}
     validation_errors: List[str] = []
     retry_count: int = 0
     last_message_timestamp: Optional[datetime] = None

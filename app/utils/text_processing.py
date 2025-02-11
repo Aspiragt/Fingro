@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Any
+from typing import List, Optional, Any
 import re
 from unidecode import unidecode
 from thefuzz import fuzz
@@ -91,7 +91,7 @@ class TextProcessor:
         return [float(num.replace(',', '.')) for num in numbers]
 
     @staticmethod
-    def get_regional_example(region: str) -> Dict[str, str]:
+    def get_regional_example(region: str) -> dict[str, str]:
         """Obtiene ejemplo regional para el mensaje de bienvenida"""
         if region not in REGION_EXAMPLES:
             region = list(REGION_EXAMPLES.keys())[0]
@@ -116,7 +116,7 @@ class MessageAnalytics:
             'correction_distance': Levenshtein.distance(original_text, normalized_text)
         }
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             'timestamp': datetime.now(),
             'original_text': self.original,
