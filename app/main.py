@@ -5,6 +5,8 @@ import os
 import json
 import httpx
 from typing import Dict, Any
+from enum import Enum
+from datetime import datetime
 
 # Configuración de logging
 logging.basicConfig(
@@ -22,10 +24,94 @@ PHONE_NUMBER_ID = os.getenv("WHATSAPP_PHONE_NUMBER_ID")
 WHATSAPP_API_VERSION = "v17.0"
 WHATSAPP_URL = f"https://graph.facebook.com/{WHATSAPP_API_VERSION}/{PHONE_NUMBER_ID}/messages"
 
-# Log configuración inicial
-logger.info(f"Iniciando bot con Phone Number ID: {PHONE_NUMBER_ID}")
-logger.info(f"URL de la API: {WHATSAPP_URL}")
-logger.info(f"Token configurado: {'Sí' if WHATSAPP_TOKEN else 'No'}")
+# Estados de la conversación
+class ConversationState(str, Enum):
+    INICIO = "INICIO"
+    CULTIVO = "CULTIVO"
+    HECTAREAS = "HECTAREAS"
+    RIEGO = "RIEGO"
+    COMERCIALIZACION = "COMERCIALIZACION"
+    UBICACION = "UBICACION"
+    FINALIZADO = "FINALIZADO"
+
+# Almacenamiento temporal de conversaciones
+# En producción, esto debería estar en una base de datos
+conversations: Dict[str, Dict[str, Any]] = {}
+
+def get_next_state(current_state: ConversationState) -> ConversationState:
+    """Determina el siguiente estado de la conversación"""
+    state_flow = {
+        ConversationState.INICIO: ConversationState.CULTIVO,
+        ConversationState.CULTIVO: ConversationState.HECTAREAS,
+        ConversationState.HECTAREAS: ConversationState.RIEGO,
+        ConversationState.RIEGO: ConversationState.COMERCIALIZACION,
+        ConversationState.COMERCIALIZACION: ConversationState.UBICACION,
+        ConversationState.UBICACION: ConversationState.FINALIZADO,
+        ConversationState.FINALIZADO: ConversationState.FINALIZADO,
+    }
+    return state_flow.get(current_state, ConversationState.INICIO)
+
+def get_response_for_state(state: ConversationState, user_data: Dict[str, Any]) -> str:
+    """Genera la respuesta apropiada según el estado de la conversación"""
+    responses = {
+        ConversationState.INICIO: "¡Hola! Soy Fingro , tu asistente para conseguir financiamiento agrícola. ¿Qué te gustaría cultivar?",
+        ConversationState.CULTIVO: f"¡Excelente elección! ¿Cuántas hectáreas planeas cultivar?",
+        ConversationState.HECTAREAS: "Entiendo. ¿Qué método de riego utilizas o planeas utilizar?\nPor ejemplo: por goteo, aspersión, o tradicional",
+        ConversationState.RIEGO: "¿Y ya tienes comprador para tu cosecha? ¿A quién le vendes normalmente?",
+        ConversationState.COMERCIALIZACION: "¿Te gustaría compartir tu ubicación para que pueda darte información más precisa?",
+        ConversationState.UBICACION: generate_summary(user_data),
+        ConversationState.FINALIZADO: "¡Gracias por tu interés! Pronto un asesor se pondrá en contacto contigo."
+    }
+    return responses.get(state, "No entiendo ese estado.")
+
+def generate_summary(user_data: Dict[str, Any]) -> str:
+    """Genera un resumen de la información recopilada"""
+    # TODO: Integrar con APIs para obtener precios y costos reales
+    cultivo = user_data.get('cultivo', 'N/A')
+    hectareas = user_data.get('hectareas', 'N/A')
+    riego = user_data.get('riego', 'N/A')
+    
+    return f"""¡Gracias! Con la información que me has dado, puedo decirte que:
+
+ Cultivo de {cultivo}
+ {hectareas} hectáreas con riego por {riego}
+ Ingresos estimados: $10,000 (estimado)
+ Costos estimados: $5,000 (estimado)
+
+¿Te gustaría saber cuánto financiamiento podrías obtener?"""
+
+def process_user_message(from_number: str, message: str) -> str:
+    """Procesa el mensaje del usuario y actualiza el estado de la conversación"""
+    # Obtener o crear la conversación del usuario
+    if from_number not in conversations:
+        conversations[from_number] = {
+            'state': ConversationState.INICIO,
+            'data': {},
+            'last_update': datetime.now().isoformat()
+        }
+    
+    conversation = conversations[from_number]
+    current_state = ConversationState(conversation['state'])
+    
+    # Actualizar datos según el estado actual
+    if current_state == ConversationState.INICIO:
+        conversation['data']['cultivo'] = message
+    elif current_state == ConversationState.CULTIVO:
+        conversation['data']['hectareas'] = message
+    elif current_state == ConversationState.HECTAREAS:
+        conversation['data']['riego'] = message
+    elif current_state == ConversationState.RIEGO:
+        conversation['data']['comercializacion'] = message
+    elif current_state == ConversationState.COMERCIALIZACION:
+        conversation['data']['ubicacion'] = message
+    
+    # Avanzar al siguiente estado
+    next_state = get_next_state(current_state)
+    conversation['state'] = next_state
+    conversation['last_update'] = datetime.now().isoformat()
+    
+    # Generar respuesta
+    return get_response_for_state(next_state, conversation['data'])
 
 async def send_whatsapp_message(to_number: str, message: str) -> Dict:
     """Enviar mensaje usando WhatsApp Cloud API"""
@@ -143,13 +229,13 @@ async def webhook(request: Request):
                             text = message.get("text", {}).get("body", "")
                             logger.info(f"Mensaje de texto recibido - De: {from_number}, Contenido: {text}")
                             
-                            # Enviar respuesta
+                            # Procesar el mensaje y obtener respuesta
                             try:
-                                response = "¡Hola! Gracias por tu mensaje. Soy el bot de Fingro 🌱"
+                                response = process_user_message(from_number, text)
                                 await send_whatsapp_message(from_number, response)
                                 messages_processed += 1
                             except Exception as e:
-                                logger.error(f"Error enviando respuesta: {str(e)}")
+                                logger.error(f"Error procesando mensaje: {str(e)}")
         
         except Exception as e:
             logger.error(f"Error procesando mensajes: {str(e)}", exc_info=True)
@@ -178,7 +264,7 @@ async def test_send(phone_number: str):
         logger.info(f"Probando envío de mensaje a {phone_number}")
         response = await send_whatsapp_message(
             phone_number,
-            "Este es un mensaje de prueba desde Fingro Bot 🌱"
+            "Este es un mensaje de prueba desde Fingro Bot "
         )
         return {
             "status": "success",
