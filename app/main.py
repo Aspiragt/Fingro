@@ -210,12 +210,14 @@ async def health_check():
 
 @app.get("/webhook/whatsapp")
 async def verify_webhook(request: Request):
-    """Verificar webhook de WhatsApp Cloud API"""
+    """
+    Verificar webhook de WhatsApp Cloud API
+    """
     try:
         params = dict(request.query_params)
         logger.info(f"Verificación de webhook recibida. Parámetros: {params}")
         
-        verify_token = os.getenv("WHATSAPP_VERIFY_TOKEN", "fingro-bot-token")
+        verify_token = os.getenv("WHATSAPP_WEBHOOK_VERIFY_TOKEN", "fingro-bot-token")
         logger.debug(f"Token de verificación esperado: {verify_token}")
         
         if params.get("hub.mode") == "subscribe" and params.get("hub.verify_token") == verify_token:
@@ -231,7 +233,9 @@ async def verify_webhook(request: Request):
 
 @app.post("/webhook/whatsapp")
 async def webhook(request: Request):
-    """Recibir mensajes de WhatsApp Cloud API"""
+    """
+    Recibir mensajes de WhatsApp Cloud API
+    """
     try:
         # Obtener el cuerpo de la petición como texto
         body_str = await request.body()

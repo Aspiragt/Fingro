@@ -2,6 +2,7 @@
 Configuración de la aplicación
 """
 import os
+import json
 from typing import Dict, Any
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -14,22 +15,21 @@ class Settings(BaseModel):
     
     # WhatsApp API
     WHATSAPP_API_URL: str = "https://graph.facebook.com/v17.0"
-    WHATSAPP_TOKEN: str = os.getenv("WHATSAPP_TOKEN", "")
+    WHATSAPP_TOKEN: str = os.getenv("WHATSAPP_ACCESS_TOKEN", "")
     WHATSAPP_PHONE_NUMBER_ID: str = os.getenv("WHATSAPP_PHONE_NUMBER_ID", "")
+    WHATSAPP_WEBHOOK_VERIFY_TOKEN: str = os.getenv("WHATSAPP_WEBHOOK_VERIFY_TOKEN", "")
     
     # Firebase
-    FIREBASE_CREDENTIALS: Dict[str, Any] = {
-        "type": "service_account",
-        "project_id": os.getenv("FIREBASE_PROJECT_ID", ""),
-        "private_key_id": os.getenv("FIREBASE_PRIVATE_KEY_ID", ""),
-        "private_key": os.getenv("FIREBASE_PRIVATE_KEY", "").replace("\\n", "\n"),
-        "client_email": os.getenv("FIREBASE_CLIENT_EMAIL", ""),
-        "client_id": os.getenv("FIREBASE_CLIENT_ID", ""),
-        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-        "token_uri": "https://oauth2.googleapis.com/token",
-        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-        "client_x509_cert_url": os.getenv("FIREBASE_CLIENT_CERT_URL", "")
-    }
+    FIREBASE_CREDENTIALS_PATH: str = os.getenv("FIREBASE_CREDENTIALS_PATH", "")
+    
+    @property
+    def FIREBASE_CREDENTIALS(self) -> Dict[str, Any]:
+        """Lee las credenciales de Firebase desde el archivo"""
+        try:
+            with open(self.FIREBASE_CREDENTIALS_PATH) as f:
+                return json.load(f)
+        except Exception as e:
+            raise ValueError(f"Error leyendo credenciales de Firebase: {str(e)}")
     
     # MAGA API
     MAGA_BASE_URL: str = "https://precios.maga.gob.gt"
