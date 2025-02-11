@@ -1,8 +1,8 @@
 """
 Módulo para calcular el Fingro Score y análisis financiero
 """
-from typing import Dict, Any, Optional
 import logging
+from typing import Dict, Any
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -10,45 +10,24 @@ logger = logging.getLogger(__name__)
 class FingroScoring:
     """Calcula el Fingro Score y genera análisis financiero"""
     
-    # Pesos para diferentes factores
-    WEIGHTS = {
-        'area_size': 0.25,          # Tamaño del área
-        'irrigation': 0.20,         # Sistema de riego
-        'market_access': 0.20,      # Acceso a mercado
-        'price_trend': 0.15,        # Tendencia de precios
-        'location': 0.20           # Ubicación
-    }
-    
-    # Puntuaciones para sistemas de riego
-    IRRIGATION_SCORES = {
-        'goteo': 1.0,
-        'aspersión': 0.8,
-        'gravedad': 0.6,
-        'temporal': 0.4
-    }
-    
-    # Puntuaciones para comercialización
-    MARKET_SCORES = {
-        'exportación': 1.0,
-        'mercado local': 0.8,
-        'directo': 0.7,
-        'intermediario': 0.6
-    }
-    
     # Costos base por hectárea (en quetzales)
     COSTOS_BASE = {
-        'semillas': 1500,
-        'fertilizantes': 2000,
-        'mano_obra': 3000,
-        'riego': {
-            'goteo': 5000,
-            'aspersión': 4000,
-            'gravedad': 2000,
-            'temporal': 0
-        }
+        'preparacion_tierra': 2000,  # Preparación de tierra
+        'semillas': 1500,           # Semillas/plantas
+        'fertilizantes': 2000,      # Fertilizantes básicos
+        'mano_obra': 3000,          # Mano de obra básica
+        'otros': 1000               # Otros gastos básicos
     }
     
-    # Factores de ajuste de costos por tipo de comercialización
+    # Costos de riego por hectárea
+    COSTOS_RIEGO = {
+        'goteo': 5000,      # Sistema completo de goteo
+        'aspersión': 4000,  # Sistema de aspersión
+        'gravedad': 2000,   # Sistema por gravedad
+        'temporal': 0       # Sin sistema de riego
+    }
+    
+    # Factores de ajuste por tipo de comercialización
     FACTOR_COMERCIALIZACION = {
         'exportación': 1.3,  # 30% más caro por estándares de calidad
         'mercado local': 1.0,
@@ -56,38 +35,23 @@ class FingroScoring:
         'intermediario': 1.1 # 10% más caro por comisiones
     }
     
-    @staticmethod
-    def calculate_area_score(hectareas: float) -> float:
-        """Calcula score basado en área"""
-        if hectareas <= 0:
-            return 0
-        elif hectareas <= 1:
-            return 0.6
-        elif hectareas <= 3:
-            return 0.8
-        elif hectareas <= 10:
-            return 1.0
-        else:
-            return 0.9  # Áreas muy grandes pueden tener más riesgo
-    
-    @staticmethod
-    def calculate_price_trend_score(trend: str) -> float:
-        """Calcula score basado en tendencia de precios"""
-        trends = {
-            'alza': 1.0,
-            'estable': 0.8,
-            'baja': 0.6
+    # Datos de producción por defecto (por hectárea)
+    DATOS_PRODUCCION = {
+        'produccion_baja': {
+            'quintales': 30,
+            'precio_promedio': 120
+        },
+        'produccion_media': {
+            'quintales': 40,
+            'precio_promedio': 150
+        },
+        'produccion_alta': {
+            'quintales': 50,
+            'precio_promedio': 180
         }
-        return trends.get(trend.lower(), 0.7)
+    }
     
-    @staticmethod
-    def calculate_location_score(location: str) -> float:
-        """Calcula score basado en ubicación"""
-        # TODO: Implementar lógica basada en datos históricos de producción por región
-        return 0.8  # Por ahora retorna un valor fijo
-    
-    @classmethod
-    def calculate_score(cls, user_data: Dict[str, Any]) -> Dict[str, Any]:
+    def calculate_score(self, user_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Calcula el Fingro Score y genera reporte financiero
         """
@@ -96,51 +60,73 @@ class FingroScoring:
             hectareas = float(user_data.get('hectareas', 0))
             riego = user_data.get('riego', '').lower()
             comercializacion = user_data.get('comercializacion', '').lower()
-            ubicacion = user_data.get('ubicacion', '')
-            precio_info = user_data.get('precio_info', {})
-            tendencia = precio_info.get('tendencia', 'estable').lower()
             
-            # Calcular scores individuales
-            scores = {
-                'area_size': cls.calculate_area_score(hectareas),
-                'irrigation': cls.IRRIGATION_SCORES.get(riego, 0.5),
-                'market_access': cls.MARKET_SCORES.get(comercializacion, 0.5),
-                'price_trend': cls.calculate_price_trend_score(tendencia),
-                'location': cls.calculate_location_score(ubicacion)
-            }
-            
-            # Calcular score final
-            final_score = sum(score * cls.WEIGHTS[factor] 
-                            for factor, score in scores.items())
-            
-            # Calcular costos
-            costo_riego = cls.COSTOS_BASE['riego'].get(riego, 2000)
-            costos_base = sum(cost for key, cost in cls.COSTOS_BASE.items() if key != 'riego')
+            # 1. Calcular costos base
+            costos_base = sum(self.COSTOS_BASE.values())
+            costo_riego = self.COSTOS_RIEGO.get(riego, self.COSTOS_RIEGO['temporal'])
             costos_por_hectarea = costos_base + costo_riego
             
-            # Ajustar por comercialización
-            factor = cls.FACTOR_COMERCIALIZACION.get(comercializacion, 1.0)
+            # 2. Ajustar por comercialización
+            factor = self.FACTOR_COMERCIALIZACION.get(comercializacion, 1.0)
             costos_totales = costos_por_hectarea * hectareas * factor
             
-            # Calcular ingresos (estimado conservador)
-            precio_promedio = 150  # Precio promedio por quintal
-            produccion_por_hectarea = 40  # Quintales por hectárea
-            ingreso_total = hectareas * produccion_por_hectarea * precio_promedio
+            # 3. Calcular producción estimada (usando escenario medio por defecto)
+            datos_prod = self.DATOS_PRODUCCION['produccion_media']
+            quintales_por_hectarea = datos_prod['quintales']
+            precio_promedio = datos_prod['precio_promedio']
             
-            # Calcular ganancia
+            # 4. Calcular ingresos
+            produccion_total = hectareas * quintales_por_hectarea
+            ingreso_total = produccion_total * precio_promedio
+            
+            # 5. Calcular ganancia
             ganancia = ingreso_total - costos_totales
             
-            # Calcular préstamo recomendado (40% de costos totales)
-            prestamo = costos_totales * 0.4
+            # 6. Calcular Fingro Score (0-100)
+            score_base = 60  # Puntaje base
+            
+            # Ajustes al score
+            if ganancia > 0:
+                score_base += min(20, int(ganancia / costos_totales * 100))  # Hasta 20 puntos por rentabilidad
+            
+            if hectareas >= 1:
+                score_base += min(10, int(hectareas * 2))  # Hasta 10 puntos por escala
+                
+            if riego in ['goteo', 'aspersión']:
+                score_base += 10  # 10 puntos por tecnificación
+                
+            if comercializacion in ['exportación', 'directo']:
+                score_base += 5   # 5 puntos por canal de venta optimizado
+            
+            # Limitar score entre 0 y 100
+            fingro_score = max(0, min(100, score_base))
+            
+            # 7. Calcular préstamo recomendado (basado en costos y score)
+            factor_prestamo = fingro_score / 100  # Factor de riesgo basado en score
+            prestamo_base = costos_totales * 0.6  # Hasta 60% de los costos totales
+            prestamo_recomendado = prestamo_base * factor_prestamo
+            
+            # 8. Limitar el préstamo entre Q5,000 y Q100,000
+            prestamo_recomendado = max(5000, min(100000, prestamo_recomendado))
             
             return {
-                'fingro_score': round(final_score * 100, 2),
-                'prestamo_recomendado': round(prestamo, 2),
+                'fingro_score': fingro_score,
+                'prestamo_recomendado': round(prestamo_recomendado, 2),
                 'costos_estimados': round(costos_totales, 2),
                 'ingreso_estimado': round(ingreso_total, 2),
                 'ganancia_estimada': round(ganancia, 2),
-                'scores_detallados': {
-                    k: round(v * 100, 2) for k, v in scores.items()
+                'detalle_costos': {
+                    'preparacion_tierra': self.COSTOS_BASE['preparacion_tierra'] * hectareas,
+                    'semillas': self.COSTOS_BASE['semillas'] * hectareas,
+                    'fertilizantes': self.COSTOS_BASE['fertilizantes'] * hectareas,
+                    'mano_obra': self.COSTOS_BASE['mano_obra'] * hectareas,
+                    'riego': costo_riego * hectareas,
+                    'otros': self.COSTOS_BASE['otros'] * hectareas
+                },
+                'produccion_estimada': {
+                    'quintales_por_hectarea': quintales_por_hectarea,
+                    'quintales_totales': produccion_total,
+                    'precio_promedio': precio_promedio
                 },
                 'fecha_calculo': datetime.now().isoformat()
             }
