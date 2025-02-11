@@ -122,56 +122,48 @@ async def get_response_for_state(state: ConversationState, user_data: dict[str, 
                "Por favor, escribe 'reiniciar' para intentar de nuevo o contacta a nuestro equipo de soporte.")
 
 async def process_user_message(from_number: str, message: str) -> str:
-    """Procesa el mensaje del usuario y actualiza el estado de la conversación"""
+    """
+    Procesa el mensaje del usuario y actualiza el estado de la conversación
+    """
     try:
-        # Verificar si es un comando para reiniciar
-        if message.strip().lower() in ['reiniciar', 'restart', 'comenzar', 'inicio']:
-            # Reiniciar la conversación
-            conversation_data = {}
-            await db.update_conversation_state(from_number, ConversationState.INICIO, conversation_data)
-            return ("¡Bienvenido a Fingro! \n\n"
-                    "Somos tu aliado financiero en el campo. Te ayudamos a obtener el financiamiento que necesitas para tu cultivo "
-                    "de manera rápida y sencilla.\n\n"
-                    "En los próximos minutos, te haré algunas preguntas sobre tu proyecto agrícola. "
-                    "Con esta información, podremos:\n"
-                    "• Calcular el monto de financiamiento \n"
-                    "• Estimar los costos de producción \n"
-                    "• Proyectar tus ganancias potenciales \n\n"
-                    "Al final, recibirás un resumen detallado y nos pondremos en contacto contigo para discutir las opciones de financiamiento disponibles.\n\n"
-                    "¡Empecemos! ¿Qué cultivo estás planeando sembrar?")
-
-        # Obtener datos del usuario
-        user_data = await db.get_user(from_number) or {}
-        current_state = ConversationState(user_data.get('estado_conversacion', ConversationState.INICIO))
-        conversation_data = user_data.get('data', {})
-
-        # Si es un usuario nuevo, enviar mensaje de bienvenida
-        if not user_data:
-            conversation_data = {}
-            await db.update_conversation_state(from_number, ConversationState.INICIO, conversation_data)
-            return ("¡Bienvenido a Fingro! \n\n"
-                    "Somos tu aliado financiero en el campo. Te ayudamos a obtener el financiamiento que necesitas para tu cultivo "
-                    "de manera rápida y sencilla.\n\n"
-                    "En los próximos minutos, te haré algunas preguntas sobre tu proyecto agrícola. "
-                    "Con esta información, podremos:\n"
-                    "• Calcular el monto de financiamiento \n"
-                    "• Estimar los costos de producción \n"
-                    "• Proyectar tus ganancias potenciales \n\n"
-                    "Al final, recibirás un resumen detallado y nos pondremos en contacto contigo para discutir las opciones de financiamiento disponibles.\n\n"
-                    "¡Empecemos! ¿Qué cultivo estás planeando sembrar?")
+        # Obtener estado actual
+        conversation_data = await db.get_conversation_state(from_number)
+        current_state = ConversationState(conversation_data.get('state', ConversationState.INICIO))
         
+        # Si el mensaje es 'reiniciar', volver al inicio
+        if message.lower() == 'reiniciar':
+            next_state = ConversationState.INICIO
+            await db.update_conversation_state(from_number, next_state, {})
+            return await get_response_for_state(next_state, {})
+            
+        # Procesar mensaje según el estado actual
         if current_state == ConversationState.INICIO:
-            # Procesar cultivo
-            cultivo = message.strip().lower()
+            # Guardar cultivo y buscar datos
+            cultivo = message.strip()
             conversation_data['cultivo'] = cultivo
             
-            # Obtener información de precios (solo guardar, no mostrar)
             try:
-                precio_info = await maga_client.get_market_prices(cultivo)
-                conversation_data['precio_info'] = precio_info if precio_info else None
+                # Obtener precio del MAGA
+                precio_info = await maga_client.get_precio_cultivo(cultivo)
+                if precio_info:
+                    conversation_data['precio_info'] = precio_info
+                    logger.info(f"Precio encontrado para {cultivo}: {precio_info}")
+                else:
+                    # Si no hay precio en MAGA, usar precio por defecto
+                    conversation_data['precio_info'] = {
+                        'precio_actual': 150,  # Precio por defecto
+                        'tendencia': 'estable',
+                        'unidad_medida': 'quintal'
+                    }
+                    logger.warning(f"No se encontró precio para {cultivo}, usando valor por defecto")
             except Exception as e:
                 logger.error(f"Error obteniendo precios: {str(e)}")
-                conversation_data['precio_info'] = None
+                # Si hay error, usar precio por defecto
+                conversation_data['precio_info'] = {
+                    'precio_actual': 150,
+                    'tendencia': 'estable',
+                    'unidad_medida': 'quintal'
+                }
             
             next_state = ConversationState.CULTIVO
             await db.update_conversation_state(from_number, next_state, conversation_data)
@@ -181,7 +173,7 @@ async def process_user_message(from_number: str, message: str) -> str:
             try:
                 hectareas = float(message.replace(',', '.'))
                 if hectareas <= 0:
-                    return "Por favor, ingresa un número válido mayor que 0."
+                    return "Por favor, ingresa un número válido mayor a 0"
             except ValueError:
                 return "Por favor, ingresa un número válido. Por ejemplo: 2.5"
                 
@@ -204,8 +196,6 @@ async def process_user_message(from_number: str, message: str) -> str:
         
         elif current_state == ConversationState.COMERCIALIZACION:
             conversation_data['ubicacion'] = message
-            
-            # Actualizar al estado final directamente
             next_state = ConversationState.FINALIZADO
             await db.update_conversation_state(from_number, next_state, conversation_data)
             
@@ -214,13 +204,13 @@ async def process_user_message(from_number: str, message: str) -> str:
         
         elif current_state == ConversationState.FINALIZADO:
             return "Tu análisis ya está listo. Si quieres iniciar una nueva consulta, escribe 'reiniciar'."
-        
+            
         else:
-            return "Lo siento, no entiendo ese comando. Por favor, escribe 'reiniciar' para comenzar de nuevo."
+            return "Lo siento, ha ocurrido un error. Por favor escribe 'reiniciar' para comenzar de nuevo."
             
     except Exception as e:
-        logger.error(f"Error procesando mensaje: {str(e)}")
-        return "Lo siento, hubo un error procesando tu mensaje. Por favor, escribe 'reiniciar' para comenzar de nuevo."
+        logger.error(f"Error procesando mensaje: {str(e)}", exc_info=True)
+        return "Lo siento, ha ocurrido un error. Por favor escribe 'reiniciar' para comenzar de nuevo."
 
 async def send_whatsapp_message(to_number: str, message: str) -> dict:
     """Enviar mensaje usando WhatsApp Cloud API"""
