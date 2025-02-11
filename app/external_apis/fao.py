@@ -6,6 +6,8 @@ from typing import Dict, Optional
 import logging
 from datetime import datetime
 import json
+import os
+from ..config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -13,12 +15,19 @@ class FAOClient:
     """Cliente para obtener datos de cultivos de FAO"""
     
     BASE_URL = "https://fenix.fao.org/faostat/api/v1"
+    CACHE_DURATION = 24 * 60 * 60  # 24 horas en segundos
     
     def __init__(self):
         """Inicializa el cliente de FAO"""
-        self.session = httpx.AsyncClient()
+        self.api_key = os.getenv('FAOSTAT_API_KEY')
+        self.session = httpx.AsyncClient(
+            headers={
+                'X-API-KEY': self.api_key,
+                'Accept': 'application/json'
+            }
+        )
         self._cache = {}
-        self._last_update = None
+        self._last_update = {}
     
     async def get_crop_data(self, crop_name: str) -> Optional[Dict]:
         """
@@ -35,24 +44,141 @@ class FAOClient:
             crop_name = self._normalize_crop_name(crop_name)
             
             # Verificar cache
-            if crop_name in self._cache:
+            now = datetime.now().timestamp()
+            if crop_name in self._cache and \
+               now - self._last_update.get(crop_name, 0) < self.CACHE_DURATION:
                 return self._cache[crop_name]
             
-            # Construir URL para la API de FAO
-            url = f"{self.BASE_URL}/crops/{crop_name}"
+            # Construir parámetros de consulta
+            params = {
+                'area': 'GTM',  # Guatemala
+                'item': crop_name,
+                'element': ['yield', 'production_cost', 'producer_price'],
+                'year': '2024',  # Último año disponible
+                'format': 'json'
+            }
             
-            # Por ahora, usamos datos de ejemplo mientras implementamos la API real
-            # TODO: Implementar llamada real a la API de FAO
-            example_data = self._get_example_data(crop_name)
-            if example_data:
-                self._cache[crop_name] = example_data
-                return example_data
+            # Hacer request a FAOSTAT
+            async with self.session as client:
+                response = await client.get(
+                    f"{self.BASE_URL}/data",
+                    params=params
+                )
+                response.raise_for_status()
+                data = response.json()
                 
+                if not data.get('data'):
+                    logger.warning(f"No se encontraron datos para {crop_name}")
+                    return None
+                
+                # Procesar datos de FAOSTAT
+                processed_data = self._process_faostat_data(data['data'])
+                
+                # Guardar en cache
+                self._cache[crop_name] = processed_data
+                self._last_update[crop_name] = now
+                
+                return processed_data
+                
+        except httpx.HTTPError as e:
+            logger.error(f"Error HTTP obteniendo datos de FAOSTAT: {str(e)}")
             return None
-            
         except Exception as e:
             logger.error(f"Error obteniendo datos de cultivo de FAO: {str(e)}")
             return None
+    
+    def _process_faostat_data(self, raw_data: Dict) -> Dict:
+        """
+        Procesa datos crudos de FAOSTAT al formato que necesitamos
+        """
+        try:
+            # Extraer datos relevantes
+            yield_data = next((item for item in raw_data if item['element'] == 'yield'), {})
+            cost_data = next((item for item in raw_data if item['element'] == 'production_cost'), {})
+            price_data = next((item for item in raw_data if item['element'] == 'producer_price'), {})
+            
+            # Calcular rendimientos
+            base_yield = float(yield_data.get('value', 0))
+            rendimiento_min = base_yield * 0.8  # 20% menos del promedio
+            rendimiento_max = base_yield * 1.2  # 20% más del promedio
+            
+            # Calcular costos
+            base_cost = float(cost_data.get('value', 0))
+            costos_fijos = {
+                'preparacion_tierra': base_cost * 0.2,
+                'sistema_riego': base_cost * 0.3,
+            }
+            costos_variables = {
+                'semilla': base_cost * 0.1,
+                'fertilizantes': base_cost * 0.15,
+                'pesticidas': base_cost * 0.1,
+                'mano_obra': base_cost * 0.1,
+                'cosecha': base_cost * 0.05,
+            }
+            
+            # Determinar ciclo de cultivo y riesgo basado en el cultivo
+            ciclo_cultivo = self._get_crop_cycle(yield_data.get('item'))
+            factor_riesgo = self._calculate_risk_factor(
+                yield_data.get('item'),
+                float(yield_data.get('cv', 20))  # Coeficiente de variación
+            )
+            
+            return {
+                'rendimiento_min': rendimiento_min,
+                'rendimiento_max': rendimiento_max,
+                'costos_fijos': costos_fijos,
+                'costos_variables': costos_variables,
+                'ciclo_cultivo': ciclo_cultivo,
+                'riesgos': factor_riesgo,
+                'metadata': {
+                    'source': 'FAOSTAT',
+                    'last_update': yield_data.get('date_update'),
+                    'region': 'Guatemala',
+                    'year': yield_data.get('year'),
+                    'reliability': yield_data.get('reliability')
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Error procesando datos de FAOSTAT: {str(e)}")
+            return None
+    
+    def _get_crop_cycle(self, crop_code: str) -> int:
+        """Determina el ciclo de cultivo en meses"""
+        cycles = {
+            'maize': 4,
+            'beans': 3,
+            'potato': 4,
+            'tomato': 3,
+            'onion': 3,
+            'carrot': 3,
+            'chili': 4,
+            'coffee': 12,
+            'rice': 4,
+            'wheat': 4
+        }
+        return cycles.get(crop_code, 4)  # 4 meses por defecto
+    
+    def _calculate_risk_factor(self, crop_code: str, cv: float) -> float:
+        """
+        Calcula factor de riesgo basado en el cultivo y su coeficiente de variación
+        """
+        # Base risk from coefficient of variation (normalized)
+        base_risk = min(cv / 100, 0.5)  # Cap at 50%
+        
+        # Additional risk factors by crop type
+        crop_risks = {
+            'coffee': 0.1,  # Cultivos perennes, menor riesgo
+            'banana': 0.1,
+            'rice': 0.2,    # Cultivos básicos, riesgo medio
+            'maize': 0.2,
+            'beans': 0.25,  # Cultivos sensibles, mayor riesgo
+            'tomato': 0.3,
+            'potato': 0.25
+        }
+        
+        additional_risk = crop_risks.get(crop_code, 0.2)
+        return min(base_risk + additional_risk, 0.8)  # Cap total risk at 80%
     
     def _normalize_crop_name(self, name: str) -> str:
         """Normaliza el nombre del cultivo para búsqueda"""
@@ -69,60 +195,6 @@ class FAOClient:
             'trigo': 'wheat'
         }
         return translations.get(name.lower(), name.lower())
-    
-    def _get_example_data(self, crop_name: str) -> Optional[Dict]:
-        """
-        Datos de ejemplo mientras se implementa la API real
-        En producción, esto vendrá de la API de FAO
-        """
-        example_data = {
-            'maize': {
-                'rendimiento_min': 80,
-                'rendimiento_max': 120,
-                'costos_fijos': {
-                    'preparacion_tierra': 2000,
-                    'sistema_riego': 3000,
-                },
-                'costos_variables': {
-                    'semilla': 800,
-                    'fertilizantes': 2500,
-                    'pesticidas': 1000,
-                    'mano_obra': 3000,
-                    'cosecha': 1500,
-                },
-                'ciclo_cultivo': 4,
-                'riesgos': 0.2,
-                'metadata': {
-                    'source': 'FAO',
-                    'last_update': '2025-02-10',
-                    'region': 'Central America'
-                }
-            },
-            'beans': {
-                'rendimiento_min': 25,
-                'rendimiento_max': 35,
-                'costos_fijos': {
-                    'preparacion_tierra': 1800,
-                    'sistema_riego': 2500,
-                },
-                'costos_variables': {
-                    'semilla': 1000,
-                    'fertilizantes': 2000,
-                    'pesticidas': 800,
-                    'mano_obra': 2500,
-                    'cosecha': 1200,
-                },
-                'ciclo_cultivo': 3,
-                'riesgos': 0.15,
-                'metadata': {
-                    'source': 'FAO',
-                    'last_update': '2025-02-10',
-                    'region': 'Central America'
-                }
-            },
-            # Agregar más cultivos aquí
-        }
-        return example_data.get(crop_name)
 
 # Cliente global
 fao_client = FAOClient()
