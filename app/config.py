@@ -3,9 +3,10 @@ Configuración de la aplicación
 """
 import os
 import json
+import logging
 from pathlib import Path
-from typing import Dict, Any
-from pydantic import BaseModel
+from typing import Dict, Any, Optional
+from pydantic import BaseModel, Field, validator
 from dotenv import load_dotenv
 
 # Obtener la ruta base del proyecto
@@ -14,28 +15,84 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Cargar variables de entorno
 load_dotenv(BASE_DIR / ".env")
 
+# Configurar logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
+logger = logging.getLogger(__name__)
+
 class Settings(BaseModel):
     """Configuración de la aplicación"""
     
     # Entorno
-    ENV: str = os.getenv("ENV", "development")
+    ENV: str = Field(default="development", description="Entorno de ejecución")
+    DEBUG: bool = Field(default=False, description="Modo debug")
     
     # WhatsApp API
-    WHATSAPP_API_URL: str = "https://graph.facebook.com/v17.0"
-    WHATSAPP_TOKEN: str = os.getenv("WHATSAPP_ACCESS_TOKEN", "")
-    WHATSAPP_PHONE_NUMBER_ID: str = os.getenv("WHATSAPP_PHONE_NUMBER_ID", "")
-    WHATSAPP_WEBHOOK_VERIFY_TOKEN: str = os.getenv("WHATSAPP_WEBHOOK_VERIFY_TOKEN", "")
+    WHATSAPP_API_URL: str = Field(
+        default="https://graph.facebook.com/v17.0",
+        description="URL base de la API de WhatsApp"
+    )
+    WHATSAPP_TOKEN: str = Field(
+        default="",
+        description="Token de acceso para la API de WhatsApp"
+    )
+    WHATSAPP_PHONE_NUMBER_ID: str = Field(
+        default="",
+        description="ID del número de teléfono de WhatsApp"
+    )
+    WHATSAPP_WEBHOOK_VERIFY_TOKEN: str = Field(
+        default="",
+        description="Token de verificación para el webhook de WhatsApp"
+    )
     
     # Firebase
-    FIREBASE_CREDENTIALS_PATH: str = os.getenv("FIREBASE_CREDENTIALS_PATH", str(BASE_DIR / "firebase-credentials.json"))
+    FIREBASE_CREDENTIALS_PATH: str = Field(
+        default=str(BASE_DIR / "firebase-credentials.json"),
+        description="Ruta al archivo de credenciales de Firebase"
+    )
+    
+    # MAGA API
+    MAGA_BASE_URL: str = Field(
+        default="https://web.maga.gob.gt",
+        description="URL base del sitio web del MAGA"
+    )
+    
+    # Límites y timeouts
+    REQUEST_TIMEOUT: int = Field(
+        default=30,
+        description="Timeout para requests HTTP en segundos"
+    )
+    CACHE_TTL: int = Field(
+        default=300,
+        description="Tiempo de vida del caché en segundos"
+    )
+    MAX_RETRIES: int = Field(
+        default=3,
+        description="Número máximo de reintentos para operaciones fallidas"
+    )
+    
+    @validator('ENV')
+    def validate_env(cls, v: str) -> str:
+        """Valida el entorno"""
+        if v not in ['development', 'staging', 'production']:
+            raise ValueError("ENV debe ser 'development', 'staging' o 'production'")
+        return v
     
     @property
     def FIREBASE_CREDENTIALS(self) -> Dict[str, Any]:
-        """Lee las credenciales de Firebase desde el archivo o variables de entorno"""
+        """
+        Lee las credenciales de Firebase desde el archivo o variables de entorno
+        
+        Returns:
+            Dict[str, Any]: Credenciales de Firebase
+        """
         try:
             # En producción, usar variables de entorno
             if self.ENV == "production":
-                return {
+                creds = {
                     "type": "service_account",
                     "project_id": os.getenv("FIREBASE_PROJECT_ID", ""),
                     "private_key_id": os.getenv("FIREBASE_PRIVATE_KEY_ID", ""),
@@ -48,35 +105,58 @@ class Settings(BaseModel):
                     "client_x509_cert_url": os.getenv("FIREBASE_CLIENT_CERT_URL", ""),
                     "universe_domain": "googleapis.com"
                 }
-            
-            # En desarrollo, usar archivo
+                
+                # Validar credenciales
+                required_fields = [
+                    "project_id", "private_key_id", "private_key",
+                    "client_email", "client_id", "client_x509_cert_url"
+                ]
+                
+                missing_fields = [
+                    field for field in required_fields
+                    if not creds.get(field)
+                ]
+                
+                if missing_fields:
+                    raise ValueError(
+                        f"Faltan las siguientes credenciales de Firebase: {', '.join(missing_fields)}"
+                    )
+                
+                return creds
+                
+            # En desarrollo, leer del archivo
             creds_path = Path(self.FIREBASE_CREDENTIALS_PATH)
-            if not creds_path.is_absolute():
-                creds_path = BASE_DIR / creds_path
-            
+            if not creds_path.exists():
+                raise FileNotFoundError(
+                    f"No se encontró el archivo de credenciales en {creds_path}"
+                )
+                
             with open(creds_path) as f:
                 return json.load(f)
                 
         except Exception as e:
-            raise ValueError(f"Error leyendo credenciales de Firebase: {str(e)}")
+            logger.error(f"Error cargando credenciales de Firebase: {str(e)}")
+            raise
     
-    # MAGA API
-    MAGA_BASE_URL: str = "https://precios.maga.gob.gt"
-    MAGA_CACHE_TTL: int = 21600  # 6 horas en segundos
+    @property
+    def IS_PRODUCTION(self) -> bool:
+        """Indica si el entorno es producción"""
+        return self.ENV == "production"
     
-    # Configuración de la aplicación
-    DEBUG: bool = os.getenv("DEBUG", "False").lower() == "true"
-    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
-    
-    # Límites y configuraciones
-    MAX_CACHE_SIZE: int = 1000
-    REQUEST_TIMEOUT: int = 30
-    MAX_RETRIES: int = 3
+    @property
+    def IS_DEVELOPMENT(self) -> bool:
+        """Indica si el entorno es desarrollo"""
+        return self.ENV == "development"
     
     class Config:
-        """Configuración de Pydantic"""
+        """Configuración del modelo"""
         env_file = ".env"
         case_sensitive = True
 
 # Instancia global de configuración
-settings = Settings()
+try:
+    settings = Settings()
+    logger.info(f"Configuración cargada para entorno: {settings.ENV}")
+except Exception as e:
+    logger.error(f"Error cargando configuración: {str(e)}")
+    raise

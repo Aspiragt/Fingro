@@ -2,11 +2,12 @@
 Módulo para manejar la interacción con la API de WhatsApp
 """
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple, Optional
 import httpx
 from app.config import settings
 from app.chat.conversation_flow import conversation_manager
 from app.database.firebase import firebase_manager
+from app.utils.constants import MESSAGES
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,7 @@ class WhatsAppService:
         self.api_url = settings.WHATSAPP_API_URL
         self.token = settings.WHATSAPP_TOKEN
         self.phone_number_id = settings.WHATSAPP_PHONE_NUMBER_ID
+        self.client = httpx.AsyncClient(timeout=30.0)
         
     async def handle_webhook(self, data: Dict[str, Any]) -> None:
         """
@@ -34,121 +36,122 @@ class WhatsAppService:
                 phone = message['from']
                 
                 # Extraer el nombre del contacto si está disponible
+                name = None
                 if 'contacts' in value:
                     contact = value['contacts'][0]
                     name = contact.get('profile', {}).get('name')
                     if name:
-                        firebase_manager.update_user_name(phone, name)
+                        await firebase_manager.update_user_name(phone, name)
                 
-                # Procesar el mensaje
+                # Procesar el mensaje según su tipo
                 if message['type'] == 'text':
-                    text = message['text']['body']
-                    response, attachments = conversation_manager.handle_message(phone, text)
+                    text = message['text']['body'].strip().lower()
                     
-                    # Enviar respuesta
-                    await self.send_message(phone, response)
-                    
-                    # Enviar archivos adjuntos si hay
-                    for attachment in attachments:
-                        await self.send_file(phone, attachment)
+                    # Manejar comandos especiales
+                    if text == 'reiniciar':
+                        await firebase_manager.reset_user_state(phone)
+                        await self.send_message(phone, MESSAGES['welcome'])
+                        return
                         
+                    try:
+                        # Procesar el mensaje normal
+                        response = await conversation_manager.handle_message(phone, text)
+                        
+                        # Enviar respuesta
+                        if isinstance(response, tuple):
+                            message, attachments = response
+                            await self.send_message(phone, message)
+                            if attachments:
+                                for attachment in attachments:
+                                    await self.send_attachment(phone, attachment)
+                        else:
+                            await self.send_message(phone, response)
+                            
+                    except Exception as e:
+                        logger.error(f"Error processing message: {str(e)}")
+                        await self.send_message(phone, MESSAGES['error'])
+                        
+                elif message['type'] in ['image', 'document', 'video']:
+                    await self.send_message(
+                        phone,
+                        "Lo siento, por el momento solo puedo procesar mensajes de texto. "
+                        "Por favor, escribe tu mensaje."
+                    )
+                    
         except Exception as e:
-            logger.error(f"Error procesando webhook: {str(e)}")
-    
-    async def send_message(self, to: str, message: str) -> None:
+            logger.error(f"Error handling webhook: {str(e)}")
+            
+    async def send_message(self, to: str, message: str) -> bool:
         """
-        Envía un mensaje de texto por WhatsApp
+        Envía un mensaje de texto a través de WhatsApp
+        
+        Args:
+            to: Número de teléfono del destinatario
+            message: Mensaje a enviar
+            
+        Returns:
+            bool: True si el mensaje se envió correctamente
         """
         try:
             payload = {
                 "messaging_product": "whatsapp",
+                "recipient_type": "individual",
                 "to": to,
                 "type": "text",
                 "text": {"body": message}
             }
             
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    f"{self.api_url}/{self.phone_number_id}/messages",
-                    json=payload,
-                    headers={
-                        "Authorization": f"Bearer {self.token}",
-                        "Content-Type": "application/json"
-                    }
-                )
+            headers = {
+                "Authorization": f"Bearer {self.token}",
+                "Content-Type": "application/json"
+            }
+            
+            url = f"{self.api_url}/{self.phone_number_id}/messages"
+            
+            async with self.client as client:
+                response = await client.post(url, json=payload, headers=headers)
+                response.raise_for_status()
+                return True
                 
-                if response.status_code != 200:
-                    logger.error(f"Error enviando mensaje: {response.text}")
-                    
         except Exception as e:
-            logger.error(f"Error enviando mensaje: {str(e)}")
-    
-    async def send_file(self, to: str, file_url: str, caption: str = None) -> None:
+            logger.error(f"Error sending message: {str(e)}")
+            return False
+            
+    async def send_attachment(self, to: str, attachment: Dict[str, str]) -> bool:
         """
-        Envía un archivo por WhatsApp
+        Envía un archivo adjunto a través de WhatsApp
+        
+        Args:
+            to: Número de teléfono del destinatario
+            attachment: Diccionario con tipo y URL del archivo
+            
+        Returns:
+            bool: True si el archivo se envió correctamente
         """
         try:
             payload = {
                 "messaging_product": "whatsapp",
+                "recipient_type": "individual",
                 "to": to,
-                "type": "document",
-                "document": {
-                    "link": file_url,
-                    "caption": caption if caption else ""
-                }
+                "type": attachment['type'],
+                attachment['type']: {"link": attachment['url']}
             }
             
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    f"{self.api_url}/{self.phone_number_id}/messages",
-                    json=payload,
-                    headers={
-                        "Authorization": f"Bearer {self.token}",
-                        "Content-Type": "application/json"
-                    }
-                )
-                
-                if response.status_code != 200:
-                    logger.error(f"Error enviando archivo: {response.text}")
-                    
-        except Exception as e:
-            logger.error(f"Error enviando archivo: {str(e)}")
-
-    async def send_template(self, to: str, template_name: str, components: List[Dict[str, Any]] = None) -> None:
-        """
-        Envía un mensaje usando una plantilla de WhatsApp
-        """
-        try:
-            payload = {
-                "messaging_product": "whatsapp",
-                "to": to,
-                "type": "template",
-                "template": {
-                    "name": template_name,
-                    "language": {
-                        "code": "es"
-                    }
-                }
+            headers = {
+                "Authorization": f"Bearer {self.token}",
+                "Content-Type": "application/json"
             }
             
-            if components:
-                payload["template"]["components"] = components
+            url = f"{self.api_url}/{self.phone_number_id}/messages"
             
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    f"{self.api_url}/{self.phone_number_id}/messages",
-                    json=payload,
-                    headers={
-                        "Authorization": f"Bearer {self.token}",
-                        "Content-Type": "application/json"
-                    }
-                )
+            async with self.client as client:
+                response = await client.post(url, json=payload, headers=headers)
+                response.raise_for_status()
+                return True
                 
-                if response.status_code != 200:
-                    logger.error(f"Error enviando template: {response.text}")
-                    
         except Exception as e:
-            logger.error(f"Error enviando template: {str(e)}")
+            logger.error(f"Error sending attachment: {str(e)}")
+            return False
 
 # Instancia global
 whatsapp_service = WhatsAppService()

@@ -11,319 +11,171 @@ from datetime import datetime
 import httpx
 from app.utils.constants import ConversationState, MESSAGES
 from app.services.whatsapp_service import WhatsAppService
-from app.database.firebase import FirebaseDB
+from app.database.firebase import firebase_manager
 from app.external_apis.maga import maga_api
 from app.analysis.scoring import scoring
-from app.views.financial_report import report_generator
+from app.config import settings
 
 # Configurar logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=settings.LOG_LEVEL)
 logger = logging.getLogger(__name__)
 
-# Crear la aplicación FastAPI
-app = FastAPI()
+app = FastAPI(title="FinGro API")
 
-# Inicializar servicios
-db = FirebaseDB()
-whatsapp_service = WhatsAppService()
-
-# Variables de WhatsApp Cloud API
-WHATSAPP_TOKEN = os.getenv("WHATSAPP_ACCESS_TOKEN")
-PHONE_NUMBER_ID = os.getenv("WHATSAPP_PHONE_NUMBER_ID")
-WHATSAPP_API_VERSION = "v17.0"
-WHATSAPP_URL = f"https://graph.facebook.com/{WHATSAPP_API_VERSION}/{PHONE_NUMBER_ID}/messages"
-
-async def get_response_for_state(state: ConversationState, user_data: dict[str, Any]) -> str:
-    """Genera la respuesta apropiada según el estado de la conversación"""
-    try:
-        if state == ConversationState.FINALIZADO:
-            # Calcular Fingro Score
-            score_data = scoring.calculate_score(user_data)
-            if not score_data:
-                return "❌ Lo siento, hubo un error al analizar tu proyecto. Por favor, escribe 'reiniciar' para intentar de nuevo."
-            
-            # Generar reporte detallado
-            return report_generator.generate_detailed_report(user_data, score_data)
-        else:
-            # Usar mensajes predefinidos para otros estados
-            message = MESSAGES.get(state)
-            if callable(message):
-                return message(user_data)
-            return message
-    except Exception as e:
-        logger.error(f"Error generando respuesta: {str(e)}")
-        return "❌ Lo siento, ocurrió un error. Por favor, escribe 'reiniciar' para intentar de nuevo."
-
-async def process_user_message(from_number: str, message: str) -> str:
+async def process_user_message(from_number: str, message: str) -> None:
     """
     Procesa el mensaje del usuario y actualiza el estado de la conversación
     """
     try:
         # Obtener estado actual
-        conversation_data = db.get_conversation_state(from_number)
-        
-        # Si no hay datos de conversación, inicializar con estado INICIO
-        if not conversation_data:
-            conversation_data = {'state': ConversationState.INICIO, 'data': {}}
-            db.update_conversation_state(from_number, conversation_data)
-        
-        current_state = conversation_data.get('state', ConversationState.INICIO)
+        conversation_data = firebase_manager.get_conversation_state(from_number)
+        current_state = conversation_data.get('state', ConversationState.INITIAL.value)
         user_data = conversation_data.get('data', {})
         
-        # Si el mensaje es 'reiniciar', volver al inicio
-        if message.lower() == 'reiniciar':
-            new_conversation_data = {'state': ConversationState.INICIO, 'data': {}}
-            db.update_conversation_state(from_number, new_conversation_data)
-            return await get_response_for_state(ConversationState.INICIO, {})
+        # Si el mensaje es "reiniciar", volver al estado inicial
+        if message.lower() == "reiniciar":
+            firebase_manager.reset_user_state(from_number)
+            await WhatsAppService.send_message(from_number, MESSAGES['welcome'])
+            return
             
         # Procesar mensaje según el estado actual
-        if current_state == ConversationState.INICIO:
-            # Guardar cultivo y buscar datos
-            cultivo = message.strip()
-            user_data['cultivo'] = cultivo
+        if current_state == ConversationState.INITIAL.value:
+            # Mensaje de bienvenida
+            user_data['name'] = message
+            new_state = ConversationState.ASKING_CROP.value
+            await WhatsAppService.send_message(from_number, MESSAGES['ask_crop'])
+            
+        elif current_state == ConversationState.ASKING_CROP.value:
+            # Guardar cultivo y obtener precio
+            user_data['crop'] = message
             
             try:
-                # Obtener precio del MAGA
-                precio_info = await maga_api.get_precio_cultivo(cultivo)
+                precio_info = await maga_api.get_precio_cultivo(message)
                 if precio_info:
                     user_data['precio_info'] = precio_info
-                    logger.info(f"Precio encontrado para {cultivo}: {precio_info}")
-                else:
-                    # Si no hay precio en MAGA, usar precio por defecto
-                    user_data['precio_info'] = {
-                        'precio_actual': 150,  # Precio por defecto
-                        'tendencia': 'estable',
-                        'unidad_medida': 'quintal'
-                    }
-                    logger.warning(f"No se encontró precio para {cultivo}, usando valor por defecto")
+                    logger.info(f"Precio encontrado para {message}: {precio_info}")
             except Exception as e:
                 logger.error(f"Error obteniendo precios: {str(e)}")
-                # Si hay error, usar precio por defecto
-                user_data['precio_info'] = {
-                    'precio_actual': 150,
-                    'tendencia': 'estable',
-                    'unidad_medida': 'quintal'
-                }
             
-            new_conversation_data = {'state': ConversationState.CULTIVO, 'data': user_data}
-            db.update_conversation_state(from_number, new_conversation_data)
-            return await get_response_for_state(ConversationState.CULTIVO, user_data)
+            new_state = ConversationState.ASKING_AREA.value
+            await WhatsAppService.send_message(from_number, MESSAGES['ask_area'])
             
-        elif current_state == ConversationState.CULTIVO:
+        elif current_state == ConversationState.ASKING_AREA.value:
+            # Guardar área
             try:
-                hectareas = float(message.replace(',', '.'))
-                if hectareas <= 0:
-                    return "Por favor, ingresa un número válido mayor a 0"
+                area = float(message.replace('ha', '').strip())
+                user_data['area'] = area
+                new_state = ConversationState.ASKING_COMMERCIALIZATION.value
+                await WhatsAppService.send_message(from_number, MESSAGES['ask_commercialization'])
             except ValueError:
-                return "Por favor, ingresa un número válido. Por ejemplo: 2.5"
+                await WhatsAppService.send_message(from_number, MESSAGES['invalid_area'])
+                return
                 
-            user_data['hectareas'] = hectareas
-            new_conversation_data = {'state': ConversationState.HECTAREAS, 'data': user_data}
-            db.update_conversation_state(from_number, new_conversation_data)
-            return await get_response_for_state(ConversationState.HECTAREAS, user_data)
-        
-        elif current_state == ConversationState.HECTAREAS:
-            user_data['riego'] = message
-            new_conversation_data = {'state': ConversationState.RIEGO, 'data': user_data}
-            db.update_conversation_state(from_number, new_conversation_data)
-            return await get_response_for_state(ConversationState.RIEGO, user_data)
-        
-        elif current_state == ConversationState.RIEGO:
-            user_data['comercializacion'] = message
-            new_conversation_data = {'state': ConversationState.COMERCIALIZACION, 'data': user_data}
-            db.update_conversation_state(from_number, new_conversation_data)
-            return await get_response_for_state(ConversationState.COMERCIALIZACION, user_data)
-        
-        elif current_state == ConversationState.COMERCIALIZACION:
-            user_data['ubicacion'] = message
-            new_conversation_data = {'state': ConversationState.FINALIZADO, 'data': user_data}
-            db.update_conversation_state(from_number, new_conversation_data)
+        elif current_state == ConversationState.ASKING_COMMERCIALIZATION.value:
+            # Guardar método de comercialización
+            user_data['commercialization'] = message
+            new_state = ConversationState.ASKING_IRRIGATION.value
+            await WhatsAppService.send_message(from_number, MESSAGES['ask_irrigation'])
             
-            # Generar y enviar el análisis final
-            return await get_response_for_state(ConversationState.FINALIZADO, user_data)
-        
-        elif current_state == ConversationState.FINALIZADO:
-            return "Tu análisis ya está listo. Si quieres iniciar una nueva consulta, escribe 'reiniciar'."
+        elif current_state == ConversationState.ASKING_IRRIGATION.value:
+            # Guardar sistema de riego
+            user_data['irrigation'] = message
+            new_state = ConversationState.ASKING_LOCATION.value
+            await WhatsAppService.send_message(from_number, MESSAGES['ask_location'])
+            
+        elif current_state == ConversationState.ASKING_LOCATION.value:
+            # Guardar ubicación y generar análisis
+            user_data['location'] = message
+            new_state = ConversationState.ANALYSIS.value
+            
+            # Generar y guardar análisis
+            analysis = scoring.generate_analysis(user_data)
+            firebase_manager.store_analysis(from_number, analysis)
+            
+            # Enviar resultados
+            await WhatsAppService.send_message(from_number, MESSAGES['analysis_ready'])
             
         else:
-            return "Lo siento, ha ocurrido un error. Por favor escribe 'reiniciar' para comenzar de nuevo."
+            # Estado no reconocido, reiniciar
+            firebase_manager.reset_user_state(from_number)
+            await WhatsAppService.send_message(from_number, MESSAGES['error_restart'])
+            return
             
+        # Actualizar estado en Firebase
+        firebase_manager.update_user_state(from_number, {
+            'state': new_state,
+            'data': user_data
+        })
+        
     except Exception as e:
-        logger.error(f"Error procesando mensaje: {str(e)}", exc_info=True)
-        return "Lo siento, ha ocurrido un error. Por favor escribe 'reiniciar' para comenzar de nuevo."
-
-async def send_whatsapp_message(to_number: str, message: str) -> dict:
-    """Enviar mensaje usando WhatsApp Cloud API"""
-    logger.info(f"Intentando enviar mensaje a {to_number}")
-    
-    # Asegurarse de que el número tenga el formato correcto
-    if to_number.startswith("+"):
-        to_number = to_number[1:]
-    
-    headers = {
-        "Authorization": f"Bearer {WHATSAPP_TOKEN}",
-        "Content-Type": "application/json"
-    }
-    
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": to_number,
-        "type": "text",
-        "text": {"body": message}
-    }
-    
-    try:
-        logger.debug(f"Payload del mensaje: {json.dumps(payload, indent=2)}")
-        
-        async with httpx.AsyncClient() as client:
-            logger.info(f"Enviando request a: {WHATSAPP_URL}")
-            response = await client.post(WHATSAPP_URL, json=payload, headers=headers)
-            response_json = response.json()
-            
-            logger.info(f"Respuesta de WhatsApp [Status: {response.status_code}]: {json.dumps(response_json, indent=2)}")
-            
-            if response.status_code != 200:
-                logger.error(f"Error en la respuesta de WhatsApp: {response_json}")
-            
-            return response_json
-    except Exception as e:
-        logger.error(f"Error enviando mensaje: {str(e)}", exc_info=True)
-        raise
-
-@app.get("/")
-async def root():
-    """Endpoint de prueba"""
-    logger.info("Acceso al endpoint raíz")
-    return {
-        "status": "healthy",
-        "service": "fingro-bot",
-        "whatsapp_configured": bool(WHATSAPP_TOKEN and PHONE_NUMBER_ID)
-    }
-
-@app.get("/health")
-async def health_check():
-    """Endpoint para health check de Render"""
-    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
-
-@app.get("/webhook/whatsapp")
-async def verify_webhook(request: Request):
-    """
-    Verificar webhook de WhatsApp Cloud API
-    """
-    try:
-        params = dict(request.query_params)
-        logger.info(f"Verificación de webhook recibida. Parámetros: {params}")
-        
-        verify_token = os.getenv("WHATSAPP_WEBHOOK_VERIFY_TOKEN", "fingro-bot-token")
-        logger.debug(f"Token de verificación esperado: {verify_token}")
-        
-        if params.get("hub.mode") == "subscribe" and params.get("hub.verify_token") == verify_token:
-            challenge = params.get("hub.challenge")
-            logger.info(f"Verificación exitosa. Challenge: {challenge}")
-            return Response(content=challenge, media_type="text/plain")
-        
-        logger.warning("Verificación fallida: token no coincide o modo incorrecto")
-        return Response(status_code=403)
-    except Exception as e:
-        logger.error(f"Error en verificación: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error procesando mensaje: {str(e)}")
+        await WhatsAppService.send_message(from_number, MESSAGES['error'])
 
 @app.post("/webhook/whatsapp")
 async def webhook(request: Request):
     """
-    Recibir mensajes de WhatsApp Cloud API
+    Endpoint para recibir webhooks de WhatsApp
     """
     try:
-        # Obtener el cuerpo de la petición como texto
-        body_str = await request.body()
-        logger.info(f"Webhook raw body: {body_str}")
+        # Obtener y loguear el body raw
+        body = await request.body()
+        logger.info(f"Webhook raw body: {body}")
         
-        # Convertir a JSON
-        try:
-            body = json.loads(body_str)
-        except json.JSONDecodeError as e:
-            logger.error(f"Error decodificando JSON: {str(e)}")
-            return JSONResponse(
-                status_code=400,
-                content={"error": "Invalid JSON"}
-            )
-        
-        logger.info("Webhook recibido")
-        logger.debug(f"Contenido del webhook: {json.dumps(body, indent=2)}")
-        
-        # Verificar que es un evento de WhatsApp
-        if body.get("object") != "whatsapp_business_account":
-            logger.warning(f"Objeto incorrecto recibido: {body.get('object')}")
-            return JSONResponse({"status": "not whatsapp"})
+        # Parsear el JSON
+        data = json.loads(body)
         
         # Procesar mensajes
         messages_processed = 0
-        try:
-            entries = body.get("entry", [])
-            logger.debug(f"Procesando {len(entries)} entries")
-            
-            for entry in entries:
-                changes = entry.get("changes", [])
-                logger.debug(f"Procesando {len(changes)} changes en entry {entry.get('id')}")
-                
-                for change in changes:
-                    value = change.get("value", {})
-                    messages = value.get("messages", [])
-                    logger.debug(f"Procesando {len(messages)} mensajes en change")
-                    
-                    for message in messages:
-                        if message.get("type") == "text":
-                            from_number = message.get("from")
-                            text = message.get("text", {}).get("body", "")
-                            logger.info(f"Mensaje de texto recibido - De: {from_number}, Contenido: {text}")
-                            
-                            # Procesar el mensaje y obtener respuesta
-                            try:
-                                response = await process_user_message(from_number, text)
-                                await send_whatsapp_message(from_number, response)
-                                messages_processed += 1
-                            except Exception as e:
-                                logger.error(f"Error procesando mensaje: {str(e)}")
         
-        except Exception as e:
-            logger.error(f"Error procesando mensajes: {str(e)}", exc_info=True)
-            return JSONResponse(
-                status_code=500,
-                content={"error": f"Error processing messages: {str(e)}"}
-            )
+        if "entry" in data and len(data["entry"]) > 0:
+            for entry in data["entry"]:
+                if "changes" in entry and len(entry["changes"]) > 0:
+                    for change in entry["changes"]:
+                        if "value" in change and "messages" in change["value"]:
+                            for message in change["value"]["messages"]:
+                                if message["type"] == "text":
+                                    from_number = message["from"]
+                                    message_text = message["text"]["body"]
+                                    logger.info(f"Mensaje de texto recibido - De: {from_number}, Contenido: {message_text}")
+                                    await process_user_message(from_number, message_text)
+                                    messages_processed += 1
         
         logger.info(f"Procesados {messages_processed} mensajes exitosamente")
-        return JSONResponse({
-            "status": "processed",
-            "messages": messages_processed
-        })
+        return JSONResponse(content={"status": "success"})
         
     except Exception as e:
-        logger.error(f"Error general en webhook: {str(e)}", exc_info=True)
+        logger.error(f"Error en webhook: {str(e)}")
         return JSONResponse(
             status_code=500,
-            content={"error": str(e)}
+            content={"status": "error", "message": str(e)}
         )
 
-@app.get("/test-send/{phone_number}")
-async def test_send(phone_number: str):
-    """Endpoint de prueba para enviar mensajes"""
+@app.get("/webhook/whatsapp")
+async def verify_webhook(request: Request):
+    """
+    Endpoint para verificar webhook de WhatsApp
+    """
     try:
-        logger.info(f"Probando envío de mensaje a {phone_number}")
-        response = await send_whatsapp_message(
-            phone_number,
-            "Este es un mensaje de prueba desde Fingro Bot "
-        )
-        return {
-            "status": "success",
-            "response": response
-        }
+        verify_token = request.query_params.get("hub.verify_token")
+        challenge = request.query_params.get("hub.challenge")
+        
+        if verify_token == settings.WHATSAPP_WEBHOOK_VERIFY_TOKEN:
+            return int(challenge)
+        else:
+            return JSONResponse(
+                status_code=403,
+                content={"status": "error", "message": "Invalid verify token"}
+            )
     except Exception as e:
-        logger.error(f"Error en prueba: {str(e)}", exc_info=True)
-        return {
-            "status": "error",
-            "error": str(e)
-        }
+        logger.error(f"Error en verificación: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": str(e)}
+        )
+
+@app.get("/health")
+async def health_check():
+    """
+    Endpoint para verificar el estado del servicio
+    """
+    return {"status": "healthy"}

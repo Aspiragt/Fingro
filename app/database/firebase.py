@@ -30,14 +30,16 @@ class FirebaseDB:
         except Exception as e:
             logger.error(f"Error inicializando Firebase: {str(e)}")
             raise
-        
-    def _get_user_ref(self, phone: str) -> firestore.DocumentReference:
-        """Obtiene la referencia al documento del usuario"""
-        return self.db.collection('users').document(phone)
-        
-    def get_user_state(self, phone: str) -> Dict[str, Any]:
+    
+    async def get_conversation_state(self, phone: str) -> Optional[ConversationState]:
         """
-        Obtiene el estado actual del usuario desde el caché o Firebase
+        Obtiene el estado actual de la conversación
+        
+        Args:
+            phone: Número de teléfono del usuario
+            
+        Returns:
+            Optional[ConversationState]: Estado actual de la conversación
         """
         try:
             # Intentar obtener del caché
@@ -46,157 +48,169 @@ class FirebaseDB:
                 return self.cache[cache_key]
             
             # Si no está en caché, obtener de Firebase
-            user_ref = self._get_user_ref(phone)
+            user_ref = self.db.collection('users').document(phone)
             user_doc = user_ref.get()
             
             if user_doc.exists:
-                state = user_doc.to_dict()
-            else:
-                state = {
-                    'state': ConversationState.INITIAL.value,
-                    'data': {},
-                    'last_update': datetime.utcnow().isoformat()
-                }
-                user_ref.set(state)
+                state = user_doc.to_dict().get('state')
+                if state:
+                    self.cache[cache_key] = state
+                    return state
             
-            # Guardar en caché
-            self.cache[cache_key] = state
-            return state
+            return None
             
         except Exception as e:
-            logger.error(f"Error obteniendo estado del usuario {phone}: {str(e)}")
-            return {
-                'state': ConversationState.INITIAL.value,
-                'data': {},
-                'last_update': datetime.utcnow().isoformat()
-            }
+            logger.error(f"Error obteniendo estado de conversación: {str(e)}")
+            return None
     
-    def get_conversation_state(self, phone: str) -> Dict[str, Any]:
+    async def update_user_state(self, phone: str, state: ConversationState) -> bool:
         """
-        Obtiene el estado de la conversación del usuario
-        """
-        return self.get_user_state(phone)
-    
-    def update_user_state(self, phone: str, state: Dict[str, Any]) -> None:
-        """
-        Actualiza el estado del usuario en Firebase y caché
+        Actualiza el estado de la conversación del usuario
+        
+        Args:
+            phone: Número de teléfono del usuario
+            state: Nuevo estado de la conversación
+            
+        Returns:
+            bool: True si se actualizó correctamente
         """
         try:
-            # Actualizar timestamp
-            state['last_update'] = datetime.utcnow().isoformat()
-            
             # Actualizar en Firebase
-            user_ref = self._get_user_ref(phone)
-            user_ref.set(state, merge=True)
+            user_ref = self.db.collection('users').document(phone)
+            user_ref.set({
+                'state': state,
+                'updated_at': firestore.SERVER_TIMESTAMP
+            }, merge=True)
             
             # Actualizar caché
             cache_key = f"state_{phone}"
             self.cache[cache_key] = state
             
-        except Exception as e:
-            logger.error(f"Error actualizando estado del usuario {phone}: {str(e)}")
-            raise
-    
-    def reset_user_state(self, phone: str) -> None:
-        """
-        Reinicia el estado del usuario a inicial
-        """
-        try:
-            initial_state = {
-                'state': ConversationState.INITIAL.value,
-                'data': {},
-                'last_update': datetime.utcnow().isoformat()
-            }
-            self.update_user_state(phone, initial_state)
+            return True
             
         except Exception as e:
-            logger.error(f"Error reiniciando estado del usuario {phone}: {str(e)}")
-            raise
+            logger.error(f"Error actualizando estado de usuario: {str(e)}")
+            return False
     
-    def store_analysis(self, phone: str, analysis_data: Dict[str, Any]) -> None:
+    async def get_user_data(self, phone: str) -> Optional[Dict[str, Any]]:
         """
-        Almacena los resultados del análisis financiero
+        Obtiene los datos del usuario
+        
+        Args:
+            phone: Número de teléfono del usuario
+            
+        Returns:
+            Optional[Dict[str, Any]]: Datos del usuario
         """
         try:
-            analysis_ref = self.db.collection('analysis').document()
-            analysis_data.update({
-                'user_phone': phone,
-                'created_at': datetime.utcnow().isoformat()
-            })
-            analysis_ref.set(analysis_data)
+            # Intentar obtener del caché
+            cache_key = f"data_{phone}"
+            if cache_key in self.cache:
+                return self.cache[cache_key]
+            
+            # Si no está en caché, obtener de Firebase
+            user_ref = self.db.collection('users').document(phone)
+            user_doc = user_ref.get()
+            
+            if user_doc.exists:
+                data = user_doc.to_dict().get('data', {})
+                self.cache[cache_key] = data
+                return data
+            
+            return None
             
         except Exception as e:
-            logger.error(f"Error almacenando análisis para usuario {phone}: {str(e)}")
-            raise
+            logger.error(f"Error obteniendo datos de usuario: {str(e)}")
+            return None
     
-    def update_user_name(self, phone: str, name: str) -> None:
+    async def update_user_data(self, phone: str, data: Dict[str, Any]) -> bool:
+        """
+        Actualiza los datos del usuario
+        
+        Args:
+            phone: Número de teléfono del usuario
+            data: Nuevos datos a guardar
+            
+        Returns:
+            bool: True si se actualizó correctamente
+        """
+        try:
+            # Obtener datos actuales
+            current_data = await self.get_user_data(phone) or {}
+            
+            # Actualizar datos
+            current_data.update(data)
+            
+            # Guardar en Firebase
+            user_ref = self.db.collection('users').document(phone)
+            user_ref.set({
+                'data': current_data,
+                'updated_at': firestore.SERVER_TIMESTAMP
+            }, merge=True)
+            
+            # Actualizar caché
+            cache_key = f"data_{phone}"
+            self.cache[cache_key] = current_data
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error actualizando datos de usuario: {str(e)}")
+            return False
+    
+    async def update_user_name(self, phone: str, name: str) -> bool:
         """
         Actualiza el nombre del usuario
-        """
-        try:
-            user_ref = self._get_user_ref(phone)
-            user_ref.update({'name': name})
+        
+        Args:
+            phone: Número de teléfono del usuario
+            name: Nombre del usuario
             
-            # Actualizar caché
-            cache_key = f"state_{phone}"
-            if cache_key in self.cache:
-                cached_state = self.cache[cache_key]
-                cached_state['name'] = name
-                self.cache[cache_key] = cached_state
-                
-        except Exception as e:
-            logger.error(f"Error actualizando nombre del usuario {phone}: {str(e)}")
-    
-    def reset_conversation(self, phone: str) -> None:
-        """
-        Reinicia la conversación del usuario
+        Returns:
+            bool: True si se actualizó correctamente
         """
         try:
-            # Limpiar datos en Firebase
-            user_ref = self._get_user_ref(phone)
+            user_ref = self.db.collection('users').document(phone)
             user_ref.set({
-                'state': ConversationState.INITIAL.value,
-                'data': {},
-                'last_update': datetime.utcnow().isoformat(),
-                'name': None
-            })
+                'name': name,
+                'updated_at': firestore.SERVER_TIMESTAMP
+            }, merge=True)
+            return True
             
-            # Limpiar caché
-            cache_key = f"state_{phone}"
-            if cache_key in self.cache:
-                del self.cache[cache_key]
-                
         except Exception as e:
-            logger.error(f"Error reiniciando conversación del usuario {phone}: {str(e)}")
+            logger.error(f"Error actualizando nombre de usuario: {str(e)}")
+            return False
     
-    def save_fingro_score(self, phone: str, score_data: Dict[str, Any]) -> None:
+    async def reset_user_state(self, phone: str) -> bool:
         """
-        Guarda el Fingro Score y datos financieros del usuario
+        Reinicia el estado de la conversación del usuario
+        
+        Args:
+            phone: Número de teléfono del usuario
+            
+        Returns:
+            bool: True si se reinició correctamente
         """
         try:
-            user_ref = self._get_user_ref(phone)
-            score_doc = {
-                'score_data': score_data,
-                'calculated_at': datetime.utcnow().isoformat()
-            }
-            user_ref.collection('scores').add(score_doc)
+            # Limpiar caché
+            cache_key_state = f"state_{phone}"
+            cache_key_data = f"data_{phone}"
+            self.cache.pop(cache_key_state, None)
+            self.cache.pop(cache_key_data, None)
             
-            # Actualizar datos del usuario
-            user_ref.update({
-                'latest_score': score_data,
-                'score_updated_at': datetime.utcnow().isoformat()
-            })
+            # Actualizar en Firebase
+            user_ref = self.db.collection('users').document(phone)
+            user_ref.set({
+                'state': ConversationState.INITIAL,
+                'data': {},
+                'reset_at': firestore.SERVER_TIMESTAMP
+            }, merge=True)
             
-            # Actualizar caché
-            cache_key = f"state_{phone}"
-            if cache_key in self.cache:
-                cached_state = self.cache[cache_key]
-                cached_state['latest_score'] = score_data
-                cached_state['score_updated_at'] = datetime.utcnow().isoformat()
-                self.cache[cache_key] = cached_state
-                
+            return True
+            
         except Exception as e:
-            logger.error(f"Error guardando Fingro Score para usuario {phone}: {str(e)}")
+            logger.error(f"Error reiniciando estado de usuario: {str(e)}")
+            return False
 
 # Instancia global
 firebase_manager = FirebaseDB()
