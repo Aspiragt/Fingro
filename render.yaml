@@ -2,20 +2,24 @@ services:
   - type: web
     name: fingro-bot
     env: python
+    region: oregon
+    plan: starter
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.9.0
       - key: WHATSAPP_ACCESS_TOKEN
         sync: false
       - key: WHATSAPP_PHONE_NUMBER_ID
         sync: false
       - key: WHATSAPP_VERIFY_TOKEN
         sync: false
-      - key: PYTHON_VERSION
-        value: 3.10.0
       - key: FIREBASE_CREDENTIALS
         sync: false
     files:
       - name: firebase-credentials
         sync: false
         destination: firebase-credentials.json
+    autoDeploy: true
+    healthCheckPath: /health

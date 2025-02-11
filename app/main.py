@@ -12,7 +12,7 @@ from .analysis.financial import financial_analyzer
 
 # Configuración de logging
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
@@ -238,6 +238,11 @@ async def root():
         "service": "fingro-bot",
         "whatsapp_configured": bool(WHATSAPP_TOKEN and PHONE_NUMBER_ID)
     }
+
+@app.get("/health")
+async def health_check():
+    """Endpoint para health check de Render"""
+    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
 @app.get("/webhook/whatsapp")
 async def verify_webhook(request: Request):
