@@ -129,3 +129,23 @@ async def webhook(request: Request):
             status_code=500,
             content={"error": str(e)}
         )
+
+@app.get("/test-send/{phone_number}")
+async def test_send(phone_number: str):
+    """Endpoint de prueba para enviar mensajes"""
+    try:
+        logger.info(f"Probando envío de mensaje a {phone_number}")
+        response = await send_whatsapp_message(
+            phone_number,
+            "Este es un mensaje de prueba desde Fingro Bot 🌱"
+        )
+        return {
+            "status": "success",
+            "response": response
+        }
+    except Exception as e:
+        logger.error(f"Error en prueba: {str(e)}", exc_info=True)
+        return {
+            "status": "error",
+            "error": str(e)
+        }
