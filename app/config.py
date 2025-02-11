@@ -3,13 +3,13 @@ Configuración de la aplicación
 """
 import os
 from typing import Dict, Any
-from pydantic_settings import BaseSettings
+from pydantic import BaseModel
 from dotenv import load_dotenv
 
 # Cargar variables de entorno
 load_dotenv()
 
-class Settings(BaseSettings):
+class Settings(BaseModel):
     """Configuración de la aplicación"""
     
     # WhatsApp API
