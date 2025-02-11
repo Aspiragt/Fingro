@@ -12,6 +12,7 @@ import httpx
 from app.utils.constants import ConversationState, MESSAGES
 from app.services.whatsapp_service import WhatsAppService
 from app.database.firebase import FirebaseDB
+from app.external_apis.maga import maga_client
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
