@@ -13,7 +13,7 @@ from app.utils.constants import ConversationState, MESSAGES
 from app.services.whatsapp_service import WhatsAppService
 from app.database.firebase import firebase_manager
 from app.external_apis.maga import maga_api
-from app.analysis.scoring import scoring
+from app.analysis.scoring import scoring_service
 from app.config import settings
 
 # Configurar logging
@@ -89,7 +89,7 @@ async def process_user_message(from_number: str, message: str) -> None:
             new_state = ConversationState.ANALYSIS.value
             
             # Generar y guardar análisis
-            analysis = scoring.generate_analysis(user_data)
+            analysis = scoring_service.generate_analysis(user_data)
             firebase_manager.store_analysis(from_number, analysis)
             
             # Enviar resultados
