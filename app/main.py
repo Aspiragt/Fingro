@@ -3,55 +3,32 @@ FastAPI app principal
 """
 from fastapi import FastAPI, Request, Response, HTTPException
 from fastapi.responses import JSONResponse
-from typing import Any, Optional
+from typing import Optional, Dict, Any, List
+import json
 import logging
 import os
-import json
-import httpx
-from enum import Enum
 from datetime import datetime
-from .database import db
-from .external_apis.maga import maga_client
-from .analysis.financial import financial_analyzer
+import httpx
+from app.utils.constants import ConversationState, MESSAGES
+from app.services.whatsapp_service import WhatsAppService
+from app.database.firebase import FirebaseDB
 
-# Configuración de logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+# Configurar logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Inicializar FastAPI
-app = FastAPI(title="Fingro Bot")
+# Crear la aplicación FastAPI
+app = FastAPI()
+
+# Inicializar servicios
+db = FirebaseDB()
+whatsapp_service = WhatsAppService()
 
 # Variables de WhatsApp Cloud API
 WHATSAPP_TOKEN = os.getenv("WHATSAPP_ACCESS_TOKEN")
 PHONE_NUMBER_ID = os.getenv("WHATSAPP_PHONE_NUMBER_ID")
 WHATSAPP_API_VERSION = "v17.0"
 WHATSAPP_URL = f"https://graph.facebook.com/{WHATSAPP_API_VERSION}/{PHONE_NUMBER_ID}/messages"
-
-# Estados de la conversación
-class ConversationState(str, Enum):
-    INICIO = "INICIO"
-    CULTIVO = "CULTIVO"
-    HECTAREAS = "HECTAREAS"
-    RIEGO = "RIEGO"
-    COMERCIALIZACION = "COMERCIALIZACION"
-    UBICACION = "UBICACION"
-    FINALIZADO = "FINALIZADO"
-
-def get_next_state(current_state: ConversationState) -> ConversationState:
-    """Determina el siguiente estado de la conversación"""
-    state_flow = {
-        ConversationState.INICIO: ConversationState.CULTIVO,
-        ConversationState.CULTIVO: ConversationState.HECTAREAS,
-        ConversationState.HECTAREAS: ConversationState.RIEGO,
-        ConversationState.RIEGO: ConversationState.COMERCIALIZACION,
-        ConversationState.COMERCIALIZACION: ConversationState.UBICACION,
-        ConversationState.UBICACION: ConversationState.FINALIZADO,
-        ConversationState.FINALIZADO: ConversationState.FINALIZADO,
-    }
-    return state_flow.get(current_state, ConversationState.INICIO)
 
 async def get_response_for_state(state: ConversationState, user_data: dict[str, Any]) -> str:
     """Genera la respuesta apropiada según el estado de la conversación"""

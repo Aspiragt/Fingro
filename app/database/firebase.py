@@ -70,17 +70,48 @@ class FirebaseDB:
 
     def get_conversation_state(self, phone_number: str) -> Optional[Dict[str, Any]]:
         """Get conversation state"""
-        user = self.get_user(phone_number)
-        return user.get('conversation_state') if user else None
+        try:
+            user_ref = self.db.collection('users').document(phone_number)
+            doc = user_ref.get()
+            if doc.exists:
+                user_data = doc.to_dict()
+                return user_data.get('conversation_state')
+            return None
+        except Exception as e:
+            logger.error(f"Error getting conversation state: {str(e)}")
+            return None
 
-    def update_conversation_state(self, phone_number: str, state: Dict[str, Any]) -> None:
+    def update_conversation_state(self, phone_number: str, conversation_data: Dict[str, Any]) -> None:
         """Update conversation state"""
-        self.update_user(phone_number, {'conversation_state': state})
+        try:
+            user_ref = self.db.collection('users').document(phone_number)
+            doc = user_ref.get()
+            
+            if doc.exists:
+                # Actualizar estado existente
+                user_ref.update({'conversation_state': conversation_data})
+            else:
+                # Crear nuevo usuario con estado inicial
+                user_ref.set({
+                    'phone_number': phone_number,
+                    'created_at': firestore.SERVER_TIMESTAMP,
+                    'conversation_state': conversation_data
+                })
+        except Exception as e:
+            logger.error(f"Error updating conversation state: {str(e)}")
+            raise
 
     def reset_conversation(self, phone_number: str) -> None:
         """Reset conversation state"""
-        from app.models.user import ConversationState
-        self.update_conversation_state(phone_number, ConversationState().dict())
+        try:
+            initial_state = {
+                'state': 'INICIO',
+                'data': {}
+            }
+            self.update_conversation_state(phone_number, initial_state)
+        except Exception as e:
+            logger.error(f"Error resetting conversation: {str(e)}")
+            raise
 
     def add_message(self, phone_number: str, message: Dict[str, Any]) -> None:
         """Add message to conversation history"""
