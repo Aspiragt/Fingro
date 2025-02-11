@@ -12,7 +12,7 @@ import httpx
 from app.utils.constants import ConversationState, MESSAGES
 from app.services.whatsapp_service import WhatsAppService
 from app.database.firebase import FirebaseDB
-from app.external_apis.maga import maga_client
+from app.external_apis.maga import maga_api
 from app.analysis.scoring import scoring
 from app.views.financial_report import report_generator
 
@@ -87,7 +87,7 @@ async def process_user_message(from_number: str, message: str) -> str:
             
             try:
                 # Obtener precio del MAGA
-                precio_info = await maga_client.get_precio_cultivo(cultivo)
+                precio_info = await maga_api.get_precio_cultivo(cultivo)
                 if precio_info:
                     user_data['precio_info'] = precio_info
                     logger.info(f"Precio encontrado para {cultivo}: {precio_info}")
