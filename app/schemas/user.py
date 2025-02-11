@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any
+from typing import Optional, dict, Any
 from datetime import datetime
 
 class Location(BaseModel):
@@ -12,7 +12,7 @@ class FinancialProfile(BaseModel):
     """Schema for user financial profile"""
     fingro_score: float = Field(0.0, ge=0.0, le=1000.0)
     last_calculated: datetime
-    factors: Dict[str, Any]
+    factors: dict[str, Any]
 
 class UserData(BaseModel):
     """Schema for user data"""
@@ -20,7 +20,7 @@ class UserData(BaseModel):
     financial_profile: Optional[FinancialProfile] = None
     conversation_state: str = "START"
     last_interaction: datetime
-    preferences: Dict[str, Any] = Field(default_factory=dict)
+    preferences: dict[str, Any] = Field(default_factory=dict)
 
 class User(BaseModel):
     """Schema for user"""

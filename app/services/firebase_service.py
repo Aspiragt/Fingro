@@ -1,5 +1,5 @@
 import os
-from typing import Dict, List, Optional
+from typing import List, Optional
 import firebase_admin
 from firebase_admin import credentials, firestore
 from dotenv import load_dotenv
@@ -13,7 +13,7 @@ class FirebaseService:
             firebase_admin.initialize_app(cred)
         self.db = firestore.client()
 
-    def save_user_data(self, phone_number: str, data: Dict) -> str:
+    def save_user_data(self, phone_number: str, data: dict) -> str:
         """
         Guarda o actualiza datos del usuario
         """
@@ -21,7 +21,7 @@ class FirebaseService:
         doc_ref.set(data, merge=True)
         return phone_number
 
-    def save_conversation(self, phone_number: str, message_data: Dict) -> str:
+    def save_conversation(self, phone_number: str, message_data: dict) -> str:
         """
         Guarda un mensaje de la conversación
         """
@@ -32,7 +32,7 @@ class FirebaseService:
         })
         return phone_number
 
-    def get_user_data(self, phone_number: str) -> Optional[Dict]:
+    def get_user_data(self, phone_number: str) -> Optional[dict]:
         """
         Obtiene datos del usuario
         """
@@ -40,7 +40,7 @@ class FirebaseService:
         doc = doc_ref.get()
         return doc.to_dict() if doc.exists else None
 
-    def get_conversation_history(self, phone_number: str, limit: int = 10) -> List[Dict]:
+    def get_conversation_history(self, phone_number: str, limit: int = 10) -> List[dict]:
         """
         Obtiene historial de conversación
         """
@@ -52,7 +52,7 @@ class FirebaseService:
         
         return [doc.to_dict() for doc in messages_ref.stream()]
 
-    def save_score(self, phone_number: str, score_data: Dict) -> str:
+    def save_score(self, phone_number: str, score_data: dict) -> str:
         """
         Guarda el Fingro Score calculado
         """
@@ -63,7 +63,7 @@ class FirebaseService:
         }, merge=True)
         return phone_number
 
-    def get_latest_score(self, phone_number: str) -> Optional[Dict]:
+    def get_latest_score(self, phone_number: str) -> Optional[dict]:
         """
         Obtiene el último Fingro Score calculado
         """

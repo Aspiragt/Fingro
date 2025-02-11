@@ -1,6 +1,6 @@
 import os
 import requests
-from typing import Dict, Optional, List
+from typing import Optional, List
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -12,14 +12,14 @@ class WhatsAppCloudAPI:
         self.api_version = 'v21.0'
         self.api_url = f'https://graph.facebook.com/{self.api_version}/{self.phone_number_id}/messages'
 
-    def _get_headers(self) -> Dict[str, str]:
+    def _get_headers(self) -> dict[str, str]:
         """Retorna los headers necesarios para la API de WhatsApp"""
         return {
             'Authorization': f'Bearer {self.access_token}',
             'Content-Type': 'application/json'
         }
 
-    def send_text_message(self, to_number: str, message: str) -> Dict:
+    def send_text_message(self, to_number: str, message: str) -> dict:
         """Envía un mensaje de texto simple"""
         to_number = to_number.lstrip('+')
         
@@ -54,8 +54,8 @@ class WhatsAppCloudAPI:
         to_number: str, 
         template_name: str, 
         language_code: str = "es",
-        components: Optional[List[Dict]] = None
-    ) -> Dict:
+        components: Optional[List[dict]] = None
+    ) -> dict:
         """Envía un mensaje de plantilla con componentes opcionales"""
         to_number = to_number.lstrip('+')
         
@@ -94,8 +94,8 @@ class WhatsAppCloudAPI:
     def send_interactive_message(
         self, 
         to_number: str, 
-        interactive_data: Dict
-    ) -> Dict:
+        interactive_data: dict
+    ) -> dict:
         """Envía un mensaje interactivo (botones, listas, etc.)"""
         to_number = to_number.lstrip('+')
         
@@ -122,7 +122,7 @@ class WhatsAppCloudAPI:
                 print(f"Server response: {e.response.text}")
             raise e
 
-    def send_location_request(self, to_number: str) -> Dict:
+    def send_location_request(self, to_number: str) -> dict:
         """Envía una solicitud de ubicación"""
         return self.send_text_message(
             to_number,
@@ -136,8 +136,8 @@ class WhatsAppCloudAPI:
         body: str,
         footer: str,
         button_text: str,
-        sections: List[Dict]
-    ) -> Dict:
+        sections: List[dict]
+    ) -> dict:
         """Envía un mensaje con lista de opciones"""
         interactive_data = {
             "type": "list",
@@ -165,8 +165,8 @@ class WhatsAppCloudAPI:
         header: str,
         body: str,
         footer: str,
-        buttons: List[Dict]
-    ) -> Dict:
+        buttons: List[dict]
+    ) -> dict:
         """Envía un mensaje con botones"""
         interactive_data = {
             "type": "button",
@@ -187,7 +187,7 @@ class WhatsAppCloudAPI:
         
         return self.send_interactive_message(to_number, interactive_data)
 
-    def mark_message_as_read(self, message_id: str) -> Dict:
+    def mark_message_as_read(self, message_id: str) -> dict:
         """Marca un mensaje como leído"""
         payload = {
             "messaging_product": "whatsapp",
