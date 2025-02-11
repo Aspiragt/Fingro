@@ -1,6 +1,7 @@
-from enum import Enum
+from enum import Enum, auto
 
 class ConversationState(str, Enum):
+    """Estados de la conversación del chatbot"""
     INICIO = "INICIO"
     CULTIVO = "CULTIVO"
     HECTAREAS = "HECTAREAS"
@@ -8,6 +9,9 @@ class ConversationState(str, Enum):
     COMERCIALIZACION = "COMERCIALIZACION"
     UBICACION = "UBICACION"
     FINALIZADO = "FINALIZADO"
+
+    def __str__(self):
+        return self.value
 
 # Mensajes del bot
 MESSAGES = {
@@ -20,6 +24,8 @@ MESSAGES = {
     ConversationState.RIEGO: "🏪 ¿Cómo planeas comercializar tu cosecha?\n\nEscribe una opción:\n- Mercado local\n- Exportación\n- Intermediario\n- Directo",
     
     ConversationState.COMERCIALIZACION: "📍 ¿En qué municipio y departamento está ubicada tu parcela?\n\nEjemplo: San Juan Sacatepéquez, Guatemala",
+    
+    ConversationState.UBICACION: "⌛ Analizando tu proyecto...",
     
     ConversationState.FINALIZADO: lambda data: (
         f"✅ ¡Análisis completado!\n\n"
@@ -79,4 +85,17 @@ SCORE_CONFIG = {
         "threshold": 60,  # segundos
         "points": 50
     }
+}
+
+# Respuestas comunes para cada estado
+VALID_RESPONSES = {
+    ConversationState.RIEGO: ['goteo', 'aspersión', 'gravedad', 'temporal'],
+    ConversationState.COMERCIALIZACION: ['mercado local', 'exportación', 'intermediario', 'directo']
+}
+
+# Comandos especiales
+SPECIAL_COMMANDS = {
+    'reiniciar': 'Reinicia la conversación',
+    'ayuda': 'Muestra el menú de ayuda',
+    'solicitar': 'Inicia el proceso de solicitud de préstamo'
 }
