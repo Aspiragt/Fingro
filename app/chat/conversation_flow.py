@@ -54,7 +54,7 @@ class ConversationManager:
             
             # Procesar mensaje según estado
             if current_state == ConversationState.INITIAL.value:
-                user_data['name'] = message
+                user_data['name'] = message.title()  # Capitalizar nombre
                 new_state = ConversationState.ASKING_CROP.value
                 response = MESSAGES['ask_crop']
                 
@@ -62,12 +62,13 @@ class ConversationManager:
                 user_data['crop'] = message
                 # Obtener precio del cultivo
                 try:
-                    precio_info = await maga_api.get_precio_cultivo(message)
-                    if precio_info:
-                        user_data['precio_info'] = precio_info
-                        logger.info(f"Precio encontrado para {message}: {precio_info}")
+                    precio = await maga_api.get_precio_cultivo(message)
+                    user_data['precio_info'] = precio
+                    logger.info(f"Precio encontrado para {message}: Q{precio}/quintal")
                 except Exception as e:
                     logger.error(f"Error obteniendo precios: {str(e)}")
+                    # Usar precio por defecto si no se encuentra
+                    user_data['precio_info'] = maga_api.default_prices.get(message, 200)
                 
                 new_state = ConversationState.ASKING_AREA.value
                 response = MESSAGES['ask_area']
