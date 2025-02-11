@@ -59,22 +59,38 @@ class MagaAPI:
             # Normalizar nombre del cultivo
             cultivo = cultivo.lower().strip()
             
+            # Verificar si es un cultivo conocido
+            cultivo_normalizado = None
+            for nombre, variaciones in CROP_VARIATIONS.items():
+                if cultivo in variaciones:
+                    cultivo_normalizado = nombre
+                    break
+            
+            if not cultivo_normalizado:
+                logger.warning(f"Cultivo no reconocido: {cultivo}")
+                return self.default_prices.get('maiz', 150)  # Precio base maíz
+            
             # Verificar caché
-            if cultivo in self.price_cache:
-                return self.price_cache[cultivo]
+            if cultivo_normalizado in self.price_cache:
+                return self.price_cache[cultivo_normalizado]
             
             # Obtener precio de la web
-            precio = await self._fetch_precio_web(cultivo)
-            if precio:
-                self.price_cache[cultivo] = precio
-                return precio
+            try:
+                precio = await self._fetch_precio_web(cultivo_normalizado)
+                if precio:
+                    self.price_cache[cultivo_normalizado] = precio
+                    return precio
+            except Exception as e:
+                logger.error(f"Error obteniendo precio web para {cultivo_normalizado}: {str(e)}")
             
             # Si no se encuentra, usar precio por defecto
-            return self.default_prices.get(cultivo, 150)
+            precio_default = self.default_prices.get(cultivo_normalizado, 150)
+            logger.info(f"Usando precio por defecto para {cultivo_normalizado}: Q{precio_default}")
+            return precio_default
             
         except Exception as e:
-            logger.error(f"Error obteniendo precio para {cultivo}: {str(e)}")
-            return self.default_prices.get(cultivo, 150)
+            logger.error(f"Error en get_precio_cultivo para {cultivo}: {str(e)}")
+            return self.default_prices.get('maiz', 150)  # Precio base maíz
     
     async def _fetch_precio_web(self, cultivo: str) -> Optional[float]:
         """
@@ -88,14 +104,13 @@ class MagaAPI:
         """
         try:
             # Construir URL
-            url = f"{self.base_url}/precios-agricolas"
+            url = f"{self.base_url}/precios"
             
             # Headers para simular navegador
             headers = {
                 'User-Agent': self.ua.random,
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'es-GT,es;q=0.8,en-US;q=0.5,en;q=0.3',
-                'Connection': 'keep-alive',
+                'Accept': 'text/html',
+                'Accept-Language': 'es-GT,es',
             }
             
             # Realizar request
@@ -106,27 +121,20 @@ class MagaAPI:
                 # Parsear HTML
                 soup = BeautifulSoup(response.text, 'html.parser')
                 
-                # Buscar tabla de precios
-                tabla = soup.find('table', {'class': 'precios-agricolas'})
-                if not tabla:
-                    return None
-                
-                # Buscar fila del cultivo
-                for fila in tabla.find_all('tr'):
-                    celdas = fila.find_all('td')
-                    if len(celdas) >= 3:
-                        nombre = celdas[0].text.strip().lower()
+                # Buscar precio
+                for row in soup.find_all('tr'):
+                    cells = row.find_all('td')
+                    if len(cells) >= 2:
+                        nombre = cells[0].text.strip().lower()
                         if self._match_cultivo(cultivo, nombre):
-                            # Extraer precio
-                            precio_texto = celdas[2].text.strip()
-                            precio = self._extract_precio(precio_texto)
+                            precio = self._extract_precio(cells[1].text)
                             if precio:
                                 return precio
-                
-                return None
-                
+            
+            return None
+            
         except Exception as e:
-            logger.error(f"Error consultando web MAGA: {str(e)}")
+            logger.error(f"Error en _fetch_precio_web para {cultivo}: {str(e)}")
             return None
     
     def _match_cultivo(self, cultivo: str, nombre: str) -> bool:
@@ -140,17 +148,11 @@ class MagaAPI:
         Returns:
             bool: True si hay coincidencia
         """
-        # Normalizar nombres
-        cultivo = cultivo.lower().strip()
-        nombre = nombre.lower().strip()
-        
-        # Verificar coincidencia exacta
-        if cultivo == nombre:
-            return True
-        
-        # Verificar variaciones conocidas
-        variaciones = CROP_VARIATIONS.get(cultivo, [])
-        return nombre in variaciones
+        try:
+            variaciones = CROP_VARIATIONS.get(cultivo, [])
+            return any(var in nombre for var in variaciones)
+        except Exception:
+            return False
     
     def _extract_precio(self, texto: str) -> Optional[float]:
         """
@@ -163,13 +165,11 @@ class MagaAPI:
             Optional[float]: Precio extraído o None si no se encuentra
         """
         try:
-            # Buscar patrón de precio (Q123.45 o 123.45)
-            patron = r'(?:Q)?(\d+(?:\.\d{2})?)'
-            match = re.search(patron, texto)
+            # Buscar números en el texto
+            match = re.search(r'Q?(\d+(?:\.\d{1,2})?)', texto)
             if match:
                 return float(match.group(1))
             return None
-            
         except Exception:
             return None
 
