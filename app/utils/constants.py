@@ -42,9 +42,10 @@ Puede indicarlo en cuerdas, manzanas o hectáreas 🌾""",
     
     'ask_commercialization': """¿Cómo planea comercializar su cosecha? 🚛
 
-1. Mercado local
-2. Intermediario
-3. Exportación""",
+1. Mercado local (plaza, terminal)
+2. Intermediario (coyote, comprador)
+3. Exportación
+4. Directo (cooperativa, asociación)""",
     
     'ask_payment_method': "💵 ¿Forma de pago?\n\n- Efectivo\n- Transferencia\n- Cheque",
     

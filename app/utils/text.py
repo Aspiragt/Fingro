@@ -90,15 +90,22 @@ def normalize_commercialization(text: str) -> str:
         'local': 'mercado local',
         'mercado': 'mercado local',
         'pueblo': 'mercado local',
+        'plaza': 'mercado local',
+        'terminal': 'mercado local',
         'intermediario': 'intermediario',
         'coyote': 'intermediario',
         'revendedor': 'intermediario',
+        'comprador': 'intermediario',
         'exportacion': 'exportacion',
         'exportar': 'exportacion',
         'extranjero': 'exportacion',
+        'internacional': 'exportacion',
         'directo': 'directo',
         'propio': 'directo',
-        'personal': 'directo'
+        'personal': 'directo',
+        'cooperativa': 'directo',
+        'coop': 'directo',
+        'asociacion': 'directo'
     }
     
     return corrections.get(text, text)
