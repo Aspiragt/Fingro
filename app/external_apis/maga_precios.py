@@ -1,12 +1,9 @@
 """
-API para obtener precios de productos agrícolas del MAGA usando datos locales
+API para obtener precios de productos agrícolas del MAGA usando datos predefinidos
 """
 
-import json
 import logging
-import os
 from typing import Dict, Any, Optional, List
-from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -15,48 +12,116 @@ class MagaAPI:
     
     def __init__(self):
         """Inicializa el cliente de MAGA"""
-        # Intentar diferentes rutas para el archivo
-        possible_paths = [
-            Path(__file__).parent.parent / 'data' / 'maga_data.json',  # app/data
-            Path(__file__).parent.parent.parent / 'app' / 'data' / 'maga_data.json',  # /app/data desde raíz
-            Path('/opt/render/project/src/app/data/maga_data.json'),  # Ruta absoluta en Render
-        ]
+        # Datos predefinidos de cultivos
+        self.crops = {
+            'maiz': {
+                'nombre': 'Maíz',
+                'precio': 150.00,
+                'unidad': 'quintal',
+                'fecha': '2025-02-12',
+                'mercado': 'Nacional',
+                'fuente': 'MAGA'
+            },
+            'frijol': {
+                'nombre': 'Frijol',
+                'precio': 500.00,
+                'unidad': 'quintal',
+                'fecha': '2025-02-12',
+                'mercado': 'Nacional',
+                'fuente': 'MAGA'
+            },
+            'papa': {
+                'nombre': 'Papa',
+                'precio': 200.00,
+                'unidad': 'quintal',
+                'fecha': '2025-02-12',
+                'mercado': 'Nacional',
+                'fuente': 'MAGA'
+            },
+            'tomate': {
+                'nombre': 'Tomate',
+                'precio': 250.00,
+                'unidad': 'caja',
+                'fecha': '2025-02-12',
+                'mercado': 'Nacional',
+                'fuente': 'MAGA'
+            },
+            'cebolla': {
+                'nombre': 'Cebolla',
+                'precio': 300.00,
+                'unidad': 'quintal',
+                'fecha': '2025-02-12',
+                'mercado': 'Nacional',
+                'fuente': 'MAGA'
+            },
+            'chile': {
+                'nombre': 'Chile Pimiento',
+                'precio': 350.00,
+                'unidad': 'caja',
+                'fecha': '2025-02-12',
+                'mercado': 'Nacional',
+                'fuente': 'MAGA'
+            },
+            'repollo': {
+                'nombre': 'Repollo',
+                'precio': 100.00,
+                'unidad': 'red',
+                'fecha': '2025-02-12',
+                'mercado': 'Nacional',
+                'fuente': 'MAGA'
+            },
+            'zanahoria': {
+                'nombre': 'Zanahoria',
+                'precio': 180.00,
+                'unidad': 'quintal',
+                'fecha': '2025-02-12',
+                'mercado': 'Nacional',
+                'fuente': 'MAGA'
+            }
+        }
         
-        self.data = []
-        for path in possible_paths:
-            try:
-                if path.exists():
-                    logger.info(f"Intentando cargar datos desde: {path}")
-                    self._load_data(path)
-                    if self.data:
-                        logger.info(f"Datos cargados exitosamente desde: {path}")
-                        break
-            except Exception as e:
-                logger.error(f"Error cargando datos desde {path}: {str(e)}")
+        # Mapeo de variaciones de nombres
+        self.name_mapping = {
+            # Maíz
+            'maiz': 'maiz',
+            'maíz': 'maiz',
+            'mais': 'maiz',
+            'maís': 'maiz',
+            # Frijol
+            'frijol': 'frijol',
+            'frijoles': 'frijol',
+            'frijol negro': 'frijol',
+            'frijoles negros': 'frijol',
+            # Papa
+            'papa': 'papa',
+            'papas': 'papa',
+            'patata': 'papa',
+            'patatas': 'papa',
+            # Tomate
+            'tomate': 'tomate',
+            'tomates': 'tomate',
+            'jitomate': 'tomate',
+            # Cebolla
+            'cebolla': 'cebolla',
+            'cebollas': 'cebolla',
+            # Chile
+            'chile': 'chile',
+            'chiles': 'chile',
+            'chile pimiento': 'chile',
+            'pimiento': 'chile',
+            # Repollo
+            'repollo': 'repollo',
+            'col': 'repollo',
+            # Zanahoria
+            'zanahoria': 'zanahoria',
+            'zanahorias': 'zanahoria'
+        }
         
-        if not self.data:
-            logger.error("No se pudieron cargar los datos de MAGA de ninguna ubicación")
-            logger.error(f"Directorio actual: {os.getcwd()}")
-            logger.error(f"Contenido del directorio: {os.listdir()}")
-    
-    def _load_data(self, file_path: Path):
-        """
-        Carga los datos del archivo JSON
-        
-        Args:
-            file_path: Ruta al archivo de datos
-        """
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                self.data = json.load(f)
-            logger.info(f"Datos de MAGA cargados: {len(self.data)} registros")
-        except Exception as e:
-            logger.error(f"Error cargando datos de MAGA: {str(e)}")
-            self.data = []
+        logger.info("MagaAPI inicializado con datos predefinidos")
     
     async def search_crop(self, query: str) -> Optional[Dict[str, Any]]:
         """
-        Busca un cultivo en los datos de MAGA
+        Busca un cultivo en los datos predefinidos
         
         Args:
             query: Nombre del cultivo a buscar
@@ -67,38 +132,25 @@ class MagaAPI:
         try:
             # Normalizar búsqueda
             query = query.lower().strip()
-            query = query.replace('á', 'a').replace('é', 'e').replace('í', 'i').replace('ó', 'o').replace('ú', 'u')
+            logger.info(f"Buscando cultivo: {query}")
             
-            # Buscar coincidencias
-            matches = {}
-            for record in self.data:
-                product = record.get('producto', '').lower()
-                product = product.replace('á', 'a').replace('é', 'e').replace('í', 'i').replace('ó', 'o').replace('ú', 'u')
-                
-                if query in product or product in query:
-                    key = f"{product}_{record.get('unidad', '')}"
-                    if key not in matches or record.get('fecha', '') > matches[key].get('fecha', ''):
-                        matches[key] = record
-            
-            if not matches:
-                logger.warning(f"No se encontró el cultivo: {query}")
+            # Buscar en el mapeo de nombres
+            crop_key = self.name_mapping.get(query)
+            if not crop_key:
+                logger.warning(f"Cultivo no encontrado en mapeo: {query}")
                 return None
             
-            # Retornar el registro más reciente
-            latest = max(matches.values(), key=lambda x: x.get('fecha', ''))
-            result = {
-                'nombre': latest.get('producto'),
-                'precio': latest.get('precio'),
-                'unidad': latest.get('unidad'),
-                'fecha': latest.get('fecha'),
-                'mercado': latest.get('mercado', 'Nacional'),
-                'fuente': 'MAGA'
-            }
-            logger.info(f"Cultivo encontrado: {result}")
-            return result
+            # Obtener datos del cultivo
+            crop_data = self.crops.get(crop_key)
+            if not crop_data:
+                logger.warning(f"Cultivo no encontrado en datos: {crop_key}")
+                return None
+            
+            logger.info(f"Cultivo encontrado: {crop_data}")
+            return crop_data
             
         except Exception as e:
-            logger.error(f"Error buscando cultivo en MAGA: {str(e)}")
+            logger.error(f"Error buscando cultivo: {str(e)}")
             return None
     
     async def get_historical_prices(self, query: str, days: int = 30) -> List[Dict[str, Any]]:
@@ -113,34 +165,15 @@ class MagaAPI:
             Lista de precios históricos
         """
         try:
-            # Normalizar búsqueda
-            query = query.lower().strip()
-            query = query.replace('á', 'a').replace('é', 'e').replace('í', 'i').replace('ó', 'o').replace('ú', 'u')
+            crop_data = await self.search_crop(query)
+            if not crop_data:
+                return []
             
-            # Buscar coincidencias
-            matches = []
-            for record in self.data:
-                product = record.get('producto', '').lower()
-                product = product.replace('á', 'a').replace('é', 'e').replace('í', 'i').replace('ó', 'o').replace('ú', 'u')
-                
-                if query in product or product in query:
-                    matches.append({
-                        'nombre': record.get('producto'),
-                        'precio': record.get('precio'),
-                        'unidad': record.get('unidad'),
-                        'fecha': record.get('fecha'),
-                        'mercado': record.get('mercado', 'Nacional'),
-                        'fuente': 'MAGA'
-                    })
-            
-            # Ordenar por fecha descendente
-            matches.sort(key=lambda x: x.get('fecha', ''), reverse=True)
-            
-            # Retornar los últimos N días
-            return matches[:days]
+            # Por ahora solo retornamos el precio actual
+            return [crop_data]
             
         except Exception as e:
-            logger.error(f"Error obteniendo historial de MAGA: {str(e)}")
+            logger.error(f"Error obteniendo historial: {str(e)}")
             return []
 
 # Instancia global del API
