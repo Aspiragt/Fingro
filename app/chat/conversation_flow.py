@@ -267,10 +267,9 @@ class ConversationFlow:
                     'state': self.STATES['START'],
                     'data': {}
                 }
-                await firebase_manager.update_user_data(phone_number, user_data)
+                await firebase_manager.update_user_state(phone_number, user_data)
                 welcome_message = self.get_welcome_message()
                 await self.whatsapp.send_message(phone_number, welcome_message)
-                await firebase_manager.update_user_state(phone_number, user_data)
                 return
             
             # Obtener o crear datos del usuario
@@ -295,13 +294,10 @@ class ConversationFlow:
             
             # Si es nuevo usuario o conversación terminada, reiniciar
             if current_state == self.STATES['START'] or current_state == self.STATES['DONE']:
-                # Enviar mensaje de bienvenida
+                # Actualizar datos del usuario
+                await firebase_manager.update_user_state(phone_number, user_data)
                 welcome_message = self.get_welcome_message()
                 await self.whatsapp.send_message(phone_number, welcome_message)
-                
-                # Actualizar estado
-                user_data['state'] = self.STATES['GET_CROP']
-                await firebase_manager.update_user_state(phone_number, user_data)
                 return
                 
             # Validar entrada del usuario
