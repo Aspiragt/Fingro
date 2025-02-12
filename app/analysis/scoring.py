@@ -5,6 +5,8 @@ import logging
 from typing import Dict, Any, Optional
 from datetime import datetime
 
+from app.views.financial_report import FinancialReport
+
 logger = logging.getLogger(__name__)
 
 class ScoringService:
@@ -147,19 +149,20 @@ class ScoringService:
             recommended_loan = total_cost * 0.75
             
             # Preparar respuesta
+            financial_report = FinancialReport()
             return {
                 'score': final_score,
                 'risk_level': self._get_risk_level(final_score),
-                'total_costs': total_cost,
+                'total_costs': financial_report.format_currency(total_cost),
                 'expected_yield': expected_yield,
-                'expected_income': expected_income,
-                'expected_profit': expected_profit,
+                'expected_income': financial_report.format_currency(expected_income),
+                'expected_profit': financial_report.format_currency(expected_profit),
                 'roi': roi,
-                'recommended_loan': recommended_loan,
-                'monthly_payment': self._calculate_monthly_payment(recommended_loan),
+                'recommended_loan': financial_report.format_currency(recommended_loan),
+                'monthly_payment': financial_report.format_currency(self._calculate_monthly_payment(recommended_loan)),
                 'price_info': {
-                    'base_price': precio_actual,
-                    'adjusted_price': adjusted_price,
+                    'base_price': financial_report.format_currency(precio_actual),
+                    'adjusted_price': financial_report.format_currency(adjusted_price),
                     'unit': 'quintal'
                 },
                 'analysis_date': datetime.now().isoformat()
