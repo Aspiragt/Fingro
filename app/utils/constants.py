@@ -1,185 +1,17 @@
 """
-Constantes y mensajes del chatbot
+Constantes y mensajes del sistema
 """
-from enum import Enum, auto
+from enum import Enum
 
 class ConversationState(str, Enum):
-    """Estados de la conversación del chatbot"""
-    INITIAL = "INITIAL"
-    ASKING_AREA = "ASKING_AREA"
-    ASKING_IRRIGATION = "ASKING_IRRIGATION"
-    ASKING_COMMERCIALIZATION = "ASKING_COMMERCIALIZATION"
-    ASKING_PAYMENT_METHOD = "ASKING_PAYMENT_METHOD"
-    ASKING_LOCATION = "ASKING_LOCATION"
-    ANALYSIS = "ANALYSIS"
-    ASKING_LOAN_INTEREST = "ASKING_LOAN_INTEREST"
-    COMPLETED = "COMPLETED"
-
-    def __str__(self):
-        return self.value
-
-# Mensajes del bot
-MESSAGES = {
-    'welcome': """¡Hola! 👋 Soy el asistente de FinGro, una empresa guatemalteca dedicada a apoyar agricultores con financiamiento rápido y justo.
-
-Le ayudamos a obtener el préstamo que necesita para su siembra, sin exceso de papeleo y desde la comodidad de su teléfono 🌱
-
-¿Qué cultivo está sembrando o planea sembrar? Por ejemplo: maíz, frijol, café, etc.""",
-
-    'ask_crop': "🌿 ¿Qué cultivo planeas sembrar?",
-    
-    'ask_area': """¡Excelente! ¿Qué extensión de terreno cultivará? 
-Puede indicarlo en cuerdas, manzanas o hectáreas 🌾""",
-    
-    'invalid_area': """❌ Por favor ingresa solo el número.
-Por ejemplo: 5""",
-    
-    'ask_irrigation': """¿Qué sistema de riego utiliza en su terreno? 💧
-
-1. Temporal (lluvia)
-2. Goteo
-3. Aspersión
-4. Otro""",
-    
-    'ask_commercialization': """¿Cómo planea comercializar su cosecha? 🚛
-
-1. Mercado local
-2. Intermediario
-3. Exportación
-4. Directo""",
-    
-    'ask_payment_method': "💵 ¿Forma de pago?\n\n- Efectivo\n- Transferencia\n- Cheque",
-    
-    'ask_location': "¿En qué municipio está ubicado su terreno? 📍",
-    
-    'analysis_ready': (
-        "✅ ¡Análisis listo!\n\n"
-        "📊 FinGro Score: {score}/100\n"
-        "💰 Préstamo sugerido: {monto}\n\n"
-        "¿Te gustaría aplicar?"
-    ),
-    
-    'analysis': """📊 *Análisis Financiero*
-
-Cultivo: {cultivo}
-Área: {area} hectáreas
-
-💰 Ingresos esperados: {ingresos}
-💸 Costos estimados: {costos}
-✨ Ganancia potencial: {ganancia}""",
-    
-    'credit_offer': """¡Buenas noticias! 🎉 Califica para:
-
-💰 Monto: hasta Q{monto}
-📊 Tasa: {tasa}% anual
-⏱️ Plazo: {plazo} meses
-📅 Cuotas: Q{cuota}/mes
-
-Este préstamo le permite cubrir sus costos de siembra y le da la oportunidad de pagar con su cosecha 🌱
-
-¿Desea iniciar su solicitud? Es rápido y fácil 📝""",
-    
-    'ask_loan_interest': """¿Te gustaría recibir más información sobre nuestros préstamos? 🤝
-
-Responde 'si' o 'no'""",
-    
-    'ask_yes_no': """❌ Por favor responde 'si' o 'no'""",
-    
-    'loan_yes': """¡Excelente decisión! 🎉
-
-Un asesor se pondrá en contacto contigo pronto para explicarte los detalles y resolver tus dudas.
-
-Gracias por confiar en FinGro 🌱""",
-    
-    'loan_no': """Entendido, gracias por tu interés en FinGro 🌱
-
-Si cambias de opinión, puedes escribirnos cuando quieras.""",
-    
-    'error': """¡Disculpe! Tuvimos un pequeño problema técnico 😅
-
-Por favor intenta escribir tu respuesta nuevamente.""",
-    
-    'error_restart': "❌ Error. Empecemos de nuevo.\n\n¿Cuál es tu nombre?",
-    
-    'unknown': """❌ No entendí tu respuesta. Por favor, elige una de las opciones mostradas.""",
-    
-    'ask_crop': "🌿 ¿Qué cultivo planeas sembrar?",
-    
-    'ask_area': """¡Excelente! ¿Qué extensión de terreno cultivará? 
-Puede indicarlo en cuerdas, manzanas o hectáreas 🌾""",
-    
-    'invalid_area': """❌ Por favor ingresa solo el número.
-Por ejemplo: 5""",
-    
-    'ask_irrigation': """¿Qué sistema de riego utiliza en su terreno? 💧
-
-1. Temporal (lluvia)
-2. Goteo
-3. Aspersión
-4. Otro""",
-    
-    'ask_commercialization': """¿Cómo planea comercializar su cosecha? 🚛
-
-1. Mercado local
-2. Intermediario
-3. Exportación
-4. Directo""",
-    
-    'ask_payment_method': "💵 ¿Forma de pago?\n\n- Efectivo\n- Transferencia\n- Cheque",
-    
-    'ask_location': "¿En qué municipio está ubicado su terreno? 📍",
-    
-    'analysis_ready': (
-        "✅ ¡Análisis listo!\n\n"
-        "📊 FinGro Score: {score}/100\n"
-        "💰 Préstamo sugerido: {monto}\n\n"
-        "¿Te gustaría aplicar?"
-    ),
-    
-    'analysis': """📊 *Análisis Financiero*
-
-Cultivo: {cultivo}
-Área: {area} hectáreas
-
-💰 Ingresos esperados: {ingresos}
-💸 Costos estimados: {costos}
-✨ Ganancia potencial: {ganancia}""",
-    
-    'credit_offer': """¡Buenas noticias! 🎉 Califica para:
-
-💰 Monto: hasta Q{monto}
-📊 Tasa: {tasa}% anual
-⏱️ Plazo: {plazo} meses
-📅 Cuotas: Q{cuota}/mes
-
-Este préstamo le permite cubrir sus costos de siembra y le da la oportunidad de pagar con su cosecha 🌱
-
-¿Desea iniciar su solicitud? Es rápido y fácil 📝""",
-    
-    'ask_loan_interest': """¿Te gustaría recibir más información sobre nuestros préstamos? 🤝
-
-Responde 'si' o 'no'""",
-    
-    'ask_yes_no': """❌ Por favor responde 'si' o 'no'""",
-    
-    'loan_yes': """¡Excelente decisión! 🎉
-
-Un asesor se pondrá en contacto contigo pronto para explicarte los detalles y resolver tus dudas.
-
-Gracias por confiar en FinGro 🌱""",
-    
-    'loan_no': """Entendido, gracias por tu interés en FinGro 🌱
-
-Si cambias de opinión, puedes escribirnos cuando quieras.""",
-    
-    'error': """¡Disculpe! Tuvimos un pequeño problema técnico 😅
-
-Por favor intenta escribir tu respuesta nuevamente.""",
-    
-    'error_restart': "❌ Error. Empecemos de nuevo.\n\n¿Cuál es tu nombre?",
-    
-    'unknown': """❌ No entendí tu respuesta. Por favor, elige una de las opciones mostradas.""",
-}
+    """Estados de la conversación"""
+    INITIAL = "initial"
+    ASKING_AREA = "asking_area"
+    ASKING_IRRIGATION = "asking_irrigation"
+    ASKING_COMMERCIALIZATION = "asking_commercialization"
+    ASKING_LOCATION = "asking_location"
+    ASKING_LOAN_INTEREST = "asking_loan_interest"
+    COMPLETED = "completed"
 
 def format_currency(amount: float) -> str:
     """Formatea cantidades monetarias"""
@@ -202,4 +34,90 @@ CROP_VARIATIONS = {
     'lechuga': ['lechuga', 'lechugas'],
     'repollo': ['repollo', 'repollos', 'col'],
     'arveja': ['arveja', 'arvejas', 'guisante', 'guisantes']
+}
+
+MESSAGES = {
+    'welcome': """
+👋 ¡Hola! Soy el asistente de FinGro.
+
+Estoy aquí para ayudarte a obtener financiamiento para tu proyecto agrícola.
+
+Para empezar, dime qué cultivo planeas sembrar 🌱
+(Por ejemplo: maíz, frijol, tomate, etc.)
+""",
+
+    'ask_area': """
+¿Cuántas hectáreas planeas sembrar? 🌾
+
+Por favor, escribe solo el número.
+Ejemplo: 2.5
+""",
+
+    'ask_irrigation': """
+¿Qué sistema de riego usarás? 💧
+
+Opciones:
+- Goteo
+- Aspersión
+- Gravedad
+- Temporal (lluvia)
+""",
+
+    'ask_commercialization': """
+¿Cómo planeas vender tu cosecha? 🏪
+
+Opciones:
+- Mercado local (venta directa en mercados o tiendas)
+- Intermediario (venta a mayoristas)
+- Exportación (venta al extranjero)
+- Directo (venta directa a empresas o cooperativas)
+""",
+
+    'ask_location': """
+¿En qué municipio está tu terreno? 📍
+
+Por favor, escribe el nombre del municipio.
+""",
+
+    'ask_loan_interest': """
+¿Te gustaría solicitar un préstamo con estas condiciones? 💰
+
+Por favor responde "sí" o "no"
+""",
+
+    'loan_yes': """
+¡Excelente! 🎉
+
+Un asesor de FinGro se pondrá en contacto contigo pronto para continuar con tu solicitud.
+
+Mientras tanto, puedes ir preparando estos documentos:
+- DPI
+- Título de propiedad o contrato de arrendamiento
+- Recibo de luz o agua reciente
+""",
+
+    'loan_no': """
+¡Gracias por usar FinGro! 👋
+
+Si cambias de opinión o necesitas más información, escribe "reiniciar" para comenzar de nuevo.
+""",
+
+    'unknown': """
+❌ No entendí tu respuesta.
+
+Por favor, revisa las opciones disponibles y vuelve a intentar.
+""",
+
+    'error': """
+😕 Lo siento, hubo un error.
+
+Por favor escribe "reiniciar" para comenzar de nuevo.
+""",
+
+    'invalid_area': """
+❌ El área debe ser un número válido mayor a 0.
+
+Por favor, escribe solo el número.
+Ejemplo: 2.5
+"""
 }

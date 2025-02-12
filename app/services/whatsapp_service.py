@@ -1,9 +1,11 @@
 """
-Módulo para manejar la interacción con la API de WhatsApp
+Servicio para interactuar con la API de WhatsApp
 """
 import logging
-from typing import Dict, Any, List, Tuple, Optional
 import httpx
+from typing import Dict, Any, Optional, List
+from datetime import datetime
+
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -13,102 +15,78 @@ class WhatsAppService:
     
     def __init__(self):
         """Inicializa el servicio de WhatsApp"""
-        self.api_version = "v21.0"
-        self.api_url = settings.WHATSAPP_API_URL
-        self.token = settings.WHATSAPP_TOKEN
-        self.phone_number_id = settings.WHATSAPP_PHONE_ID.strip()  # Asegurar que no hay espacios
+        self.api_url = "https://graph.facebook.com/v17.0"
+        self.phone_number_id = settings.WHATSAPP_PHONE_NUMBER_ID
+        self.access_token = settings.WHATSAPP_ACCESS_TOKEN
         self.client = httpx.AsyncClient(timeout=30.0)
-        
-        # Validar configuración
-        if not self.token:
-            logger.error("WHATSAPP_ACCESS_TOKEN no está configurado")
-            raise ValueError("WHATSAPP_ACCESS_TOKEN es requerido")
-            
-        if not self.phone_number_id:
-            logger.error("WHATSAPP_PHONE_ID no está configurado")
-            raise ValueError("WHATSAPP_PHONE_ID es requerido")
-        
-        logger.info(f"WhatsApp Service inicializado con:")
-        logger.info(f"- API URL: {self.api_url}")
-        logger.info(f"- API Version: {self.api_version}")
-        logger.info(f"- Phone ID: {self.phone_number_id}")
-        logger.info(f"- Token length: {len(self.token)} caracteres")
     
-    async def send_message(self, to: str, message: str) -> bool:
+    async def send_message(self, to: str, message: str) -> Dict[str, Any]:
         """
-        Envía un mensaje de WhatsApp
+        Envía un mensaje de texto por WhatsApp
         
         Args:
-            to: Número de teléfono del destinatario
+            to: Número de teléfono destino
             message: Mensaje a enviar
             
         Returns:
-            bool: True si el mensaje se envió correctamente
+            Dict con la respuesta de la API
         """
         try:
-            # Asegurar que el número no tenga el símbolo + y esté limpio
-            to = to.lstrip("+").strip()
-            
-            url = f"{self.api_url}/{self.api_version}/{self.phone_number_id}/messages"
-            logger.info(f"Enviando mensaje a URL: {url}")
-            
-            headers = {
-                "Authorization": f"Bearer {self.token}",
-                "Content-Type": "application/json"
-            }
-            
-            data = {
+            # Preparar payload
+            payload = {
                 "messaging_product": "whatsapp",
                 "recipient_type": "individual",
                 "to": to,
                 "type": "text",
-                "text": {
-                    "preview_url": False,
-                    "body": message
-                }
+                "text": {"body": message}
             }
             
-            logger.info(f"Request data: {data}")
-            response = await self.client.post(url, headers=headers, json=data)
+            # Enviar mensaje
+            response = await self.client.post(
+                f"{self.api_url}/{self.phone_number_id}/messages",
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {self.access_token}",
+                    "Content-Type": "application/json"
+                }
+            )
             
-            if response.status_code != 200:
-                logger.error(f"Error HTTP {response.status_code}")
-                logger.error(f"Response content: {response.text}")
-                return False
-                
-            response_data = response.json()
-            logger.info(f"Respuesta de WhatsApp: {response_data}")
-            return True
+            # Validar respuesta
+            response.raise_for_status()
+            return response.json()
+            
+        except httpx.HTTPError as e:
+            logger.error(f"Error enviando mensaje: {str(e)}")
+            if e.response:
+                logger.error(f"Response: {e.response.text}")
+            raise
             
         except Exception as e:
-            logger.error(f"Error enviando mensaje a {to}: {str(e)}")
-            if hasattr(e, 'response'):
-                logger.error(f"Response content: {e.response.text}")
-            return False
+            logger.error(f"Error inesperado: {str(e)}")
+            raise
     
-    async def send_template(self, to: str, template_name: str, language: str = "es", components: Optional[List[Dict[str, Any]]] = None) -> bool:
+    async def send_template(
+        self,
+        to: str,
+        template_name: str,
+        language_code: str = "es",
+        components: Optional[List[Dict[str, Any]]] = None
+    ) -> Dict[str, Any]:
         """
-        Envía un mensaje de plantilla de WhatsApp
+        Envía un mensaje usando una plantilla
         
         Args:
-            to: Número de teléfono del destinatario
+            to: Número de teléfono destino
             template_name: Nombre de la plantilla
-            language: Código de idioma (default: "es")
-            components: Componentes de la plantilla (opcional)
+            language_code: Código de idioma
+            components: Componentes de la plantilla
             
         Returns:
-            bool: True si el mensaje se envió correctamente
+            Dict con la respuesta de la API
         """
         try:
-            url = f"{self.api_url}/{self.api_version}/{self.phone_number_id}/messages"
-            logger.info(f"Enviando plantilla a URL: {url}")
-            
-            headers = {
-                "Authorization": f"Bearer {self.token}",
-                "Content-Type": "application/json"
-            }
-            
-            data = {
+            # Preparar payload
+            payload = {
                 "messaging_product": "whatsapp",
                 "recipient_type": "individual",
                 "to": to,
@@ -116,34 +94,108 @@ class WhatsAppService:
                 "template": {
                     "name": template_name,
                     "language": {
-                        "code": language
+                        "code": language_code
                     }
                 }
             }
             
+            # Agregar componentes si existen
             if components:
-                data["template"]["components"] = components
+                payload["template"]["components"] = components
             
-            logger.info(f"Request data: {data}")
-            response = await self.client.post(url, headers=headers, json=data)
+            # Enviar mensaje
+            response = await self.client.post(
+                f"{self.api_url}/{self.phone_number_id}/messages",
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {self.access_token}",
+                    "Content-Type": "application/json"
+                }
+            )
             
-            if response.status_code != 200:
-                logger.error(f"Error HTTP {response.status_code}")
-                logger.error(f"Response content: {response.text}")
-                return False
-                
-            response_data = response.json()
-            logger.info(f"Respuesta de WhatsApp: {response_data}")
-            return True
+            # Validar respuesta
+            response.raise_for_status()
+            return response.json()
+            
+        except httpx.HTTPError as e:
+            logger.error(f"Error enviando template: {str(e)}")
+            if e.response:
+                logger.error(f"Response: {e.response.text}")
+            raise
             
         except Exception as e:
-            logger.error(f"Error enviando plantilla {template_name} a {to}: {str(e)}")
-            if hasattr(e, 'response'):
-                logger.error(f"Response content: {e.response.text}")
-            return False
+            logger.error(f"Error inesperado: {str(e)}")
+            raise
+    
+    async def send_interactive(
+        self,
+        to: str,
+        interactive_type: str,
+        header: Optional[Dict[str, Any]] = None,
+        body: Optional[Dict[str, Any]] = None,
+        footer: Optional[Dict[str, Any]] = None,
+        action: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Envía un mensaje interactivo
+        
+        Args:
+            to: Número de teléfono destino
+            interactive_type: Tipo de mensaje interactivo
+            header: Encabezado opcional
+            body: Cuerpo opcional
+            footer: Pie opcional
+            action: Acción opcional
+            
+        Returns:
+            Dict con la respuesta de la API
+        """
+        try:
+            # Preparar payload
+            payload = {
+                "messaging_product": "whatsapp",
+                "recipient_type": "individual",
+                "to": to,
+                "type": "interactive",
+                "interactive": {
+                    "type": interactive_type
+                }
+            }
+            
+            # Agregar componentes opcionales
+            if header:
+                payload["interactive"]["header"] = header
+            if body:
+                payload["interactive"]["body"] = body
+            if footer:
+                payload["interactive"]["footer"] = footer
+            if action:
+                payload["interactive"]["action"] = action
+            
+            # Enviar mensaje
+            response = await self.client.post(
+                f"{self.api_url}/{self.phone_number_id}/messages",
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {self.access_token}",
+                    "Content-Type": "application/json"
+                }
+            )
+            
+            # Validar respuesta
+            response.raise_for_status()
+            return response.json()
+            
+        except httpx.HTTPError as e:
+            logger.error(f"Error enviando mensaje interactivo: {str(e)}")
+            if e.response:
+                logger.error(f"Response: {e.response.text}")
+            raise
+            
+        except Exception as e:
+            logger.error(f"Error inesperado: {str(e)}")
+            raise
     
     async def close(self):
         """Cierra el cliente HTTP"""
         await self.client.aclose()
-
-# No crear instancia global aquí, se crea en main.py

@@ -21,66 +21,115 @@ class FinancialReport:
     def generate_detailed_report(cls, user_data: Dict[str, Any], score_data: Dict[str, Any]) -> str:
         """
         Genera un reporte financiero detallado formateado para WhatsApp
+        
+        Args:
+            user_data: Datos del usuario y proyecto
+            score_data: Datos del análisis financiero
+            
+        Returns:
+            str: Reporte formateado
         """
         try:
-            # Datos básicos
-            cultivo = user_data.get('cultivo', 'No especificado')
-            hectareas = float(user_data.get('hectareas', 0))
-            riego = user_data.get('riego', 'No especificado')
-            comercializacion = user_data.get('comercializacion', 'No especificado')
-            ubicacion = user_data.get('ubicacion', 'No especificado')
+            # Formatear datos básicos
+            cultivo = user_data['crop'].capitalize()
+            area = cls.format_number(user_data['area'])
+            riego = user_data['irrigation']
+            comercializacion = user_data['commercialization']
+            ubicacion = user_data.get('location', 'No especificada')
             
-            # Datos de precios
-            precio_info = user_data.get('precio_info', {})
-            precio_actual = float(precio_info.get('precio_actual', 0))
-            tendencia = precio_info.get('tendencia', 'estable')
-            unidad = precio_info.get('unidad_medida', 'quintal')
+            # Formatear datos financieros
+            score = score_data['score']
+            riesgo = score_data['risk_level']
+            costos = cls.format_currency(score_data['total_costs'])
+            produccion = cls.format_number(score_data['expected_yield'])
+            ingresos = cls.format_currency(score_data['expected_income'])
+            ganancia = cls.format_currency(score_data['expected_profit'])
+            roi = cls.format_number(score_data['roi'])
             
-            # Datos del score
-            fingro_score = score_data.get('fingro_score', 0)
-            prestamo = score_data.get('prestamo_recomendado', 0)
-            produccion = score_data.get('produccion_estimada', 0)
-            ingreso = score_data.get('ingreso_estimado', 0)
-            scores = score_data.get('scores_detallados', {})
+            # Formatear datos del préstamo
+            prestamo = cls.format_currency(score_data['recommended_loan'])
+            cuota = cls.format_currency(score_data['monthly_payment'])
+            
+            # Formatear precios
+            precio_base = cls.format_currency(score_data['price_info']['base_price'])
+            precio_ajustado = cls.format_currency(score_data['price_info']['adjusted_price'])
             
             # Construir reporte
             report = [
-                "📊 *REPORTE FINANCIERO DETALLADO*\n",
+                "📊 *ANÁLISIS FINANCIERO*\n",
                 
                 "*📝 Datos del Proyecto*",
                 f"• Cultivo: {cultivo}",
-                f"• Área: {cls.format_number(hectareas)} hectáreas",
-                f"• Sistema de riego: {riego}",
+                f"• Área: {area} hectáreas",
+                f"• Riego: {riego}",
                 f"• Comercialización: {comercializacion}",
                 f"• Ubicación: {ubicacion}\n",
                 
-                "*💰 Análisis de Mercado*",
-                f"• Precio actual: {cls.format_currency(precio_actual)}/{unidad}",
-                f"• Tendencia: {tendencia}",
-                f"• Producción estimada: {cls.format_number(produccion)} {unidad}s",
-                f"• Ingreso proyectado: {cls.format_currency(ingreso)}\n",
+                "*💰 Análisis de Costos y Ganancias*",
+                f"• Costos totales: {costos}",
+                f"• Producción esperada: {produccion} quintales",
+                f"• Precio base: {precio_base}/quintal",
+                f"• Precio ajustado: {precio_ajustado}/quintal",
+                f"• Ingresos esperados: {ingresos}",
+                f"• Ganancia potencial: {ganancia}",
+                f"• Retorno sobre inversión: {roi}%\n",
                 
-                "*📈 Fingro Score*",
-                f"• Score general: {fingro_score}%",
-                "• Desglose:",
-                f"  - Área: {scores.get('area_size', 0)}%",
-                f"  - Riego: {scores.get('irrigation', 0)}%",
-                f"  - Mercado: {scores.get('market_access', 0)}%",
-                f"  - Precios: {scores.get('price_trend', 0)}%",
-                f"  - Ubicación: {scores.get('location', 0)}%\n",
+                "*📈 Evaluación de Riesgo*",
+                f"• FinGro Score: {score}/1000",
+                f"• Nivel de riesgo: {riesgo}\n",
                 
                 "*💳 Préstamo Recomendado*",
-                f"• Monto: {cls.format_currency(prestamo)}\n",
-                
-                "🏦 *¿Listo para solicitar tu préstamo?*",
-                "Escribe 'solicitar' para comenzar el proceso."
+                f"• Monto: {prestamo}",
+                f"• Cuota mensual: {cuota}/mes",
+                "• Plazo: 12 meses",
+                "• Tasa: 15% anual"
             ]
             
             return "\n".join(report)
             
         except Exception as e:
-            return ("❌ Lo siento, hubo un error generando el reporte. "
-                   "Por favor, intenta nuevamente o contacta a soporte.")
+            return (
+                "❌ Error generando reporte\n\n"
+                "Por favor contacta a soporte técnico."
+            )
+    
+    @classmethod
+    def generate_simple_report(cls, user_data: Dict[str, Any], score_data: Dict[str, Any]) -> str:
+        """
+        Genera un reporte financiero simplificado
+        
+        Args:
+            user_data: Datos del usuario y proyecto
+            score_data: Datos del análisis financiero
+            
+        Returns:
+            str: Reporte formateado
+        """
+        try:
+            # Formatear datos principales
+            cultivo = user_data['crop'].capitalize()
+            area = cls.format_number(user_data['area'])
+            ganancia = cls.format_currency(score_data['expected_profit'])
+            prestamo = cls.format_currency(score_data['recommended_loan'])
+            cuota = cls.format_currency(score_data['monthly_payment'])
+            
+            # Construir reporte
+            report = [
+                "📊 *RESUMEN FINANCIERO*\n",
+                f"• Cultivo: {cultivo}",
+                f"• Área: {area} hectáreas",
+                f"• Ganancia potencial: {ganancia}",
+                f"• Préstamo disponible: {prestamo}",
+                f"• Cuota mensual: {cuota}/mes"
+            ]
+            
+            return "\n".join(report)
+            
+        except Exception as e:
+            return (
+                "❌ Error generando reporte\n\n"
+                "Por favor contacta a soporte técnico."
+            )
 
 # Instancia global
 report_generator = FinancialReport()
