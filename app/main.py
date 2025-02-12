@@ -47,11 +47,20 @@ async def verify_webhook_signature(request: Request) -> bool:
     Returns:
         bool: True si la firma es válida
     """
+    # En desarrollo, no verificar firma
+    if settings.ENV != "production":
+        return True
+        
     try:
         signature = request.headers.get('X-Hub-Signature-256', '')
         if not signature or not signature.startswith('sha256='):
             logger.warning("Firma no encontrada o inválida")
             return False
+            
+        # Si no hay secreto configurado, no verificar
+        if not settings.WHATSAPP_WEBHOOK_SECRET:
+            logger.warning("WHATSAPP_WEBHOOK_SECRET no configurado, saltando verificación")
+            return True
             
         # Obtener firma
         expected_signature = signature.split('sha256=')[1]
