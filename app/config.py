@@ -49,185 +49,84 @@ class Settings(BaseModel):
         default=os.getenv("WHATSAPP_ACCESS_TOKEN", ""),
         description="Token de acceso para la API de WhatsApp"
     )
-    WHATSAPP_PHONE_NUMBER_ID: str = Field(
-        default=os.getenv("WHATSAPP_PHONE_NUMBER_ID", ""),
-        description="ID del número de teléfono de WhatsApp"
+    WHATSAPP_PHONE_ID: str = Field(
+        default=os.getenv("WHATSAPP_PHONE_ID", ""),
+        description="ID del número de WhatsApp"
     )
     WHATSAPP_WEBHOOK_VERIFY_TOKEN: str = Field(
         default=os.getenv("WHATSAPP_WEBHOOK_VERIFY_TOKEN", ""),
-        description="Token de verificación para el webhook de WhatsApp"
+        description="Token para verificar webhooks de WhatsApp"
+    )
+    WHATSAPP_WEBHOOK_SECRET: str = Field(
+        default=os.getenv("WHATSAPP_WEBHOOK_SECRET", ""),
+        description="Secreto para verificar firmas de webhooks"
     )
     
     # Firebase
-    FIREBASE_CREDENTIALS_PATH: str = Field(
-        default=os.getenv("FIREBASE_CREDENTIALS_PATH", str(BASE_DIR / "firebase-credentials.json")),
+    FIREBASE_CREDENTIALS: str = Field(
+        default=os.getenv("FIREBASE_CREDENTIALS_PATH", ""),
         description="Ruta al archivo de credenciales de Firebase"
     )
-    
-    # MAGA API
-    MAGA_BASE_URL: str = Field(
-        default="https://web.maga.gob.gt",
-        description="URL base del sitio web del MAGA"
-    )
-    MAGA_CACHE_TTL: int = Field(
-        default=int(os.getenv("MAGA_CACHE_TTL", "21600")),  # 6 horas
-        description="Tiempo de vida del caché de precios del MAGA en segundos"
-    )
-    MAGA_MAX_RETRIES: int = Field(
-        default=int(os.getenv("MAGA_MAX_RETRIES", "3")),
-        description="Número máximo de reintentos para requests al MAGA"
-    )
-    
-    # Límites y timeouts
-    REQUEST_TIMEOUT: int = Field(
-        default=int(os.getenv("REQUEST_TIMEOUT", "30")),
-        description="Timeout para requests HTTP en segundos"
-    )
-    CACHE_TTL: int = Field(
-        default=int(os.getenv("CACHE_TTL", "300")),
+    FIREBASE_CACHE_TTL: int = Field(
+        default=int(os.getenv("FIREBASE_CACHE_TTL", "300")),
         description="Tiempo de vida del caché en segundos"
     )
-    MAX_RETRIES: int = Field(
-        default=int(os.getenv("MAX_RETRIES", "3")),
-        description="Número máximo de reintentos para operaciones fallidas"
-    )
-    MAX_CACHE_SIZE: int = Field(
-        default=int(os.getenv("MAX_CACHE_SIZE", "1000")),
+    FIREBASE_CACHE_MAXSIZE: int = Field(
+        default=int(os.getenv("FIREBASE_CACHE_MAXSIZE", "1000")),
         description="Tamaño máximo del caché"
     )
     
-    # Configuración de análisis financiero
-    MIN_FINGRO_SCORE: float = Field(
-        default=float(os.getenv("MIN_FINGRO_SCORE", "0.0")),
-        description="Puntaje mínimo para aprobar un préstamo"
+    # Seguridad
+    CORS_ORIGINS: list = Field(
+        default=json.loads(os.getenv("CORS_ORIGINS", '["*"]')),
+        description="Orígenes permitidos para CORS"
     )
-    MAX_FINGRO_SCORE: float = Field(
-        default=float(os.getenv("MAX_FINGRO_SCORE", "100.0")),
-        description="Puntaje máximo del Fingro Score"
-    )
-    MIN_LOAN_AMOUNT: float = Field(
-        default=float(os.getenv("MIN_LOAN_AMOUNT", "1000.0")),
-        description="Monto mínimo de préstamo en quetzales"
-    )
-    MAX_LOAN_AMOUNT: float = Field(
-        default=float(os.getenv("MAX_LOAN_AMOUNT", "100000.0")),
-        description="Monto máximo de préstamo en quetzales"
-    )
-    DEFAULT_LOAN_TERM: int = Field(
-        default=int(os.getenv("DEFAULT_LOAN_TERM", "12")),
-        description="Plazo por defecto del préstamo en meses"
-    )
-    DEFAULT_INTEREST_RATE: float = Field(
-        default=float(os.getenv("DEFAULT_INTEREST_RATE", "0.15")),
-        description="Tasa de interés anual por defecto"
+    RATE_LIMIT_PER_MINUTE: int = Field(
+        default=int(os.getenv("RATE_LIMIT_PER_MINUTE", "60")),
+        description="Límite de requests por minuto"
     )
     
-    @validator('ENV')
-    def validate_env(cls, v: str) -> str:
-        """Valida el entorno"""
-        v = v.lower()
-        if v not in ['development', 'staging', 'production']:
-            raise ValueError("ENV debe ser 'development', 'staging' o 'production'")
+    # Validaciones
+    @validator("WHATSAPP_TOKEN")
+    def validate_whatsapp_token(cls, v: str) -> str:
+        """Valida que el token de WhatsApp esté presente"""
+        if not v:
+            raise ValueError("WHATSAPP_TOKEN es requerido")
         return v
     
-    @property
-    def FIREBASE_CREDENTIALS(self) -> Dict[str, Any]:
-        """
-        Lee las credenciales de Firebase desde el archivo o variables de entorno
-        
-        Returns:
-            Dict[str, Any]: Credenciales de Firebase
-        """
-        try:
-            # Forzar uso de variables de entorno si estamos en Render
-            is_render = os.getenv("RENDER", "").lower() == "true"
-            is_production = self.ENV.lower() == "production"
-            
-            logger.info(f"Ambiente: ENV={self.ENV}, RENDER={is_render}")
-            
-            if is_production or is_render:
-                logger.info("Usando credenciales de Firebase desde variables de entorno")
-                private_key = os.getenv("FIREBASE_PRIVATE_KEY", "")
-                if not private_key:
-                    raise ValueError("FIREBASE_PRIVATE_KEY no está configurada")
-                    
-                # Asegurarse de que la clave privada esté formateada correctamente
-                if "\\n" in private_key:
-                    private_key = private_key.replace("\\n", "\n")
-                
-                creds = {
-                    "type": "service_account",
-                    "project_id": os.getenv("FIREBASE_PROJECT_ID"),
-                    "private_key_id": os.getenv("FIREBASE_PRIVATE_KEY_ID"),
-                    "private_key": private_key,
-                    "client_email": os.getenv("FIREBASE_CLIENT_EMAIL"),
-                    "client_id": os.getenv("FIREBASE_CLIENT_ID"),
-                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                    "token_uri": "https://oauth2.googleapis.com/token",
-                    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-                    "client_x509_cert_url": os.getenv("FIREBASE_CLIENT_CERT_URL"),
-                    "universe_domain": "googleapis.com"
-                }
-                
-                # Validar credenciales requeridas
-                required_fields = {
-                    "project_id": "FIREBASE_PROJECT_ID",
-                    "private_key_id": "FIREBASE_PRIVATE_KEY_ID",
-                    "private_key": "FIREBASE_PRIVATE_KEY",
-                    "client_email": "FIREBASE_CLIENT_EMAIL",
-                    "client_id": "FIREBASE_CLIENT_ID",
-                    "client_x509_cert_url": "FIREBASE_CLIENT_CERT_URL"
-                }
-                
-                missing_fields = []
-                for field, env_var in required_fields.items():
-                    if not creds.get(field):
-                        missing_fields.append(f"{env_var} ({field})")
-                
-                if missing_fields:
-                    raise ValueError(
-                        "Faltan las siguientes variables de entorno para Firebase:\n" +
-                        "\n".join(f"- {field}" for field in missing_fields)
-                    )
-                
-                return creds
-            
-            logger.info("Usando credenciales de Firebase desde archivo")
-            # En desarrollo, leer del archivo
-            creds_path = Path(self.FIREBASE_CREDENTIALS_PATH)
-            if not creds_path.exists():
-                raise FileNotFoundError(
-                    f"No se encontró el archivo de credenciales en {creds_path}\n"
-                    "En producción, configura las variables de entorno FIREBASE_*"
-                )
-            
-            with open(creds_path) as f:
-                return json.load(f)
-            
-        except Exception as e:
-            logger.error(f"Error cargando credenciales de Firebase: {str(e)}")
-            raise
+    @validator("WHATSAPP_PHONE_ID")
+    def validate_whatsapp_phone_id(cls, v: str) -> str:
+        """Valida que el phone ID de WhatsApp esté presente"""
+        if not v:
+            raise ValueError("WHATSAPP_PHONE_ID es requerido")
+        return v
     
-    @property
-    def IS_PRODUCTION(self) -> bool:
-        """Indica si el entorno es producción"""
-        return self.ENV.lower() == "production" or os.getenv("RENDER", "").lower() == "true"
+    @validator("FIREBASE_CREDENTIALS")
+    def validate_firebase_credentials(cls, v: str) -> str:
+        """Valida que las credenciales de Firebase existan"""
+        if not v:
+            raise ValueError("FIREBASE_CREDENTIALS es requerido")
+        if not Path(v).exists():
+            raise ValueError(f"Archivo de credenciales no encontrado: {v}")
+        return v
     
-    @property
-    def IS_DEVELOPMENT(self) -> bool:
-        """Indica si el entorno es desarrollo"""
-        return not self.IS_PRODUCTION
+    @validator("WHATSAPP_WEBHOOK_SECRET")
+    def validate_webhook_secret(cls, v: str, values: Dict[str, Any]) -> str:
+        """Valida que el secreto del webhook esté presente en producción"""
+        if values.get("ENV") == "production" and not v:
+            raise ValueError("WHATSAPP_WEBHOOK_SECRET es requerido en producción")
+        return v
     
     class Config:
         """Configuración del modelo"""
-        env_file = ".env"
         case_sensitive = True
+        env_file = ".env"
+        env_file_encoding = "utf-8"
 
 # Instancia global de configuración
 try:
     settings = Settings()
     logger.info(f"Configuración cargada para entorno: {settings.ENV}")
-    logger.info(f"¿Es producción? {settings.IS_PRODUCTION}")
 except Exception as e:
     logger.error(f"Error cargando configuración: {str(e)}")
     raise

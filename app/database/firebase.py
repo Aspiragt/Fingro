@@ -6,7 +6,7 @@ from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
 from cachetools import TTLCache
 import firebase_admin
-from firebase_admin import credentials, firestore
+from firebase_admin import credentials, firestore, App
 from app.config import settings
 from app.utils.constants import ConversationState
 
@@ -18,14 +18,19 @@ class FirebaseDB:
     def __init__(self):
         """Inicializa el cliente de Firestore y el caché"""
         try:
-            # Inicializar Firebase Admin
-            if not firebase_admin._apps:
+            # Intentar obtener app existente o crear nueva
+            try:
+                self.app = firebase_admin.get_app()
+            except ValueError:
                 cred = credentials.Certificate(settings.FIREBASE_CREDENTIALS)
-                firebase_admin.initialize_app(cred)
+                self.app = firebase_admin.initialize_app(cred)
             
-            self.db = firestore.client()
-            # Caché con tiempo de vida de 5 minutos
-            self.cache = TTLCache(maxsize=100, ttl=300)
+            self.db = firestore.client(self.app)
+            # Caché con tiempo de vida configurable
+            self.cache = TTLCache(
+                maxsize=settings.FIREBASE_CACHE_MAXSIZE,
+                ttl=settings.FIREBASE_CACHE_TTL
+            )
             
         except Exception as e:
             logger.error(f"Error inicializando Firebase: {str(e)}")
@@ -42,16 +47,17 @@ class FirebaseDB:
             Dict[str, Any]: Estado actual de la conversación y datos del usuario
         """
         try:
-            # Intentar obtener del caché
+            # Intentar obtener del caché de forma segura
             cache_key = f"state_{phone}"
-            if cache_key in self.cache:
-                return self.cache[cache_key]
+            cached_data = self.cache.get(cache_key)
+            if cached_data is not None:
+                return cached_data
             
             # Si no está en caché, obtener de Firebase
             user_ref = self.db.collection('users').document(phone)
-            doc = user_ref.get()
+            doc = await user_ref.get(_raise_on_missing=False)
             
-            if doc.exists:
+            if doc is not None and doc.exists:
                 data = doc.to_dict()
             else:
                 # Si no existe, crear estado inicial
@@ -61,7 +67,7 @@ class FirebaseDB:
                     'created_at': datetime.utcnow().isoformat(),
                     'updated_at': datetime.utcnow().isoformat()
                 }
-                user_ref.set(data)
+                await user_ref.set(data)
             
             # Guardar en caché
             self.cache[cache_key] = data
@@ -75,7 +81,7 @@ class FirebaseDB:
                 'data': {}
             }
     
-    async def update_user_state(self, phone: str, state: ConversationState) -> bool:
+    async def update_user_state(self, phone: str, state: Dict[str, Any]) -> bool:
         """
         Actualiza el estado de la conversación del usuario
         
@@ -89,108 +95,20 @@ class FirebaseDB:
         try:
             # Actualizar en Firebase
             user_ref = self.db.collection('users').document(phone)
-            user_ref.set({
-                'state': state,
-                'updated_at': firestore.SERVER_TIMESTAMP
-            }, merge=True)
+            state['updated_at'] = firestore.SERVER_TIMESTAMP
+            await user_ref.set(state, merge=True)
             
-            # Actualizar caché
+            # Actualizar caché de forma segura
             cache_key = f"state_{phone}"
-            self.cache[cache_key] = state
+            cached_data = self.cache.get(cache_key, {})
+            if cached_data:
+                cached_data.update(state)
+                self.cache[cache_key] = cached_data
             
             return True
             
         except Exception as e:
-            logger.error(f"Error actualizando estado de usuario: {str(e)}")
-            return False
-    
-    async def get_user_data(self, phone: str) -> Optional[Dict[str, Any]]:
-        """
-        Obtiene los datos del usuario
-        
-        Args:
-            phone: Número de teléfono del usuario
-            
-        Returns:
-            Optional[Dict[str, Any]]: Datos del usuario
-        """
-        try:
-            # Intentar obtener del caché
-            cache_key = f"data_{phone}"
-            if cache_key in self.cache:
-                return self.cache[cache_key]
-            
-            # Si no está en caché, obtener de Firebase
-            user_ref = self.db.collection('users').document(phone)
-            user_doc = user_ref.get()
-            
-            if user_doc.exists:
-                data = user_doc.to_dict().get('data', {})
-                self.cache[cache_key] = data
-                return data
-            
-            return None
-            
-        except Exception as e:
-            logger.error(f"Error obteniendo datos de usuario: {str(e)}")
-            return None
-    
-    async def update_user_data(self, phone: str, data: Dict[str, Any]) -> bool:
-        """
-        Actualiza los datos del usuario
-        
-        Args:
-            phone: Número de teléfono del usuario
-            data: Nuevos datos a guardar
-            
-        Returns:
-            bool: True si se actualizó correctamente
-        """
-        try:
-            # Obtener datos actuales
-            current_data = await self.get_user_data(phone) or {}
-            
-            # Actualizar datos
-            current_data.update(data)
-            
-            # Guardar en Firebase
-            user_ref = self.db.collection('users').document(phone)
-            user_ref.set({
-                'data': current_data,
-                'updated_at': firestore.SERVER_TIMESTAMP
-            }, merge=True)
-            
-            # Actualizar caché
-            cache_key = f"data_{phone}"
-            self.cache[cache_key] = current_data
-            
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error actualizando datos de usuario: {str(e)}")
-            return False
-    
-    async def update_user_name(self, phone: str, name: str) -> bool:
-        """
-        Actualiza el nombre del usuario
-        
-        Args:
-            phone: Número de teléfono del usuario
-            name: Nombre del usuario
-            
-        Returns:
-            bool: True si se actualizó correctamente
-        """
-        try:
-            user_ref = self.db.collection('users').document(phone)
-            user_ref.set({
-                'name': name,
-                'updated_at': firestore.SERVER_TIMESTAMP
-            }, merge=True)
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error actualizando nombre de usuario: {str(e)}")
+            logger.error(f"Error actualizando estado: {str(e)}")
             return False
     
     async def reset_user_state(self, phone: str) -> bool:
@@ -204,25 +122,75 @@ class FirebaseDB:
             bool: True si se reinició correctamente
         """
         try:
-            # Limpiar caché
-            cache_key_state = f"state_{phone}"
-            cache_key_data = f"data_{phone}"
-            self.cache.pop(cache_key_state, None)
-            self.cache.pop(cache_key_data, None)
+            # Crear estado inicial
+            initial_state = {
+                'state': ConversationState.INITIAL.value,
+                'data': {},
+                'updated_at': firestore.SERVER_TIMESTAMP
+            }
             
             # Actualizar en Firebase
             user_ref = self.db.collection('users').document(phone)
-            user_ref.set({
-                'state': ConversationState.INITIAL,
-                'data': {},
-                'reset_at': firestore.SERVER_TIMESTAMP
-            }, merge=True)
+            await user_ref.set(initial_state, merge=True)
+            
+            # Limpiar caché
+            cache_key = f"state_{phone}"
+            self.cache.pop(cache_key, None)
             
             return True
             
         except Exception as e:
-            logger.error(f"Error reiniciando estado de usuario: {str(e)}")
+            logger.error(f"Error reiniciando estado: {str(e)}")
             return False
+    
+    async def store_analysis(self, phone: str, analysis: Dict[str, Any]) -> bool:
+        """
+        Guarda el análisis generado para un usuario
+        
+        Args:
+            phone: Número de teléfono del usuario
+            analysis: Datos del análisis
+            
+        Returns:
+            bool: True si se guardó correctamente
+        """
+        try:
+            # Sanitizar datos sensibles
+            safe_analysis = self._sanitize_data(analysis)
+            
+            # Crear documento de análisis
+            analysis_data = {
+                'user_phone': phone,
+                'analysis': safe_analysis,
+                'created_at': firestore.SERVER_TIMESTAMP
+            }
+            
+            # Guardar en Firebase
+            await self.db.collection('analysis').add(analysis_data)
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error guardando análisis: {str(e)}")
+            return False
+    
+    def _sanitize_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Sanitiza datos sensibles antes de guardar o loggear
+        
+        Args:
+            data: Datos a sanitizar
+            
+        Returns:
+            Dict[str, Any]: Datos sanitizados
+        """
+        sensitive_fields = ['phone', 'email', 'address']
+        safe_data = data.copy()
+        
+        for field in sensitive_fields:
+            if field in safe_data:
+                safe_data[field] = '[REDACTED]'
+        
+        return safe_data
 
 # Instancia global
 firebase_manager = FirebaseDB()

@@ -1,12 +1,14 @@
 """
 FastAPI app principal
 """
-from fastapi import FastAPI, Request, Response, HTTPException
+from fastapi import FastAPI, Request, Response, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from typing import Optional, Dict, Any, List
 import json
 import logging
 import os
+import hmac
+import hashlib
 from datetime import datetime
 import httpx
 from app.utils.constants import ConversationState, MESSAGES
@@ -35,19 +37,53 @@ app = FastAPI(
 # Instanciar servicios
 whatsapp = WhatsAppService()
 
+def verify_webhook_signature(request: Request) -> bool:
+    """
+    Verifica la firma del webhook de WhatsApp
+    
+    Args:
+        request: Request de FastAPI
+        
+    Returns:
+        bool: True si la firma es válida
+    """
+    try:
+        signature = request.headers.get('X-Hub-Signature-256', '')
+        if not signature or not signature.startswith('sha256='):
+            return False
+            
+        # Obtener firma
+        expected_signature = signature.split('sha256=')[1]
+        
+        # Calcular firma
+        secret = settings.WHATSAPP_WEBHOOK_SECRET.encode()
+        body = await request.body()
+        calculated_signature = hmac.new(
+            secret,
+            msg=body,
+            digestmod=hashlib.sha256
+        ).hexdigest()
+        
+        # Comparar firmas
+        return hmac.compare_digest(calculated_signature, expected_signature)
+        
+    except Exception as e:
+        logger.error(f"Error verificando firma: {str(e)}")
+        return False
+
 async def process_user_message(from_number: str, message: str) -> None:
     """
     Procesa el mensaje del usuario y actualiza el estado de la conversación
     """
     try:
         # Obtener estado actual
-        conversation_data = firebase_manager.get_conversation_state(from_number)
+        conversation_data = await firebase_manager.get_conversation_state(from_number)
         current_state = conversation_data.get('state', ConversationState.INITIAL.value)
         user_data = conversation_data.get('data', {})
         
         # Si el mensaje es "reiniciar", volver al estado inicial
         if message.lower() == "reiniciar":
-            firebase_manager.reset_user_state(from_number)
+            await firebase_manager.reset_user_state(from_number)
             await whatsapp.send_message(from_number, MESSAGES['welcome'])
             return
             
@@ -66,7 +102,7 @@ async def process_user_message(from_number: str, message: str) -> None:
                 precio_info = await maga_api.get_precio_cultivo(message)
                 if precio_info:
                     user_data['precio_info'] = precio_info
-                    logger.info(f"Precio encontrado para {message}: {precio_info}")
+                    logger.info(f"Precio encontrado para {message}")
             except Exception as e:
                 logger.error(f"Error obteniendo precios: {str(e)}")
             
@@ -102,20 +138,20 @@ async def process_user_message(from_number: str, message: str) -> None:
             new_state = ConversationState.ANALYSIS.value
             
             # Generar y guardar análisis
-            analysis = scoring_service.generate_analysis(user_data)
-            firebase_manager.store_analysis(from_number, analysis)
+            analysis = await scoring_service.generate_analysis(user_data)
+            await firebase_manager.store_analysis(from_number, analysis)
             
             # Enviar resultados
             await whatsapp.send_message(from_number, MESSAGES['analysis_ready'])
             
         else:
             # Estado no reconocido, reiniciar
-            firebase_manager.reset_user_state(from_number)
+            await firebase_manager.reset_user_state(from_number)
             await whatsapp.send_message(from_number, MESSAGES['error_restart'])
             return
             
         # Actualizar estado en Firebase
-        firebase_manager.update_user_state(from_number, {
+        await firebase_manager.update_user_state(from_number, {
             'state': new_state,
             'data': user_data
         })
@@ -143,12 +179,16 @@ async def webhook(request: Request):
     Endpoint para recibir webhooks de WhatsApp
     """
     try:
-        # Obtener y loguear el body raw
-        body = await request.body()
-        logger.info(f"Webhook raw body: {body}")
+        # Verificar firma
+        if not settings.DEBUG and not await verify_webhook_signature(request):
+            raise HTTPException(status_code=403, detail="Invalid signature")
         
-        # Parsear el JSON
-        data = json.loads(body)
+        # Obtener y parsear body
+        body = await request.body()
+        try:
+            data = json.loads(body)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid JSON")
         
         # Procesar mensajes
         messages_processed = 0
@@ -162,18 +202,20 @@ async def webhook(request: Request):
                                 if message["type"] == "text":
                                     from_number = message["from"]
                                     message_text = message["text"]["body"]
-                                    logger.info(f"Mensaje de texto recibido - De: {from_number}, Contenido: {message_text}")
+                                    logger.info(f"Mensaje recibido de: {from_number}")
                                     await process_user_message(from_number, message_text)
                                     messages_processed += 1
         
         logger.info(f"Procesados {messages_processed} mensajes exitosamente")
         return JSONResponse(content={"status": "success"})
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error en webhook: {str(e)}")
         return JSONResponse(
             status_code=500,
-            content={"status": "error", "message": str(e)}
+            content={"status": "error", "message": "Internal server error"}
         )
 
 @app.get("/webhook/whatsapp")
@@ -185,18 +227,21 @@ async def verify_webhook(request: Request):
         verify_token = request.query_params.get("hub.verify_token")
         challenge = request.query_params.get("hub.challenge")
         
+        if not verify_token or not challenge:
+            raise HTTPException(status_code=400, detail="Missing parameters")
+        
         if verify_token == settings.WHATSAPP_WEBHOOK_VERIFY_TOKEN:
             return int(challenge)
         else:
-            return JSONResponse(
-                status_code=403,
-                content={"status": "error", "message": "Invalid verify token"}
-            )
+            raise HTTPException(status_code=403, detail="Invalid verify token")
+            
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error en verificación: {str(e)}")
         return JSONResponse(
             status_code=500,
-            content={"status": "error", "message": str(e)}
+            content={"status": "error", "message": "Internal server error"}
         )
 
 @app.get("/health")
@@ -210,19 +255,12 @@ if __name__ == "__main__":
     import uvicorn
     
     # Obtener puerto de Render o usar 8000 por defecto
-    port = int(os.getenv("PORT", 8000))
+    port = int(os.getenv("PORT", "8000"))
     
-    # En producción, bind a 0.0.0.0
-    if settings.IS_PRODUCTION:
-        host = "0.0.0.0"
-        logger.info(f"Iniciando servidor en modo producción: {host}:{port}")
-    else:
-        host = "127.0.0.1"
-        logger.info(f"Iniciando servidor en modo desarrollo: {host}:{port}")
-    
+    # Iniciar servidor
     uvicorn.run(
-        "app.main:app",
-        host=host,
+        "main:app",
+        host="0.0.0.0",
         port=port,
-        reload=not settings.IS_PRODUCTION
+        reload=settings.DEBUG
     )
