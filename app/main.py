@@ -43,7 +43,7 @@ app = FastAPI(
 whatsapp = WhatsAppService()
 
 # Incluir routers
-app.include_router(webhook_router, prefix="/webhook", tags=["webhook"])
+app.include_router(webhook_router, tags=["webhook"])
 
 @app.get("/")
 async def root():
