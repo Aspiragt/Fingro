@@ -205,16 +205,14 @@ class ConversationFlow:
             return False, None
             
         elif current_state == self.STATES['GET_LOCATION']:
-            if len(user_input) > 0:
-                return True, user_input
-            return False, None
+            return True, user_input.capitalize()
             
         elif current_state in [self.STATES['ASK_LOAN'], self.STATES['CONFIRM_LOAN']]:
-            # Simplemente verificar si es si o no
-            text = user_input.lower().strip()
-            if text.startswith('si') or text.startswith('sí'):
+            # Validar respuestas SI/NO
+            user_input = user_input.lower().strip()
+            if user_input.startswith(('si', 'sí')):
                 return True, True
-            elif text.startswith('no'):
+            elif user_input.startswith('no'):
                 return True, False
             return False, None
             
@@ -230,34 +228,19 @@ class ConversationFlow:
         Returns:
             str: Mensaje de error
         """
-        if current_state == self.STATES['GET_CROP']:
-            return (
-                "❌ Por favor ingresa un cultivo válido\n\n"
-                "Algunos ejemplos: maíz, frijol, papa, tomate"
-            )
-            
-        elif current_state == self.STATES['GET_AREA']:
-            return (
-                "❌ Por favor ingresa un área válida entre 0.1 y 100 hectáreas\n\n"
-                "Ejemplo: 2.5"
-            )
+        if current_state == self.STATES['GET_AREA']:
+            return "❌ Por favor ingrese un número válido entre 0.1 y 100 hectáreas"
             
         elif current_state == self.STATES['GET_CHANNEL']:
-            return "❌ Por favor selecciona una opción válida (1-4)"
+            return "❌ Por favor seleccione una opción válida (1-4)"
             
         elif current_state == self.STATES['GET_IRRIGATION']:
-            return "❌ Por favor selecciona una opción válida (1-4)"
-            
-        elif current_state == self.STATES['GET_LOCATION']:
-            return "❌ Por favor ingresa una ubicación válida"
+            return "❌ Por favor seleccione una opción válida (1-4)"
             
         elif current_state in [self.STATES['ASK_LOAN'], self.STATES['CONFIRM_LOAN']]:
-            return (
-                "❌ Por favor responde SI o NO\n\n"
-                "Otras formas válidas: sí, s, ok, vale / no, n"
-            )
+            return "❌ Por favor responda solamente SI o NO"
             
-        return "❌ Error desconocido"
+        return "❌ Respuesta no válida, por favor intente nuevamente"
     
     def get_next_state(self, current_state: str, user_input: str = None, processed_value: bool = None) -> str:
         """
@@ -379,6 +362,7 @@ class ConversationFlow:
                 return
                 
             current_state = user_data['state']
+            logger.info(f"Estado actual: {current_state}, Mensaje: {message}")
             
             # Si conversación terminada, reiniciar
             if current_state == self.STATES['DONE']:
@@ -396,6 +380,7 @@ class ConversationFlow:
             
             # Validar entrada del usuario
             is_valid, processed_value = self.validate_input(current_state, message)
+            logger.info(f"Validación: válido={is_valid}, valor={processed_value}")
             
             if not is_valid:
                 # Enviar mensaje de error
