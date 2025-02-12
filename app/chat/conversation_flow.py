@@ -205,7 +205,10 @@ class ConversationFlow:
             return False, None
             
         elif current_state == self.STATES['GET_LOCATION']:
-            return True, user_input.capitalize()
+            # Validar que la ubicación tenga al menos 3 caracteres
+            if len(user_input.strip()) >= 3:
+                return True, user_input.strip().capitalize()
+            return False, None
             
         elif current_state in [self.STATES['ASK_LOAN'], self.STATES['CONFIRM_LOAN']]:
             # Validar respuestas SI/NO
@@ -237,11 +240,14 @@ class ConversationFlow:
         elif current_state == self.STATES['GET_IRRIGATION']:
             return "❌ Por favor seleccione una opción válida (1-4)"
             
+        elif current_state == self.STATES['GET_LOCATION']:
+            return "❌ Por favor ingrese el nombre de su municipio o departamento (mínimo 3 letras)"
+            
         elif current_state in [self.STATES['ASK_LOAN'], self.STATES['CONFIRM_LOAN']]:
             return "❌ Por favor responda solamente SI o NO"
             
         return "❌ Respuesta no válida, por favor intente nuevamente"
-    
+
     def get_next_state(self, current_state: str, user_input: str = None, processed_value: bool = None) -> str:
         """
         Obtiene el siguiente estado de la conversación
@@ -347,9 +353,6 @@ class ConversationFlow:
                 return
                 
             if not user_data:
-                # Limpiar caché de Firebase
-                await firebase_manager.clear_user_cache(phone_number)
-                
                 # Nuevo usuario, iniciar conversación
                 user_data = {
                     'state': self.STATES['GET_CROP'],
@@ -365,9 +368,6 @@ class ConversationFlow:
             
             # Si conversación terminada, reiniciar
             if current_state == self.STATES['DONE']:
-                # Limpiar caché de Firebase
-                await firebase_manager.clear_user_cache(phone_number)
-                
                 user_data = {
                     'state': self.STATES['GET_CROP'],
                     'data': {}
