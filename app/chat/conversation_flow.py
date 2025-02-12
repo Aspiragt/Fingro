@@ -40,16 +40,68 @@ class ConversationFlow:
             'hola': 'START'
         }
         
-        self.valid_channels = [
-            CanalComercializacion.MAYORISTA,
-            CanalComercializacion.COOPERATIVA,
-            CanalComercializacion.EXPORTACION,
-            CanalComercializacion.MERCADO_LOCAL
-        ]
+        # Mapeo de canales de comercialización
+        self.channel_mapping = {
+            # Números
+            '1': CanalComercializacion.MAYORISTA,
+            '2': CanalComercializacion.COOPERATIVA, 
+            '3': CanalComercializacion.EXPORTACION,
+            '4': CanalComercializacion.MERCADO_LOCAL,
+            # Texto exacto
+            'mayorista': CanalComercializacion.MAYORISTA,
+            'cooperativa': CanalComercializacion.COOPERATIVA,
+            'exportacion': CanalComercializacion.EXPORTACION,
+            'exportación': CanalComercializacion.EXPORTACION,
+            'mercado local': CanalComercializacion.MERCADO_LOCAL,
+            # Variaciones comunes
+            'mayor': CanalComercializacion.MAYORISTA,
+            'coop': CanalComercializacion.COOPERATIVA,
+            'export': CanalComercializacion.EXPORTACION,
+            'mercado': CanalComercializacion.MERCADO_LOCAL,
+            'local': CanalComercializacion.MERCADO_LOCAL
+        }
         
-        self.valid_irrigation = [
-            'gravedad', 'aspersion', 'goteo', 'ninguno'
-        ]
+        # Mapeo de sistemas de riego
+        self.irrigation_mapping = {
+            # Números
+            '1': 'gravedad',
+            '2': 'aspersion',
+            '3': 'goteo',
+            '4': 'ninguno',
+            # Texto exacto
+            'gravedad': 'gravedad',
+            'aspersion': 'aspersion',
+            'aspersión': 'aspersion',
+            'goteo': 'goteo',
+            'ninguno': 'ninguno',
+            # Variaciones comunes
+            'por gravedad': 'gravedad',
+            'por aspersion': 'aspersion',
+            'por aspersión': 'aspersion',
+            'por goteo': 'goteo',
+            'no': 'ninguno',
+            'nada': 'ninguno',
+            'sin riego': 'ninguno'
+        }
+        
+        # Mapeo de respuestas afirmativas/negativas
+        self.yes_no_mapping = {
+            # Afirmativo
+            'si': True,
+            'sí': True,
+            'yes': True,
+            'ok': True,
+            'dale': True,
+            'va': True,
+            'simon': True,
+            'simón': True,
+            'claro': True,
+            # Negativo
+            'no': False,
+            'nel': False,
+            'nop': False,
+            'nope': False
+        }
     
     def get_welcome_message(self) -> str:
         """Retorna mensaje de bienvenida"""
@@ -73,32 +125,34 @@ class ConversationFlow:
             str: Mensaje para el usuario
         """
         if current_state == self.STATES['GET_AREA']:
-            return "¿Cuántas hectáreas planeas sembrar? 🌱"
+            return (
+                "¿Cuántas hectáreas planeas sembrar? 🌱\n\n"
+                "Puedes responder con números o texto, por ejemplo:\n"
+                "- 2.5\n"
+                "- Dos y media\n"
+                "- 2 1/2"
+            )
             
         elif current_state == self.STATES['GET_CHANNEL']:
-            channels = [
-                "1. Mayorista",
-                "2. Cooperativa",
-                "3. Exportación",
-                "4. Mercado Local"
-            ]
             return (
-                "¿Cómo planeas comercializar tu producto? 🏪\n\n" +
-                "\n".join(channels) +
-                "\n\nResponde con el número de tu elección"
+                "¿Cómo planeas comercializar tu producto? 🏪\n\n"
+                "Puedes elegir:\n"
+                "1. Mayorista\n"
+                "2. Cooperativa\n"
+                "3. Exportación\n"
+                "4. Mercado Local\n\n"
+                "Responde con el número o nombre de tu elección"
             )
             
         elif current_state == self.STATES['GET_IRRIGATION']:
-            irrigation = [
-                "1. Gravedad",
-                "2. Aspersión",
-                "3. Goteo",
-                "4. Ninguno"
-            ]
             return (
-                "¿Qué sistema de riego utilizarás? 💧\n\n" +
-                "\n".join(irrigation) +
-                "\n\nResponde con el número de tu elección"
+                "¿Qué sistema de riego utilizarás? 💧\n\n"
+                "Puedes elegir:\n"
+                "1. Gravedad\n"
+                "2. Aspersión\n"
+                "3. Goteo\n"
+                "4. Ninguno\n\n"
+                "Responde con el número o nombre del sistema"
             )
             
         elif current_state == self.STATES['GET_LOCATION']:
@@ -131,30 +185,66 @@ class ConversationFlow:
             return False, None
             
         elif current_state == self.STATES['GET_AREA']:
+            # Primero intentar convertir directamente
             try:
                 area = float(user_input.replace(',', '.'))
                 if 0.1 <= area <= 100:
                     return True, area
             except:
                 pass
+            
+            # Si falla, intentar procesar texto
+            try:
+                # Limpiar texto
+                text = user_input.lower().replace('hectareas', '').replace('hectáreas', '')
+                text = text.replace('ha', '').strip()
+                
+                # Procesar fracciones
+                if '/' in text:
+                    num, den = map(float, text.split('/'))
+                    area = num/den
+                    if 0.1 <= area <= 100:
+                        return True, area
+                
+                # Mapeo de números escritos
+                number_mapping = {
+                    'media': 0.5,
+                    'un': 1, 'una': 1,
+                    'dos': 2,
+                    'tres': 3,
+                    'cuatro': 4,
+                    'cinco': 5,
+                    'seis': 6,
+                    'siete': 7,
+                    'ocho': 8,
+                    'nueve': 9,
+                    'diez': 10
+                }
+                
+                for num_text, value in number_mapping.items():
+                    if num_text in text:
+                        if 'y media' in text:
+                            value += 0.5
+                        if 0.1 <= value <= 100:
+                            return True, value
+                
+            except Exception as e:
+                logger.error(f"Error procesando área en texto: {str(e)}")
+            
             return False, None
             
         elif current_state == self.STATES['GET_CHANNEL']:
-            try:
-                option = int(user_input)
-                if 1 <= option <= len(self.valid_channels):
-                    return True, self.valid_channels[option - 1]
-            except:
-                pass
+            # Buscar en el mapeo de canales
+            for key, value in self.channel_mapping.items():
+                if key in user_input:
+                    return True, value
             return False, None
             
         elif current_state == self.STATES['GET_IRRIGATION']:
-            try:
-                option = int(user_input)
-                if 1 <= option <= len(self.valid_irrigation):
-                    return True, self.valid_irrigation[option - 1]
-            except:
-                pass
+            # Buscar en el mapeo de sistemas de riego
+            for key, value in self.irrigation_mapping.items():
+                if key in user_input:
+                    return True, value
             return False, None
             
         elif current_state == self.STATES['GET_LOCATION']:
@@ -163,8 +253,10 @@ class ConversationFlow:
             return False, None
             
         elif current_state in [self.STATES['ASK_LOAN'], self.STATES['CONFIRM_LOAN']]:
-            if user_input in ['si', 'no']:
-                return True, user_input == 'si'
+            # Buscar en el mapeo de sí/no
+            for key, value in self.yes_no_mapping.items():
+                if key in user_input:
+                    return True, value
             return False, None
             
         return False, None
