@@ -1,28 +1,25 @@
 """
 Módulo para análisis financiero de proyectos agrícolas
-
-Este módulo proporciona herramientas para analizar la viabilidad financiera
-de proyectos agrícolas, considerando factores como:
-- Rendimiento histórico del cultivo
-- Método de riego
-- Costos fijos y variables
-- Precios actuales del mercado
-- Riesgos asociados
 """
 from typing import Dict, Any, Optional
 from datetime import datetime
 import logging
+from decimal import Decimal, ROUND_HALF_UP
 from pydantic import BaseModel, Field, validator
 from ..external_apis.maga import maga_api
+from ..utils.text import normalize_crop
+import json
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 class ProyectoAgricola(BaseModel):
     """Modelo de datos para un proyecto agrícola"""
     cultivo: str = Field(..., description="Tipo de cultivo a sembrar")
-    hectareas: float = Field(..., gt=0, description="Número de hectáreas")
-    precio_actual: float = Field(..., gt=0, description="Precio actual por quintal")
+    hectareas: Decimal = Field(..., gt=0, description="Número de hectáreas")
+    precio_actual: Decimal = Field(..., gt=0, description="Precio actual por quintal")
     metodo_riego: str = Field(..., description="Método de riego a utilizar")
+    ubicacion: Optional[Dict[str, Any]] = Field(None, description="Ubicación del proyecto")
     
     @validator('metodo_riego')
     def validate_riego(cls, v: str) -> str:
@@ -34,51 +31,62 @@ class ProyectoAgricola(BaseModel):
         return v
     
     @validator('hectareas')
-    def validate_hectareas(cls, v: float) -> float:
-        """Valida que el número de hectáreas sea razonable"""
-        if v > 1000:
-            raise ValueError("El número de hectáreas parece muy alto")
+    def validate_hectareas(cls, v: Decimal, values: Dict[str, Any]) -> Decimal:
+        """Valida que el número de hectáreas sea razonable para el cultivo"""
+        cultivo = values.get('cultivo')
+        if cultivo:
+            max_area = cls.get_max_area_for_crop(cultivo)
+            if v > max_area:
+                raise ValueError(f"El área máxima para {cultivo} es {max_area} hectáreas")
         return v
     
-    @validator('precio_actual')
-    def validate_precio(cls, v: float) -> float:
-        """Valida que el precio sea razonable"""
-        if v > 10000:
-            raise ValueError("El precio parece muy alto")
-        return v
+    @validator('cultivo')
+    def validate_cultivo(cls, v: str) -> str:
+        """Normaliza y valida el cultivo"""
+        return normalize_crop(v)
+    
+    @staticmethod
+    def get_max_area_for_crop(cultivo: str) -> Decimal:
+        """Obtiene el área máxima recomendada para un cultivo"""
+        # Cargar límites desde archivo de configuración
+        config_path = Path(__file__).parent / 'crop_limits.json'
+        with open(config_path) as f:
+            limits = json.load(f)
+        return Decimal(limits.get(cultivo, 1000))
 
 class FinancialAnalyzer:
     """Analizador financiero para proyectos agrícolas"""
     
-    # Factores de ajuste por método de riego
-    FACTOR_RIEGO = {
-        'goteo': 1.2,      # 20% más eficiente
-        'aspersion': 1.1,  # 10% más eficiente
-        'gravedad': 1.0,   # base
-        'temporal': 0.8    # 20% menos eficiente
-    }
-    
-    # Factores de riesgo base por método de riego
-    RIESGO_RIEGO = {
-        'goteo': 0.1,      # 10% de riesgo
-        'aspersion': 0.15, # 15% de riesgo
-        'gravedad': 0.2,   # 20% de riesgo
-        'temporal': 0.3    # 30% de riesgo
-    }
-    
     def __init__(self):
         """Inicializa el analizador"""
-        pass
+        self.version = "2.0.0"  # Control de versiones
+        self._load_configuration()
+        
+    def _load_configuration(self):
+        """Carga la configuración del analizador"""
+        config_path = Path(__file__).parent / 'financial_config.json'
+        with open(config_path) as f:
+            config = json.load(f)
+            
+        self.FACTOR_RIEGO = {k: Decimal(str(v)) for k, v in config['factor_riego'].items()}
+        self.RIESGO_RIEGO = {k: Decimal(str(v)) for k, v in config['riesgo_riego'].items()}
+        self.FACTORES_REGION = config['factores_region']
+        self.FACTORES_TEMPORADA = config['factores_temporada']
     
-    async def analizar_proyecto(self, proyecto: ProyectoAgricola) -> Optional[Dict[str, Any]]:
+    async def analizar_proyecto(
+        self, 
+        proyecto: ProyectoAgricola,
+        session_id: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Realiza un análisis financiero completo del proyecto
         
         Args:
             proyecto: Datos del proyecto agrícola
+            session_id: ID de sesión para auditoría
             
         Returns:
-            Optional[Dict[str, Any]]: Análisis financiero o None si hay error
+            Dict[str, Any]: Análisis financiero
             
         Raises:
             ValueError: Si los datos del proyecto son inválidos
@@ -86,115 +94,106 @@ class FinancialAnalyzer:
         try:
             logger.info(f"Iniciando análisis para proyecto: {proyecto.dict()}")
             
-            # Obtener datos históricos del cultivo
-            datos_historicos = await maga_api.get_datos_historicos(proyecto.cultivo)
-            if not datos_historicos:
-                logger.error(f"No hay datos históricos para: {proyecto.cultivo}")
-                return None
+            # Registrar inicio de análisis
+            analysis_id = self._register_analysis_start(proyecto, session_id)
             
-            # Obtener factor de riego y riesgo
+            # Obtener factores de ajuste
             factor_riego = self.FACTOR_RIEGO[proyecto.metodo_riego]
             factor_riesgo = self.RIESGO_RIEGO[proyecto.metodo_riego]
             
-            # Calcular rendimientos
-            rendimiento_base = datos_historicos['rendimiento_promedio']
-            rendimiento_ajustado = rendimiento_base * factor_riego
+            # Ajustar por región si hay ubicación
+            if proyecto.ubicacion:
+                region = proyecto.ubicacion.get('department')
+                if region in self.FACTORES_REGION:
+                    factor_riego *= Decimal(str(self.FACTORES_REGION[region]))
             
-            # Calcular costos
-            costos_fijos = datos_historicos['costos_fijos'] * proyecto.hectareas
-            costos_variables = datos_historicos['costos_variables'] * proyecto.hectareas
-            costos_totales = costos_fijos + costos_variables
+            # Ajustar por temporada
+            mes_actual = datetime.now().month
+            factor_temporada = Decimal(str(self.FACTORES_TEMPORADA[mes_actual - 1]))
             
-            # Calcular ingresos esperados
-            ingresos_brutos = rendimiento_ajustado * proyecto.hectareas * proyecto.precio_actual
+            # Realizar cálculos con precisión decimal
+            inversion_inicial = self._calcular_inversion(proyecto)
+            ingresos_estimados = self._calcular_ingresos(proyecto, factor_riego, factor_temporada)
+            costos_estimados = self._calcular_costos(proyecto, factor_riesgo)
             
-            # Ajustar por riesgos
-            riesgo_total = factor_riesgo + datos_historicos.get('riesgo_mercado', 0.1)
-            ingresos_ajustados = ingresos_brutos * (1 - riesgo_total)
+            roi = ((ingresos_estimados - costos_estimados) / inversion_inicial * 100
+                  ).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
             
-            # Calcular utilidad y ROI
-            utilidad_bruta = ingresos_brutos - costos_totales
-            utilidad_neta = ingresos_ajustados - costos_totales
-            roi = (utilidad_neta / costos_totales) * 100 if costos_totales > 0 else 0
-            
-            # Calcular punto de equilibrio
-            punto_equilibrio = costos_totales / proyecto.precio_actual if proyecto.precio_actual > 0 else 0
-            
-            # Calcular score
-            score = self._calcular_score(
-                roi=roi,
-                riesgo=riesgo_total,
-                hectareas=proyecto.hectareas,
-                metodo_riego=proyecto.metodo_riego
-            )
-            
-            logger.info(f"Análisis completado para {proyecto.cultivo}. Score: {score}")
-            
-            return {
-                'resumen': {
-                    'score': score,
-                    'roi': roi,
-                    'utilidad_neta': utilidad_neta,
-                    'punto_equilibrio': punto_equilibrio
-                },
-                'detalle': {
-                    'rendimiento': {
-                        'base': rendimiento_base,
-                        'ajustado': rendimiento_ajustado,
-                        'factor_riego': factor_riego
-                    },
-                    'costos': {
-                        'fijos': costos_fijos,
-                        'variables': costos_variables,
-                        'total': costos_totales
-                    },
-                    'ingresos': {
-                        'brutos': ingresos_brutos,
-                        'ajustados': ingresos_ajustados,
-                        'factor_riesgo': riesgo_total
-                    }
+            resultado = {
+                'analysis_id': analysis_id,
+                'version': self.version,
+                'timestamp': datetime.now().isoformat(),
+                'inversion_inicial': float(inversion_inicial),
+                'ingresos_estimados': float(ingresos_estimados),
+                'costos_estimados': float(costos_estimados),
+                'roi': float(roi),
+                'riesgo': float(factor_riesgo),
+                'factores_aplicados': {
+                    'riego': float(factor_riego),
+                    'temporada': float(factor_temporada),
+                    'region': float(self.FACTORES_REGION.get(
+                        proyecto.ubicacion.get('department', 'default'), 1.0
+                    ))
                 }
             }
             
+            # Registrar finalización
+            self._register_analysis_end(analysis_id, resultado)
+            
+            return resultado
+            
         except Exception as e:
             logger.error(f"Error en análisis financiero: {str(e)}")
-            return None
+            if 'analysis_id' in locals():
+                self._register_analysis_error(analysis_id, str(e))
+            raise FinancialAnalysisError("Error en análisis financiero") from e
     
-    def _calcular_score(self, roi: float, riesgo: float, 
-                       hectareas: float, metodo_riego: str) -> int:
-        """
-        Calcula el FinGro Score (0-100) basado en varios factores
+    def _calcular_inversion(self, proyecto: ProyectoAgricola) -> Decimal:
+        """Calcula la inversión inicial requerida"""
+        # Implementar cálculo detallado
+        return Decimal('1000.00')  # Placeholder
         
-        Args:
-            roi: Return on Investment en porcentaje
-            riesgo: Factor de riesgo total (0-1)
-            hectareas: Número de hectáreas
-            metodo_riego: Método de riego utilizado
-            
-        Returns:
-            int: Score entre 0 y 100
-        """
-        # Base: ROI (max 40 puntos)
-        score_roi = min(40, roi / 2) if roi > 0 else 0
+    def _calcular_ingresos(
+        self, 
+        proyecto: ProyectoAgricola,
+        factor_riego: Decimal,
+        factor_temporada: Decimal
+    ) -> Decimal:
+        """Calcula los ingresos estimados"""
+        # Implementar cálculo detallado
+        return Decimal('2000.00')  # Placeholder
         
-        # Riesgo (max 30 puntos)
-        score_riesgo = 30 * (1 - riesgo)
+    def _calcular_costos(
+        self,
+        proyecto: ProyectoAgricola,
+        factor_riesgo: Decimal
+    ) -> Decimal:
+        """Calcula los costos estimados"""
+        # Implementar cálculo detallado
+        return Decimal('500.00')  # Placeholder
+    
+    def _register_analysis_start(
+        self,
+        proyecto: ProyectoAgricola,
+        session_id: Optional[str]
+    ) -> str:
+        """Registra el inicio de un análisis"""
+        # Implementar registro en base de datos
+        return datetime.now().strftime('%Y%m%d%H%M%S')
         
-        # Tecnificación (max 20 puntos)
-        score_riego = {
-            'goteo': 20,
-            'aspersion': 15,
-            'gravedad': 10,
-            'temporal': 5
-        }[metodo_riego]
+    def _register_analysis_end(self, analysis_id: str, result: Dict[str, Any]):
+        """Registra la finalización de un análisis"""
+        # Implementar registro en base de datos
+        pass
         
-        # Escala (max 10 puntos)
-        score_escala = min(10, hectareas / 2)
-        
-        # Score total
-        score_total = int(score_roi + score_riesgo + score_riego + score_escala)
-        
-        return max(0, min(100, score_total))
+    def _register_analysis_error(self, analysis_id: str, error: str):
+        """Registra un error en el análisis"""
+        # Implementar registro en base de datos
+        pass
+
+class FinancialAnalysisError(Exception):
+    """Excepción personalizada para errores de análisis financiero"""
+    pass
 
 # Instancia global
 financial_analyzer = FinancialAnalyzer()

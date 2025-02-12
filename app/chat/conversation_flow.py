@@ -1,15 +1,60 @@
 """
 Módulo para manejar el flujo de conversación con usuarios
 """
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 import logging
+from datetime import datetime, timedelta
+import asyncio
 from app.models.financial_model import financial_model
 from app.views.financial_report import report_generator
 from app.external_apis.maga import CanalComercializacion
-from app.database.firebase import firebase_manager
+from app.database.firebase import firebase_manager, FirebaseError
 from app.external_apis.maga_precios import maga_api
+from app.utils.text import normalize_crop, sanitize_data
+from app.analysis.financial import ProyectoAgricola, financial_analyzer
 
 logger = logging.getLogger(__name__)
+
+class ConversationState:
+    """Estado de la conversación"""
+    def __init__(self, state: str = 'START', data: Dict[str, Any] = None):
+        self.state = state
+        self.data = data or {}
+        self.last_interaction = datetime.now()
+        self.session_id = None
+        
+    def is_expired(self, timeout: timedelta = timedelta(minutes=30)) -> bool:
+        """Verifica si la conversación ha expirado"""
+        return datetime.now() - self.last_interaction > timeout
+        
+    def update(self, state: Optional[str] = None, **kwargs):
+        """Actualiza el estado"""
+        if state:
+            self.state = state
+        self.data.update(kwargs)
+        self.last_interaction = datetime.now()
+        
+    def to_dict(self) -> Dict[str, Any]:
+        """Convierte el estado a diccionario"""
+        return {
+            'state': self.state,
+            'data': self.data,
+            'last_interaction': self.last_interaction.isoformat(),
+            'session_id': self.session_id
+        }
+        
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'ConversationState':
+        """Crea un estado desde un diccionario"""
+        state = cls(
+            state=data.get('state', 'START'),
+            data=data.get('data', {})
+        )
+        state.last_interaction = datetime.fromisoformat(
+            data.get('last_interaction', datetime.now().isoformat())
+        )
+        state.session_id = data.get('session_id')
+        return state
 
 class ConversationFlow:
     """Maneja el flujo de conversación con usuarios"""
@@ -67,427 +112,212 @@ class ConversationFlow:
             '1': 'gravedad',
             '2': 'aspersion',
             '3': 'goteo',
-            '4': 'ninguno',
+            '4': 'temporal',
             # Texto exacto
             'gravedad': 'gravedad',
             'aspersion': 'aspersion',
             'aspersión': 'aspersion',
             'goteo': 'goteo',
-            'ninguno': 'ninguno',
+            'temporal': 'temporal',
             # Variaciones comunes
             'por gravedad': 'gravedad',
             'por aspersion': 'aspersion',
             'por aspersión': 'aspersion',
             'por goteo': 'goteo',
-            'no': 'ninguno',
-            'nada': 'ninguno',
-            'sin riego': 'ninguno'
-        }
-        
-        # Mapeo de respuestas afirmativas/negativas
-        self.yes_no_mapping = {
-            # Afirmativo
-            'si': True,
-            'sí': True,
-            'yes': True,
-            'ok': True,
-            'dale': True,
-            'va': True,
-            'simon': True,
-            'simón': True,
-            'claro': True,
-            # Negativo
-            'no': False,
-            'nel': False,
-            'nop': False,
-            'nope': False
+            'lluvia': 'temporal',
+            'natural': 'temporal',
+            'ninguno': 'temporal'
         }
     
-    def get_welcome_message(self) -> str:
-        """Retorna mensaje de bienvenida"""
-        return (
-            "👋 ¡Hola! Soy FinGro, tu asistente financiero agrícola.\n\n"
-            "Te ayudaré a analizar la rentabilidad de tu proyecto y "
-            "obtener financiamiento. 🌱💰\n\n"
-            "Para empezar, *¿qué cultivo planeas sembrar?* 🌾\n\n"
-            "Por ejemplo: maíz, frijol, papa, tomate, etc."
-        )
-    
-    def get_next_message(self, current_state: str, user_data: Dict[str, Any]) -> str:
+    async def handle_message(self, phone: str, message: str) -> str:
         """
-        Obtiene el siguiente mensaje según el estado actual
-        
-        Args:
-            current_state: Estado actual de la conversación
-            user_data: Datos del usuario
-            
-        Returns:
-            str: Mensaje para el usuario
-        """
-        if current_state == self.STATES['GET_AREA']:
-            return (
-                "¿Cuántas hectáreas planeas sembrar? 🌱\n\n"
-                "Puedes responder con números o texto, por ejemplo:\n"
-                "- 2.5\n"
-                "- Dos y media\n"
-                "- 2 1/2"
-            )
-            
-        elif current_state == self.STATES['GET_CHANNEL']:
-            return (
-                "¿Cómo planeas comercializar tu producto? 🏪\n\n"
-                "Puedes elegir:\n"
-                "1. Mayorista\n"
-                "2. Cooperativa\n"
-                "3. Exportación\n"
-                "4. Mercado Local\n\n"
-                "Responde con el número o nombre de tu elección"
-            )
-            
-        elif current_state == self.STATES['GET_IRRIGATION']:
-            return (
-                "¿Qué sistema de riego utilizarás? 💧\n\n"
-                "Puedes elegir:\n"
-                "1. Gravedad\n"
-                "2. Aspersión\n"
-                "3. Goteo\n"
-                "4. Ninguno\n\n"
-                "Responde con el número o nombre del sistema"
-            )
-            
-        elif current_state == self.STATES['GET_LOCATION']:
-            return "¿En qué departamento está ubicado el terreno? 📍"
-            
-        return "❌ Estado no válido"
-    
-    async def validate_input(self, current_state: str, user_input: str) -> tuple:
-        """
-        Valida la entrada del usuario
-        
-        Args:
-            current_state: Estado actual
-            user_input: Entrada del usuario
-            
-        Returns:
-            tuple: (es_valido, valor_procesado)
-        """
-        # Normalizar entrada
-        user_input = user_input.lower().strip()
-        
-        if current_state == self.STATES['GET_CROP']:
-            # Aceptar cualquier texto no vacío como cultivo
-            user_input = user_input.strip()
-            if user_input:
-                logger.info(f"Cultivo ingresado: {user_input}")
-                return True, {
-                    'nombre': user_input,
-                    'input_original': user_input  # Guardamos el texto original para búsqueda posterior
-                }
-            else:
-                logger.warning("Entrada de cultivo vacía")
-                return False, None
-            
-        elif current_state == self.STATES['GET_AREA']:
-            # Primero intentar convertir directamente
-            try:
-                area = float(user_input.replace(',', '.'))
-                if 0.1 <= area <= 100:
-                    return True, area
-            except:
-                pass
-            
-            # Si falla, intentar procesar texto
-            try:
-                # Limpiar texto
-                text = user_input.lower().replace('hectareas', '').replace('hectáreas', '')
-                text = text.replace('ha', '').strip()
-                
-                # Procesar fracciones
-                if '/' in text:
-                    num, den = map(float, text.split('/'))
-                    area = num/den
-                    if 0.1 <= area <= 100:
-                        return True, area
-                
-                # Mapeo de números escritos
-                number_mapping = {
-                    'media': 0.5,
-                    'un': 1, 'una': 1,
-                    'dos': 2,
-                    'tres': 3,
-                    'cuatro': 4,
-                    'cinco': 5,
-                    'seis': 6,
-                    'siete': 7,
-                    'ocho': 8,
-                    'nueve': 9,
-                    'diez': 10
-                }
-                
-                for num_text, value in number_mapping.items():
-                    if num_text in text:
-                        if 'y media' in text:
-                            value += 0.5
-                        if 0.1 <= value <= 100:
-                            return True, value
-                
-            except Exception as e:
-                logger.error(f"Error procesando área en texto: {str(e)}")
-            
-            return False, None
-            
-        elif current_state == self.STATES['GET_CHANNEL']:
-            # Buscar en el mapeo de canales
-            for key, value in self.channel_mapping.items():
-                if key in user_input:
-                    return True, value
-            return False, None
-            
-        elif current_state == self.STATES['GET_IRRIGATION']:
-            # Buscar en el mapeo de sistemas de riego
-            for key, value in self.irrigation_mapping.items():
-                if key in user_input:
-                    return True, value
-            return False, None
-            
-        elif current_state == self.STATES['GET_LOCATION']:
-            if len(user_input) > 0:
-                return True, user_input
-            return False, None
-            
-        elif current_state in [self.STATES['ASK_LOAN'], self.STATES['CONFIRM_LOAN']]:
-            # Buscar en el mapeo de sí/no
-            for key, value in self.yes_no_mapping.items():
-                if key in user_input:
-                    return True, value
-            return False, None
-            
-        return False, None
-    
-    def get_error_message(self, current_state: str) -> str:
-        """
-        Obtiene mensaje de error según el estado
-        
-        Args:
-            current_state: Estado actual
-            
-        Returns:
-            str: Mensaje de error
-        """
-        if current_state == self.STATES['GET_CROP']:
-            return (
-                "❌ No encontré ese cultivo en nuestra base de datos.\n"
-                "Por favor, intenta con otro nombre o verifica la ortografía."
-            )
-            
-        elif current_state == self.STATES['GET_AREA']:
-            return (
-                "❌ Por favor ingresa un área válida entre 0.1 y 100 hectáreas\n\n"
-                "Ejemplo: 2.5"
-            )
-            
-        elif current_state == self.STATES['GET_CHANNEL']:
-            return "❌ Por favor selecciona una opción válida (1-4)"
-            
-        elif current_state == self.STATES['GET_IRRIGATION']:
-            return "❌ Por favor selecciona una opción válida (1-4)"
-            
-        elif current_state == self.STATES['GET_LOCATION']:
-            return "❌ Por favor ingresa una ubicación válida"
-            
-        elif current_state in [self.STATES['ASK_LOAN'], self.STATES['CONFIRM_LOAN']]:
-            return "❌ Por favor responde SI o NO"
-            
-        return "❌ Error desconocido"
-    
-    def get_next_state(self, current_state: str, user_input: str = None) -> str:
-        """
-        Obtiene el siguiente estado de la conversación
-        
-        Args:
-            current_state: Estado actual
-            user_input: Entrada del usuario opcional
-            
-        Returns:
-            str: Siguiente estado
-        """
-        if current_state == self.STATES['START']:
-            return self.STATES['GET_CROP']
-            
-        elif current_state == self.STATES['GET_CROP']:
-            if user_input and user_input.lower() == 'otra':
-                return self.STATES['GET_CROP']
-            return self.STATES['GET_AREA']
-            
-        elif current_state == self.STATES['GET_AREA']:
-            return self.STATES['GET_CHANNEL']
-            
-        elif current_state == self.STATES['GET_CHANNEL']:
-            return self.STATES['GET_IRRIGATION']
-            
-        elif current_state == self.STATES['GET_IRRIGATION']:
-            return self.STATES['GET_LOCATION']
-            
-        elif current_state == self.STATES['GET_LOCATION']:
-            return self.STATES['SHOW_REPORT']
-            
-        elif current_state == self.STATES['SHOW_REPORT']:
-            return self.STATES['ASK_LOAN']
-            
-        elif current_state == self.STATES['ASK_LOAN']:
-            if user_input and user_input.lower() == 'si':
-                return self.STATES['SHOW_LOAN']
-            return self.STATES['DONE']
-            
-        elif current_state == self.STATES['SHOW_LOAN']:
-            return self.STATES['CONFIRM_LOAN']
-            
-        elif current_state == self.STATES['CONFIRM_LOAN']:
-            return self.STATES['DONE']
-            
-        return self.STATES['START']
-    
-    async def process_show_report(self, user_data: Dict[str, Any]) -> str:
-        """
-        Procesa y muestra el reporte financiero
-        
-        Args:
-            user_data: Datos del usuario
-            
-        Returns:
-            str: Reporte formateado
-        """
-        try:
-            # Buscar precio del cultivo en MAGA
-            crop_name = user_data.get('crop', {}).get('input_original', '')
-            logger.info(f"Buscando precio para cultivo: {crop_name}")
-            
-            crop_info = await maga_api.search_crop(crop_name)
-            if not crop_info:
-                logger.warning(f"No se encontró precio para: {crop_name}")
-                return (
-                    f"❌ Lo siento, no pude encontrar información de precios para *{crop_name}*.\n\n"
-                    "¿Podrías intentar de nuevo con otro cultivo? Usa el comando 'reiniciar'"
-                )
-            
-            # Actualizar datos con información de MAGA
-            user_data['crop']['precio'] = crop_info['precio']
-            user_data['crop']['unidad'] = crop_info['unidad']
-            
-            # Generar reporte financiero
-            report = report_generator.generate_report(
-                crop_name=crop_name,
-                area=user_data.get('area', 0),
-                precio=crop_info['precio'],
-                unidad=crop_info['unidad'],
-                canal=user_data.get('channel', ''),
-                riego=user_data.get('irrigation', ''),
-                ubicacion=user_data.get('location', '')
-            )
-            
-            return report
-            
-        except Exception as e:
-            logger.error(f"Error generando reporte: {str(e)}")
-            return "❌ Ocurrió un error generando el reporte. Por favor intenta de nuevo."
-    
-    def process_show_loan(self, user_data: Dict[str, Any]) -> str:
-        """
-        Muestra la oferta de préstamo
-        
-        Args:
-            user_data: Datos del usuario
-            
-        Returns:
-            str: Oferta formateada
-        """
-        try:
-            score_data = user_data.get('score_data')
-            if not score_data:
-                return "❌ Error: No hay datos de análisis"
-            
-            return report_generator.generate_loan_offer(score_data)
-            
-        except Exception as e:
-            logger.error(f"Error mostrando préstamo: {str(e)}")
-            return (
-                "❌ Error generando oferta\n\n"
-                "Por favor intenta de nuevo más tarde."
-            )
-    
-    def process_confirm_loan(self) -> str:
-        """Genera mensaje de confirmación de solicitud"""
-        return report_generator.generate_success_message()
-    
-    async def handle_message(self, phone: str, text: str) -> str:
-        """
-        Maneja el mensaje entrante y actualiza el estado de la conversación
+        Maneja un mensaje entrante
         
         Args:
             phone: Número de teléfono del usuario
-            text: Mensaje de texto enviado por el usuario
+            message: Mensaje recibido
             
         Returns:
-            str: Respuesta generada para el usuario
+            str: Respuesta al usuario
         """
         try:
-            # Obtener estado actual del usuario
-            current_state = await firebase_manager.get_conversation_state(phone)
+            # Obtener o crear estado
+            state = await self._get_state(phone)
             
-            # Normalizar entrada
-            text = text.lower().strip()
+            # Verificar timeout
+            if state.is_expired():
+                await self._reset_state(phone)
+                return "👋 ¡Hola de nuevo! Tu sesión anterior expiró. Empecemos de nuevo:\n\n¿Qué cultivo planeas sembrar?"
+            
+            # Procesar mensaje
+            message = message.strip().lower()
             
             # Verificar comandos especiales
-            if text in self.SPECIAL_COMMANDS:
-                current_state = {
-                    'state': self.STATES[self.SPECIAL_COMMANDS[text]],
-                    'data': {}
-                }
-                await firebase_manager.update_user_state(phone, current_state)
-                return self.get_welcome_message()
+            if message in self.SPECIAL_COMMANDS:
+                new_state = self.SPECIAL_COMMANDS[message]
+                if new_state == 'HELP':
+                    return self._get_help_message(state.state)
+                state.update(state='START')
+                await self._save_state(phone, state)
+                return "👋 ¡Empecemos de nuevo!\n\n¿Qué cultivo planeas sembrar?"
             
-            # Si es un usuario nuevo o no tiene estado, inicializar
-            if not current_state or 'state' not in current_state:
-                current_state = {
-                    'state': self.STATES['START'],
-                    'data': {}
-                }
-                await firebase_manager.update_user_state(phone, current_state)
-                return self.get_welcome_message()
+            # Procesar según el estado actual
+            response = await self._process_state(state, message)
             
-            # Validar entrada del usuario
-            is_valid, processed_input = await self.validate_input(current_state['state'], text)
+            # Guardar estado actualizado
+            await self._save_state(phone, state)
             
-            if not is_valid:
-                return "❌ Entrada no válida. Por favor intenta de nuevo."
+            return response
             
-            # Obtener siguiente estado
-            next_state = self.get_next_state(current_state['state'], text)
-            
-            # Actualizar datos del usuario
-            if processed_input is not None:
-                current_state['data'][current_state['state']] = processed_input
-            current_state['state'] = next_state
-            
-            # Actualizar estado del usuario
-            await firebase_manager.update_user_state(phone, current_state)
-            
-            # Obtener mensaje de respuesta
-            response_message = self.get_next_message(next_state, current_state['data'])
-            
-            # Procesar estados especiales
-            if next_state == self.STATES['SHOW_REPORT']:
-                response_message = await self.process_show_report(current_state['data'])
-            elif next_state == self.STATES['SHOW_LOAN']:
-                response_message = self.process_show_loan(current_state['data'])
-            elif next_state == self.STATES['CONFIRM_LOAN']:
-                response_message = self.process_confirm_loan()
-            
-            return response_message
+        except FirebaseError as e:
+            logger.error(f"Error de Firebase: {str(e)}")
+            return "😕 Lo siento, estamos teniendo problemas técnicos. Por favor, intenta más tarde."
             
         except Exception as e:
-            logger.error(f"Error handling message: {str(e)}", exc_info=True)
-            return "❌ Lo siento, hubo un error procesando tu mensaje. Por favor intenta de nuevo."
+            logger.error(f"Error procesando mensaje: {str(e)}")
+            return "😕 Hubo un error inesperado. Por favor, intenta de nuevo o escribe 'reiniciar'."
     
+    async def _process_state(self, state: ConversationState, message: str) -> str:
+        """Procesa el mensaje según el estado actual"""
+        try:
+            if state.state == 'START' or state.state == 'GET_CROP':
+                # Normalizar y validar cultivo
+                cultivo = normalize_crop(message)
+                state.update('GET_AREA', cultivo=cultivo)
+                return "📏 ¿Cuántas hectáreas planeas sembrar?"
+                
+            elif state.state == 'GET_AREA':
+                try:
+                    area = float(message.replace(',', '.'))
+                    if area <= 0:
+                        return "❌ El área debe ser mayor a 0. Intenta de nuevo:"
+                    if area > 1000:
+                        return "❌ El área parece muy grande. Por favor verifica e intenta de nuevo:"
+                    state.update('GET_CHANNEL', area=area)
+                    return ("🏪 ¿Cómo planeas comercializar tu cosecha?\n\n"
+                           "1. Mayorista\n"
+                           "2. Cooperativa\n"
+                           "3. Exportación\n"
+                           "4. Mercado Local")
+                except ValueError:
+                    return "❌ Por favor ingresa un número válido de hectáreas:"
+                    
+            elif state.state == 'GET_CHANNEL':
+                channel = self.channel_mapping.get(message)
+                if not channel:
+                    return ("❌ Por favor selecciona una opción válida:\n\n"
+                           "1. Mayorista\n"
+                           "2. Cooperativa\n"
+                           "3. Exportación\n"
+                           "4. Mercado Local")
+                state.update('GET_IRRIGATION', channel=channel)
+                return ("💧 ¿Qué sistema de riego utilizarás?\n\n"
+                       "1. Gravedad\n"
+                       "2. Aspersión\n"
+                       "3. Goteo\n"
+                       "4. Temporal (lluvia)")
+                       
+            elif state.state == 'GET_IRRIGATION':
+                irrigation = self.irrigation_mapping.get(message)
+                if not irrigation:
+                    return ("❌ Por favor selecciona una opción válida:\n\n"
+                           "1. Gravedad\n"
+                           "2. Aspersión\n"
+                           "3. Goteo\n"
+                           "4. Temporal (lluvia)")
+                state.update('GET_LOCATION', irrigation=irrigation)
+                return "📍 ¿En qué departamento está ubicado el terreno?"
+                
+            elif state.state == 'GET_LOCATION':
+                # Aquí podríamos validar contra una lista de departamentos
+                state.update('SHOW_REPORT', location=message)
+                
+                # Crear proyecto y analizar
+                proyecto = ProyectoAgricola(
+                    cultivo=state.data['cultivo'],
+                    hectareas=state.data['area'],
+                    precio_actual=maga_api.get_precio(state.data['cultivo']),
+                    metodo_riego=state.data['irrigation'],
+                    ubicacion={'department': state.data['location']}
+                )
+                
+                analysis = await financial_analyzer.analizar_proyecto(
+                    proyecto,
+                    session_id=state.session_id
+                )
+                
+                # Generar reporte
+                report = report_generator.generate_report(analysis)
+                state.update('ASK_LOAN', analysis=analysis)
+                
+                return (f"{report}\n\n"
+                       "¿Te gustaría solicitar un préstamo para este proyecto? (sí/no)")
+                       
+            elif state.state == 'ASK_LOAN':
+                if message in ['si', 'sí', 'yes', 'dale']:
+                    state.update('SHOW_LOAN')
+                    return ("💰 Basado en tu análisis, podrías calificar para un préstamo.\n\n"
+                           "¿Deseas que te contacte un asesor? (sí/no)")
+                else:
+                    state.update('DONE')
+                    return "👍 ¡Gracias por usar FinGro! Si necesitas otro análisis, escribe 'reiniciar'."
+                    
+            elif state.state == 'SHOW_LOAN':
+                if message in ['si', 'sí', 'yes', 'dale']:
+                    state.update('DONE')
+                    return ("✅ ¡Perfecto! Un asesor te contactará pronto.\n\n"
+                           "Si necesitas otro análisis, escribe 'reiniciar'.")
+                else:
+                    state.update('DONE')
+                    return "👍 ¡Gracias por usar FinGro! Si necesitas otro análisis, escribe 'reiniciar'."
+            
+            else:
+                state.update('START')
+                return "👋 ¡Bienvenido a FinGro!\n\n¿Qué cultivo planeas sembrar?"
+                
+        except Exception as e:
+            logger.error(f"Error en _process_state: {str(e)}")
+            raise
+    
+    async def _get_state(self, phone: str) -> ConversationState:
+        """Obtiene el estado de la conversación"""
+        try:
+            data = await firebase_manager.get_conversation_state(phone)
+            if data:
+                return ConversationState.from_dict(data)
+            return ConversationState()
+        except Exception as e:
+            logger.error(f"Error obteniendo estado: {str(e)}")
+            raise
+            
+    async def _save_state(self, phone: str, state: ConversationState):
+        """Guarda el estado de la conversación"""
+        try:
+            await firebase_manager.update_user_state(phone, state.to_dict())
+        except Exception as e:
+            logger.error(f"Error guardando estado: {str(e)}")
+            raise
+            
+    async def _reset_state(self, phone: str):
+        """Reinicia el estado de la conversación"""
+        try:
+            state = ConversationState()
+            await self._save_state(phone, state)
+        except Exception as e:
+            logger.error(f"Error reiniciando estado: {str(e)}")
+            raise
+    
+    def _get_help_message(self, current_state: str) -> str:
+        """Obtiene el mensaje de ayuda según el estado actual"""
+        help_messages = {
+            'GET_CROP': "🌱 Por favor ingresa el tipo de cultivo que planeas sembrar, por ejemplo: maíz, frijol, papa, etc.",
+            'GET_AREA': "📏 Ingresa el número de hectáreas que planeas sembrar. Debe ser un número mayor a 0.",
+            'GET_CHANNEL': "🏪 Selecciona cómo planeas vender tu cosecha: mayorista, cooperativa, exportación o mercado local.",
+            'GET_IRRIGATION': "💧 Indica el sistema de riego que usarás: gravedad, aspersión, goteo o temporal (lluvia).",
+            'GET_LOCATION': "📍 Ingresa el departamento donde está ubicado el terreno.",
+            'default': "👋 FinGro te ayuda a analizar la viabilidad de tu proyecto agrícola. Escribe 'reiniciar' para comenzar."
+        }
+        return help_messages.get(current_state, help_messages['default'])
+
 # Instancia global
 conversation_flow = ConversationFlow()

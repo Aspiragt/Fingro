@@ -3,12 +3,42 @@ Servicio para interactuar con la API de WhatsApp
 """
 import logging
 import httpx
+import asyncio
 from typing import Dict, Any, Optional, List
-from datetime import datetime
+from datetime import datetime, timedelta
+from functools import wraps
+import hmac
+import hashlib
+import json
 
 from app.config import settings
+from app.utils.text import sanitize_data
 
 logger = logging.getLogger(__name__)
+
+def rate_limit(calls: int, period: int):
+    """Decorador para rate limiting"""
+    def decorator(func):
+        calls_made = []
+        
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            now = datetime.now()
+            # Limpiar llamadas antiguas
+            calls_made[:] = [t for t in calls_made if now - t < timedelta(seconds=period)]
+            
+            if len(calls_made) >= calls:
+                # Esperar hasta que podamos hacer otra llamada
+                wait_time = (calls_made[0] + timedelta(seconds=period) - now).total_seconds()
+                if wait_time > 0:
+                    await asyncio.sleep(wait_time)
+                    
+            result = await func(*args, **kwargs)
+            calls_made.append(now)
+            return result
+            
+        return wrapper
+    return decorator
 
 class WhatsAppService:
     """Servicio para interactuar con la API de WhatsApp"""
@@ -18,7 +48,14 @@ class WhatsAppService:
         self.api_url = "https://graph.facebook.com/v17.0"
         self.phone_number_id = settings.WHATSAPP_PHONE_ID
         self.access_token = settings.WHATSAPP_TOKEN
-        self.client = httpx.AsyncClient(timeout=30.0)
+        self.webhook_secret = settings.WHATSAPP_WEBHOOK_SECRET
+        
+        # Cliente HTTP con retry
+        self.client = httpx.AsyncClient(
+            timeout=30.0,
+            limits=httpx.Limits(max_keepalive_connections=5, max_connections=10),
+            transport=httpx.AsyncHTTPTransport(retries=3)
+        )
         
         # Verificar configuración
         if not self.phone_number_id or not self.access_token:
@@ -26,20 +63,36 @@ class WhatsAppService:
             raise ValueError("WhatsApp phone ID and token are required")
             
         logger.info("WhatsApp service initialized successfully")
+        
+    def verify_webhook_signature(self, signature: str, payload: bytes) -> bool:
+        """Verifica la firma del webhook"""
+        if not self.webhook_secret:
+            return True  # Si no hay secreto configurado, aceptar todo
+            
+        expected = hmac.new(
+            self.webhook_secret.encode(),
+            payload,
+            hashlib.sha256
+        ).hexdigest()
+        
+        return hmac.compare_digest(signature, expected)
     
-    async def send_message(self, to: str, message: str) -> Dict[str, Any]:
+    @rate_limit(calls=30, period=60)  # 30 llamadas por minuto
+    async def send_message(self, to: str, message: str, retry_count: int = 0) -> Dict[str, Any]:
         """
         Envía un mensaje de texto por WhatsApp
         
         Args:
             to: Número de teléfono destino
             message: Mensaje a enviar
+            retry_count: Número de reintentos realizados
             
         Returns:
             Dict con la respuesta de la API
         """
         try:
-            logger.info(f"Sending message to {to}: {message[:50]}...")
+            # Sanitizar mensaje
+            safe_message = sanitize_data({'message': message})['message']
             
             # Preparar payload
             payload = {
@@ -47,12 +100,11 @@ class WhatsAppService:
                 "recipient_type": "individual",
                 "to": to,
                 "type": "text",
-                "text": {"body": message}
+                "text": {"body": safe_message}
             }
             
-            # Log del request
-            logger.debug(f"WhatsApp API request - URL: {self.api_url}/{self.phone_number_id}/messages")
-            logger.debug(f"WhatsApp API request - Payload: {payload}")
+            # Log del request (sanitizado)
+            logger.debug(f"WhatsApp API request to: {to[:6]}...")
             
             # Enviar mensaje
             response = await self.client.post(
@@ -68,30 +120,23 @@ class WhatsAppService:
             response.raise_for_status()
             response_data = response.json()
             
-            logger.info(f"Message sent successfully to {to}")
-            logger.debug(f"WhatsApp API response: {response_data}")
-            
+            logger.info(f"Message sent successfully to {to[:6]}...")
             return response_data
             
         except httpx.HTTPStatusError as e:
-            error_msg = f"HTTP error sending WhatsApp message: {str(e.response.json())}"
-            logger.error(error_msg)
-            raise Exception(error_msg)
+            error_data = e.response.json()
+            error_code = error_data.get('error', {}).get('code')
             
-        except httpx.RequestError as e:
-            error_msg = f"Error sending WhatsApp message: {str(e)}"
-            logger.error(error_msg)
-            raise Exception(error_msg)
+            if error_code in [4, 100, 613] and retry_count < 3:  # Códigos de error recuperables
+                await asyncio.sleep(2 ** retry_count)  # Backoff exponencial
+                return await self.send_message(to, message, retry_count + 1)
+                
+            logger.error(f"HTTP error sending WhatsApp message: {sanitize_data(error_data)}")
+            raise WhatsAppError(f"HTTP error: {error_code}") from e
             
         except Exception as e:
-            error_msg = f"Unexpected error sending WhatsApp message: {str(e)}"
-            logger.error(error_msg)
-            raise Exception(error_msg)
-            
-        finally:
-            # Asegurar que el cliente se cierre
-            if not self.client.is_closed:
-                await self.client.aclose()
+            logger.error(f"Error sending WhatsApp message: {str(e)}")
+            raise WhatsAppError("Failed to send message") from e
     
     async def send_template(
         self,
@@ -226,4 +271,9 @@ class WhatsAppService:
     
     async def close(self):
         """Cierra el cliente HTTP"""
-        await self.client.aclose()
+        if not self.client.is_closed:
+            await self.client.aclose()
+
+class WhatsAppError(Exception):
+    """Excepción personalizada para errores de WhatsApp"""
+    pass

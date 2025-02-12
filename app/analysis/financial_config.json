@@ -1,0 +1,53 @@
+{
+    "factor_riego": {
+        "goteo": 1.2,
+        "aspersion": 1.1,
+        "gravedad": 1.0,
+        "temporal": 0.8
+    },
+    "riesgo_riego": {
+        "goteo": 0.1,
+        "aspersion": 0.15,
+        "gravedad": 0.2,
+        "temporal": 0.3
+    },
+    "factores_region": {
+        "Alta Verapaz": 1.1,
+        "Baja Verapaz": 1.0,
+        "Chimaltenango": 1.2,
+        "Chiquimula": 0.9,
+        "El Progreso": 1.0,
+        "Escuintla": 1.2,
+        "Guatemala": 1.1,
+        "Huehuetenango": 1.0,
+        "Izabal": 0.9,
+        "Jalapa": 1.0,
+        "Jutiapa": 1.1,
+        "Petén": 0.9,
+        "Quetzaltenango": 1.1,
+        "Quiché": 1.0,
+        "Retalhuleu": 1.2,
+        "Sacatepéquez": 1.1,
+        "San Marcos": 1.0,
+        "Santa Rosa": 1.1,
+        "Sololá": 1.0,
+        "Suchitepéquez": 1.2,
+        "Totonicapán": 1.0,
+        "Zacapa": 0.9,
+        "default": 1.0
+    },
+    "factores_temporada": [
+        1.0,  // Enero
+        1.0,  // Febrero
+        0.9,  // Marzo
+        0.8,  // Abril
+        1.1,  // Mayo
+        1.2,  // Junio
+        1.2,  // Julio
+        1.1,  // Agosto
+        1.0,  // Septiembre
+        0.9,  // Octubre
+        0.9,  // Noviembre
+        1.0   // Diciembre
+    ]
+}
