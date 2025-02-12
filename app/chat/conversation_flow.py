@@ -5,7 +5,7 @@ from typing import Dict, Any, Optional
 import logging
 from app.models.financial_model import financial_model
 from app.views.financial_report import report_generator
-from app.external_apis.maga import CanalComercializacion
+from app.external_apis.maga import CanalComercializacion, maga_api
 from app.services.whatsapp_service import WhatsAppService
 from app.database.firebase import firebase_manager
 
@@ -364,35 +364,65 @@ class ConversationFlow:
             
             # Si llegamos a SHOW_REPORT, generar reporte
             if next_state == self.STATES['SHOW_REPORT']:
-                # Preparar datos para el modelo financiero
-                analysis_data = {
-                    'crop': user_data['data']['get_crop'],
-                    'area': user_data['data']['get_area'],
-                    'commercialization': user_data['data']['get_channel'],
-                    'irrigation': user_data['data']['get_irrigation'],
-                    'location': user_data['data']['get_location']
-                }
-                
-                # Analizar proyecto
-                score_data = await financial_model.analyze_project(analysis_data)
-                if not score_data:
+                try:
+                    # Preparar datos para el modelo financiero
+                    crop = user_data['data']['get_crop']
+                    channel = user_data['data']['get_channel']
+                    
+                    # Obtener precio actual del cultivo
+                    precio_data = await maga_api.get_precio_cultivo(crop, channel)
+                    if not precio_data or 'precio' not in precio_data:
+                        error_message = (
+                            "❌ Error obteniendo precio del cultivo\n\n"
+                            "Por favor intenta de nuevo más tarde."
+                        )
+                        await self.whatsapp.send_message(phone_number, error_message)
+                        return
+                        
+                    precio_actual = precio_data['precio']
+                    
+                    analysis_data = {
+                        'crop': crop,
+                        'area': user_data['data']['get_area'],
+                        'commercialization': channel,
+                        'irrigation': user_data['data']['get_irrigation'],
+                        'location': user_data['data']['get_location'],
+                        'precio_actual': precio_actual
+                    }
+                    
+                    # Analizar proyecto
+                    score_data = await financial_model.analyze_project(analysis_data)
+                    if not score_data:
+                        error_message = (
+                            "❌ Error generando análisis financiero\n\n"
+                            "Por favor intenta de nuevo más tarde."
+                        )
+                        await self.whatsapp.send_message(phone_number, error_message)
+                        return
+
+                    # Guardar datos del análisis
+                    user_data['score_data'] = score_data
+                    
+                    # Generar y enviar reporte
+                    report = report_generator.generate_report(user_data['data'], score_data)
+                    await self.whatsapp.send_message(phone_number, report)
+                    
+                    # Preguntar si quiere préstamo de forma amigable
+                    loan_message = (
+                        "Don(ña), ¿le gustaría que le ayude a solicitar un préstamo "
+                        "para este proyecto? 🤝\n\n"
+                        "Responda *SI* o *NO* 👇"
+                    )
+                    await self.whatsapp.send_message(phone_number, loan_message)
+                    
+                except Exception as e:
+                    logger.error(f"Error generando reporte: {str(e)}")
                     error_message = (
-                        "❌ Error generando análisis financiero\n\n"
+                        "❌ Error generando reporte\n\n"
                         "Por favor intenta de nuevo más tarde."
                     )
                     await self.whatsapp.send_message(phone_number, error_message)
                     return
-
-                # Guardar datos del análisis
-                user_data['score_data'] = score_data
-                
-                # Generar y enviar reporte
-                report = report_generator.generate_report(user_data['data'], score_data)
-                await self.whatsapp.send_message(phone_number, report)
-                
-                # Preguntar si quiere préstamo
-                loan_message = "¿Te gustaría solicitar un préstamo para este proyecto? (SI/NO)"
-                await self.whatsapp.send_message(phone_number, loan_message)
                 
             # Si llegamos a SHOW_LOAN, mostrar oferta
             elif next_state == self.STATES['SHOW_LOAN']:

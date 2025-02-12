@@ -3,6 +3,9 @@ Módulo para generar reportes financieros
 """
 from typing import Dict, Any
 from datetime import datetime
+import logging
+
+logger = logging.getLogger(__name__)
 
 class FinancialReport:
     """Genera reportes financieros formatados para WhatsApp"""
@@ -27,41 +30,54 @@ class FinancialReport:
         try:
             # Formatear datos básicos
             cultivo = user_data['crop'].capitalize()
-            area = f"{user_data['area']:,.1f}"
+            area = float(user_data['area'])
+            # Convertir hectáreas a cuerdas (1 hectárea ≈ 16 cuerdas)
+            cuerdas = round(area * 16)
             
             # Formatear datos financieros
             costos = cls.format_currency(score_data['total_costs'])
             ingresos = cls.format_currency(score_data['expected_income'])
             ganancia = cls.format_currency(score_data['expected_profit'])
             
+            # Calcular rendimiento por cuerda
+            rendimiento_total = score_data.get('expected_yield', 0)
+            rendimiento_cuerda = round(rendimiento_total / (area * 16))
+            
             # Construir reporte
             report = [
-                f"✨ *Análisis de {cultivo}* ({area} hectáreas)\n",
-                f"💰 *Ingresos esperados:* {ingresos}",
-                f"💸 *Costos totales:* {costos}",
-                f"✅ *Ganancia potencial:* {ganancia}\n",
+                f"✨ *Análisis de su siembra de {cultivo}*\n",
+                f"🌱 *Área:* {cuerdas} cuerdas",
+                f"📊 *Rendimiento esperado:* {rendimiento_cuerda} quintales por cuerda",
+                f"💰 *Precio de venta:* {cls.format_currency(score_data.get('price_per_unit', 0))} por quintal\n",
+                f"💵 *Lo que puede ganar:*",
+                f"• Ingresos totales: {ingresos}",
+                f"• Costos de siembra: {costos}",
+                f"• Ganancia esperada: {ganancia}\n"
             ]
             
-            # Si el proyecto es rentable, ofrecer préstamo
+            # Si el proyecto es rentable
             if score_data['expected_profit'] > 0:
+                # Calcular retorno por cuerda
+                ganancia_cuerda = round(score_data['expected_profit'] / cuerdas)
                 report.extend([
-                    "🎯 *¡Tu proyecto es viable!*",
-                    "¿Te gustaría solicitar un préstamo para iniciarlo?",
-                    "Responde *SI* o *NO*"
+                    "✅ *¡Su proyecto puede ser rentable!*",
+                    f"Por cada cuerda podría ganar {cls.format_currency(ganancia_cuerda)}",
                 ])
             else:
                 report.extend([
-                    "❌ Los costos son mayores que los ingresos esperados.",
-                    "Te recomendamos revisar otras opciones.",
-                    "Escribe *otra* para analizar otro cultivo."
+                    "⚠️ *Recomendaciones para mejorar:*",
+                    "• Considere vender a mejor precio (cooperativa o exportación)",
+                    "• Mejore el sistema de riego para aumentar rendimiento",
+                    "• Reduzca costos comprando insumos al por mayor"
                 ])
             
             return "\n".join(report)
             
         except Exception as e:
+            logger.error(f"Error generando reporte: {str(e)}")
             return (
                 "❌ Error generando reporte\n\n"
-                "Por favor intenta de nuevo más tarde."
+                "Por favor intente de nuevo más tarde."
             )
     
     @classmethod
