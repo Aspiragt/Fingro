@@ -10,8 +10,10 @@ class ConversationState(str, Enum):
     ASKING_AREA = "ASKING_AREA"
     ASKING_IRRIGATION = "ASKING_IRRIGATION"
     ASKING_COMMERCIALIZATION = "ASKING_COMMERCIALIZATION"
+    ASKING_PAYMENT_METHOD = "ASKING_PAYMENT_METHOD"
     ASKING_LOCATION = "ASKING_LOCATION"
     ANALYSIS = "ANALYSIS"
+    ASKING_LOAN_INTEREST = "ASKING_LOAN_INTEREST"
     COMPLETED = "COMPLETED"
 
     def __str__(self):
@@ -20,33 +22,49 @@ class ConversationState(str, Enum):
 # Mensajes del bot
 MESSAGES = {
     'welcome': (
-        "👋 ¡Hola! Soy FinGro, tu aliado financiero para el campo.\n\n"
-        "🌱 Te ayudaré a conseguir el financiamiento que necesitas para tu cultivo.\n\n"
-        "✨ *Beneficios de FinGro:*\n"
-        "• Análisis financiero GRATIS\n"
-        "• Préstamos desde Q5,000 hasta Q100,000\n"
-        "• Tasas preferenciales para agricultores\n"
-        "• Respuesta en 24 horas\n\n"
-        "🚀 Para empezar, ¿cuál es tu nombre?"
+        "👋 ¡Hola! Soy FinGro\n\n"
+        "🌱 Préstamos para el campo desde Q5,000 hasta Q100,000\n"
+        "⚡️ Respuesta en 24 horas\n\n"
+        "¿Cuál es tu nombre?"
     ),
     
     'ask_crop': "🌿 ¿Qué cultivo planeas sembrar?",
     
-    'ask_area': "📏 ¿Cuántas hectáreas planeas cultivar?\n\nPor favor, ingresa solo el número (ejemplo: 2.5)",
+    'ask_area': "📏 ¿Cuántas hectáreas? (ejemplo: 2.5)",
     
-    'invalid_area': "❌ Por favor, ingresa un número válido para el área (ejemplo: 2.5)",
+    'invalid_area': "❌ Ingresa un número válido (ejemplo: 2.5)",
     
-    'ask_irrigation': "💧 ¿Qué sistema de riego utilizarás?\n\nEscribe una de estas opciones:\n- Goteo\n- Aspersión\n- Gravedad\n- Temporal",
+    'ask_irrigation': "💧 ¿Sistema de riego?\n\n- Goteo\n- Aspersión\n- Gravedad\n- Temporal",
     
-    'ask_commercialization': "🏪 ¿Cómo planeas comercializar tu cosecha?\n\nEscribe una opción:\n- Mercado local\n- Exportación\n- Intermediario\n- Directo",
+    'ask_commercialization': "🏪 ¿Cómo venderás?\n\n- Mercado local\n- Exportación\n- Intermediario\n- Directo",
     
-    'ask_location': "📍 ¿En qué municipio y departamento está ubicada tu parcela?\n\nEjemplo: San Juan Sacatepéquez, Guatemala",
+    'ask_payment_method': "💵 ¿Forma de pago?\n\n- Efectivo\n- Transferencia\n- Cheque",
     
-    'analysis_ready': "✅ ¡Tu análisis está listo!\n\nUn asesor de FinGro se pondrá en contacto contigo pronto para discutir las opciones de financiamiento disponibles para tu proyecto.",
+    'ask_location': "📍 ¿Municipio y departamento?\n\nEjemplo: San Juan Sacatepéquez, Guatemala",
     
-    'error': "❌ Lo siento, ha ocurrido un error. Por favor escribe 'reiniciar' para comenzar de nuevo.",
+    'analysis_ready': (
+        "✅ ¡Análisis listo!\n\n"
+        "📊 FinGro Score: {score}/100\n"
+        "💰 Préstamo sugerido: {monto}\n\n"
+        "¿Te gustaría aplicar?"
+    ),
     
-    'error_restart': "❌ Ha ocurrido un error. Vamos a comenzar de nuevo.\n\n¿Cuál es tu nombre?"
+    'ask_loan_interest': "🤔 ¿Aplicar para un préstamo?\n\nResponde 'si' o 'no'",
+    
+    'loan_yes': (
+        "🎉 ¡Excelente!\n\n"
+        "Documentos necesarios:\n"
+        "• DPI\n"
+        "• Recibo de servicios\n"
+        "• Estado de cuenta\n\n"
+        "¿Cuándo quieres empezar?"
+    ),
+    
+    'loan_no': "👋 ¡Gracias! Escribe 'reiniciar' cuando quieras intentar de nuevo",
+    
+    'error': "❌ Error. Escribe 'reiniciar' para comenzar de nuevo",
+    
+    'error_restart': "❌ Error. Empecemos de nuevo.\n\n¿Cuál es tu nombre?"
 }
 
 def format_currency(amount: float) -> str:
@@ -55,34 +73,19 @@ def format_currency(amount: float) -> str:
 
 # Variaciones de escritura comunes
 CROP_VARIATIONS = {
-    "maiz": ["maiz", "maíz", "mais", "elote"],
-    "frijol": ["frijol", "frijoles", "frijoles negros", "frijol negro"],
-    "papa": ["papa", "papas", "patata", "patatas"],
-    "tomate": ["tomate", "tomates", "jitomate"],
-    "chile": ["chile", "chiles", "chile pimiento", "pimiento"],
-    "cebolla": ["cebolla", "cebollas"],
-    "zanahoria": ["zanahoria", "zanahorias"],
-    "arveja": ["arveja", "arvejas", "guisante"],
-    "ejote": ["ejote", "ejotes", "judía verde"],
-    "brócoli": ["brócoli", "brocoli", "brocolí", "broccoli"],
-    "lechuga": ["lechuga", "lechugas"],
-    "repollo": ["repollo", "repollos", "col"],
-    "coliflor": ["coliflor", "coliflores"],
-    "remolacha": ["remolacha", "remolachas", "betabel"],
-    "pepino": ["pepino", "pepinos"],
-    "calabaza": ["calabaza", "calabazas", "ayote"],
-    "güisquil": ["güisquil", "guisquil", "chayote"],
-    "café": ["café", "cafe", "cafeto"],
-    "cardamomo": ["cardamomo", "cardamomo verde"],
-    "aguacate": ["aguacate", "aguacates", "palta"],
-    "plátano": ["plátano", "platano", "banano", "guineo"],
-    "piña": ["piña", "piñas", "ananás"],
-    "papaya": ["papaya", "papayas"],
-    "mango": ["mango", "mangos"],
-    "limón": ["limón", "limon", "limones"],
-    "naranja": ["naranja", "naranjas"],
-    "mandarina": ["mandarina", "mandarinas"],
-    "fresa": ["fresa", "fresas"],
-    "mora": ["mora", "moras", "zarzamora"],
-    "frambuesa": ["frambuesa", "frambuesas"]
+    'maiz': ['maiz', 'maíz', 'mais', 'elote'],
+    'frijol': ['frijol', 'frijoles', 'frijoles negros', 'frijol negro'],
+    'papa': ['papa', 'papas', 'patata', 'patatas'],
+    'tomate': ['tomate', 'tomates', 'jitomate'],
+    'chile': ['chile', 'chiles', 'pimiento', 'pimientos'],
+    'cebolla': ['cebolla', 'cebollas'],
+    'zanahoria': ['zanahoria', 'zanahorias'],
+    'aguacate': ['aguacate', 'aguacates', 'palta'],
+    'platano': ['platano', 'plátano', 'platanos', 'plátanos', 'banano'],
+    'cafe': ['cafe', 'café'],
+    'arroz': ['arroz'],
+    'brocoli': ['brocoli', 'brócoli', 'brocolis'],
+    'lechuga': ['lechuga', 'lechugas'],
+    'repollo': ['repollo', 'repollos', 'col'],
+    'arveja': ['arveja', 'arvejas', 'guisante', 'guisantes']
 }
