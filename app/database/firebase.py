@@ -14,6 +14,10 @@ from app.utils.text import sanitize_data
 
 logger = logging.getLogger(__name__)
 
+class FirebaseError(Exception):
+    """Excepción personalizada para errores de Firebase"""
+    pass
+
 class FirebaseDB:
     """Clase para manejar la conexión con Firebase"""
     
@@ -26,30 +30,48 @@ class FirebaseDB:
         except ValueError:
             # Si no existe, inicializar con las credenciales
             try:
-                if not settings.FIREBASE_CREDENTIALS:
+                if not settings.FIREBASE_CREDENTIALS_JSON:
                     raise ValueError("Firebase credentials not found in environment")
                 
                 # Convertir el string JSON a diccionario
-                cred_dict = json.loads(settings.FIREBASE_CREDENTIALS)
+                cred_dict = json.loads(settings.FIREBASE_CREDENTIALS_JSON)
+                if 'project_id' not in cred_dict:
+                    raise ValueError("project_id not found in Firebase credentials")
+                
                 cred = credentials.Certificate(cred_dict)
                 
                 # Inicializar app con configuración de retry
                 self.app = firebase_admin.initialize_app(cred, {
+                    'projectId': cred_dict['project_id'],
                     'httpTimeout': 30,
                     'retryTimeoutSeconds': 600,
                     'maxRetries': 3
                 })
-                logger.info("Firebase app initialized successfully")
+                logger.info(f"Firebase app initialized successfully for project: {cred_dict['project_id']}")
+            except json.JSONDecodeError:
+                logger.error("Invalid JSON in FIREBASE_CREDENTIALS_JSON")
+                raise FirebaseError("Invalid Firebase credentials format")
             except Exception as e:
                 logger.error(f"Error initializing Firebase: {str(e)}")
                 raise
         
-        # Inicializar Firestore de manera asíncrona
-        self.db = AsyncClient(self.app)
-        
-        # Cache para estados de conversación
-        self._conversation_cache = {}
-        self._cache_timeout = timedelta(minutes=5)
+        try:
+            # Obtener project_id de la app existente o de las credenciales
+            project_id = firebase_admin.get_app().project_id
+            if not project_id:
+                raise ValueError("Could not determine project_id")
+            
+            # Inicializar Firestore de manera asíncrona
+            self.db = AsyncClient(project=project_id)
+            logger.info(f"Firestore client initialized for project: {project_id}")
+            
+            # Cache para estados de conversación
+            self._conversation_cache = {}
+            self._cache_timeout = timedelta(minutes=5)
+            
+        except Exception as e:
+            logger.error(f"Error initializing Firestore client: {str(e)}")
+            raise FirebaseError(f"Failed to initialize Firestore: {str(e)}")
         
     async def get_conversation_state(self, phone: str) -> Optional[Dict[str, Any]]:
         """
@@ -59,96 +81,52 @@ class FirebaseDB:
             phone: Número de teléfono del usuario (debe estar validado)
             
         Returns:
-            Dict con el estado o None si no existe
+            Optional[Dict[str, Any]]: Estado de la conversación o None si no existe
         """
         try:
-            # Verificar cache
-            cache_key = f"conv_state_{phone}"
-            cached = self._conversation_cache.get(cache_key)
-            if cached and cached['timestamp'] + self._cache_timeout > datetime.now():
-                return cached['data']
-
-            # Obtener de Firestore
-            doc_ref = self.db.collection('users').document(phone)
+            # Verificar caché primero
+            if phone in self._conversation_cache:
+                cached_state, timestamp = self._conversation_cache[phone]
+                if datetime.now() - timestamp < self._cache_timeout:
+                    return cached_state
+            
+            # Si no está en caché o expiró, obtener de Firestore
+            doc_ref = self.db.collection('conversations').document(phone)
             doc = await doc_ref.get()
             
             if doc.exists:
-                data = doc.to_dict()
-                # Validar estructura del estado
-                if not self._validate_state_structure(data):
-                    logger.warning(f"Invalid state structure for {phone}")
-                    data = self._create_default_state()
-                
-                # Actualizar cache
-                self._conversation_cache[cache_key] = {
-                    'data': data,
-                    'timestamp': datetime.now()
-                }
-                return data
-                
-            return self._create_default_state()
+                state = doc.to_dict()
+                # Actualizar caché
+                self._conversation_cache[phone] = (state, datetime.now())
+                return state
+            return None
             
         except Exception as e:
             logger.error(f"Error getting conversation state: {str(e)}")
-            raise FirebaseError("Error retrieving conversation state") from e
+            raise FirebaseError(f"Failed to get conversation state: {str(e)}")
     
-    async def update_user_state(self, phone: str, state: Dict[str, Any], merge: bool = True) -> bool:
+    async def update_user_state(self, phone: str, state: Dict[str, Any]):
         """
         Actualiza el estado de un usuario
         
         Args:
             phone: Número de teléfono del usuario
             state: Nuevo estado
-            merge: Si se debe hacer merge con el estado existente
-            
-        Returns:
-            bool: True si se actualizó correctamente
         """
         try:
             # Sanitizar datos antes de guardar
-            safe_state = sanitize_data(state)
+            clean_state = sanitize_data(state)
             
-            # Validar estructura
-            if not self._validate_state_structure(safe_state):
-                raise ValueError("Invalid state structure")
+            # Guardar en Firestore
+            doc_ref = self.db.collection('conversations').document(phone)
+            await doc_ref.set(clean_state, merge=True)
             
-            # Actualizar en Firestore
-            doc_ref = self.db.collection('users').document(phone)
-            await doc_ref.set(safe_state, merge=merge)
-            
-            # Actualizar cache
-            cache_key = f"conv_state_{phone}"
-            if merge and cache_key in self._conversation_cache:
-                self._conversation_cache[cache_key]['data'].update(safe_state)
-            else:
-                self._conversation_cache[cache_key] = {
-                    'data': safe_state,
-                    'timestamp': datetime.now()
-                }
-                
-            return True
+            # Actualizar caché
+            self._conversation_cache[phone] = (clean_state, datetime.now())
             
         except Exception as e:
             logger.error(f"Error updating user state: {str(e)}")
-            raise FirebaseError("Error updating user state") from e
-
-    def _validate_state_structure(self, state: Dict[str, Any]) -> bool:
-        """Valida la estructura del estado"""
-        required_fields = {'state', 'last_interaction', 'data'}
-        return all(field in state for field in required_fields)
-        
-    def _create_default_state(self) -> Dict[str, Any]:
-        """Crea un estado por defecto"""
-        return {
-            'state': 'INICIO',
-            'last_interaction': datetime.now().isoformat(),
-            'data': {},
-            'session_id': None
-        }
-
-class FirebaseError(Exception):
-    """Excepción personalizada para errores de Firebase"""
-    pass
+            raise FirebaseError(f"Failed to update user state: {str(e)}")
 
 # Instancia global
 firebase_manager = FirebaseDB()
