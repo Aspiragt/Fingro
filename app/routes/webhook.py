@@ -2,6 +2,7 @@ from fastapi import APIRouter, Request, Response, HTTPException, Depends
 from typing import Any
 from app.services.whatsapp_service import WhatsAppService
 from app.database.firebase import get_firebase_db
+from app.chat.conversation_flow import conversation_flow
 import logging
 from datetime import datetime
 
@@ -56,7 +57,12 @@ async def receive_message(request: Request, whatsapp: WhatsAppService = Depends(
             if not from_number or not message_type:
                 continue
                 
-            await whatsapp.process_message(from_number, message)
+            if message_type == "text":
+                text = message.get("text", {}).get("body", "")
+                # Procesar el mensaje usando conversation_flow
+                response = await conversation_flow.handle_message(from_number, text)
+                # Enviar respuesta al usuario
+                await whatsapp.send_message(from_number, response)
             
         return {"status": "processed"}
         
