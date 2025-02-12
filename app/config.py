@@ -54,6 +54,10 @@ class Settings(BaseModel):
         default=os.getenv("WHATSAPP_PHONE_ID", ""),
         description="ID del número de teléfono de WhatsApp"
     )
+    WHATSAPP_VERIFY_TOKEN: str = Field(
+        default=os.getenv("WHATSAPP_VERIFY_TOKEN", "fingro_webhook_token"),
+        description="Token para verificar el webhook de WhatsApp"
+    )
     WHATSAPP_WEBHOOK_VERIFY_TOKEN: str = Field(
         default=os.getenv("WHATSAPP_WEBHOOK_VERIFY_TOKEN", ""),
         description="Token para verificar webhook de WhatsApp"
