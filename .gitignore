@@ -47,3 +47,6 @@ firebase-credentials.json
 # Sistema operativo
 .DS_Store
 Thumbs.db
+
+# Deprecated files
+deprecated/

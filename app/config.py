@@ -64,8 +64,8 @@ class Settings(BaseModel):
     )
     
     # Firebase
-    FIREBASE_CREDENTIALS: Dict[str, Any] = Field(
-        default_factory=lambda: json.loads(os.getenv("FIREBASE_CREDENTIALS_JSON", "{}")),
+    FIREBASE_CREDENTIALS: str = Field(
+        default=os.getenv("FIREBASE_CREDENTIALS_JSON", ""),
         description="Credenciales de Firebase en formato JSON"
     )
     FIREBASE_CACHE_TTL: int = Field(
@@ -111,7 +111,7 @@ class Settings(BaseModel):
         return v
     
     @validator("FIREBASE_CREDENTIALS")
-    def validate_firebase_credentials(cls, v: Dict[str, Any]) -> Dict[str, Any]:
+    def validate_firebase_credentials(cls, v: str) -> str:
         """Valida que las credenciales de Firebase existan"""
         if not v:
             raise ValueError("FIREBASE_CREDENTIALS es requerido")
