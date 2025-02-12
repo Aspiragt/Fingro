@@ -207,15 +207,16 @@ class ConversationFlow:
             # Limpiar espacios y convertir a minúsculas
             user_input = user_input.strip().lower()
             
-            # Lista de variaciones positivas
+            # Lista de variaciones positivas y negativas
             positive_responses = ['si', 'sí', 'yes', 's', 'ok', 'vale']
             negative_responses = ['no', 'not', 'n', 'nop']
             
-            if any(user_input == resp for resp in positive_responses):
+            # Comparación más flexible usando in
+            if any(resp in user_input for resp in positive_responses):
                 return True, True
-            elif any(user_input == resp for resp in negative_responses):
+            elif any(resp in user_input for resp in negative_responses):
                 return True, False
-                
+            
             return False, None
             
         return False, None
@@ -252,7 +253,10 @@ class ConversationFlow:
             return "❌ Por favor ingresa una ubicación válida"
             
         elif current_state in [self.STATES['ASK_LOAN'], self.STATES['CONFIRM_LOAN']]:
-            return "❌ Por favor responde SI o NO"
+            return (
+                "❌ Por favor responde SI o NO\n\n"
+                "Otras formas válidas: sí, s, ok, vale / no, n"
+            )
             
         return "❌ Error desconocido"
     
@@ -268,10 +272,7 @@ class ConversationFlow:
         Returns:
             str: Siguiente estado
         """
-        if current_state == self.STATES['START']:
-            return self.STATES['GET_CROP']
-            
-        elif current_state == self.STATES['GET_CROP']:
+        if current_state == self.STATES['GET_CROP']:
             return self.STATES['GET_AREA']
             
         elif current_state == self.STATES['GET_AREA']:
@@ -290,19 +291,18 @@ class ConversationFlow:
             return self.STATES['ASK_LOAN']
             
         elif current_state == self.STATES['ASK_LOAN']:
-            if processed_value is True:
+            if processed_value:  # Si responde SI
                 return self.STATES['SHOW_LOAN']
-            return self.STATES['DONE']
-            
+            else:  # Si responde NO
+                return self.STATES['DONE']
+                
         elif current_state == self.STATES['SHOW_LOAN']:
             return self.STATES['CONFIRM_LOAN']
             
         elif current_state == self.STATES['CONFIRM_LOAN']:
-            if processed_value is True:
-                return self.STATES['DONE']
-            return self.STATES['ASK_LOAN']
+            return self.STATES['DONE']
             
-        return self.STATES['START']
+        return self.STATES['GET_CROP']  # Estado por defecto
 
     def _normalize_crop(self, crop: str) -> str:
         """Normaliza el nombre del cultivo"""
