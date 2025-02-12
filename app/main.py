@@ -13,7 +13,7 @@ from datetime import datetime
 
 from app.config import settings
 from app.services.whatsapp_service import WhatsAppService
-from app.chat.conversation_flow import conversation_manager
+from app.chat.conversation_flow import conversation_flow
 from app.database.firebase import firebase_manager
 
 # Configurar logging
@@ -56,8 +56,10 @@ async def verify_webhook_signature(request: Request) -> bool:
         ).hexdigest()
         
         # Comparar firmas
-        actual_signature = signature.replace('sha256=', '')
-        return hmac.compare_digest(actual_signature, expected_signature)
+        return hmac.compare_digest(
+            f"sha256={expected_signature}",
+            signature
+        )
         
     except Exception as e:
         logger.error(f"Error verificando firma: {str(e)}")
@@ -65,85 +67,86 @@ async def verify_webhook_signature(request: Request) -> bool:
 
 @app.post("/webhook")
 async def webhook(request: Request):
-    """Endpoint para recibir webhooks de WhatsApp"""
+    """
+    Endpoint para recibir webhooks de WhatsApp
+    """
     try:
         # Verificar firma
-        if not settings.DEBUG and not await verify_webhook_signature(request):
-            logger.warning("Firma inválida en webhook")
-            return JSONResponse(status_code=401, content={"error": "Firma inválida"})
-            
-        # Procesar webhook
-        body = await request.json()
+        if not settings.DISABLE_WEBHOOK_SIGNATURE:
+            if not await verify_webhook_signature(request):
+                raise HTTPException(status_code=401, detail="Firma inválida")
         
-        # Validar estructura del webhook
-        if 'entry' not in body or not body['entry']:
-            logger.warning("Webhook sin entradas")
-            return JSONResponse(status_code=400, content={"error": "Webhook inválido"})
-            
-        # Procesar cada mensaje
-        for entry in body['entry']:
-            for change in entry.get('changes', []):
-                if change.get('value', {}).get('messages'):
-                    for message in change['value']['messages']:
-                        # Obtener número y mensaje
-                        from_number = message['from']
-                        text = message.get('text', {}).get('body', '')
-                        
-                        # Procesar mensaje
-                        await conversation_manager.handle_message(from_number, text)
+        # Obtener datos del webhook
+        data = await request.json()
+        logger.debug(f"Webhook recibido: {json.dumps(data, indent=2)}")
         
-        return {"status": "ok"}
+        # Procesar solo si es mensaje de WhatsApp
+        if "entry" in data and len(data["entry"]) > 0:
+            for entry in data["entry"]:
+                for change in entry.get("changes", []):
+                    if change.get("value", {}).get("messages"):
+                        for message in change["value"]["messages"]:
+                            # Obtener número y mensaje
+                            phone = message["from"]
+                            text = message.get("text", {}).get("body", "")
+                            
+                            # Procesar mensaje
+                            await conversation_flow.handle_message(phone, text)
+        
+        return JSONResponse(content={"status": "ok"})
         
     except Exception as e:
-        logger.error(f"Error en webhook: {str(e)}")
+        logger.error(f"Error procesando webhook: {str(e)}")
         return JSONResponse(
             status_code=500,
-            content={"error": "Error interno del servidor"}
+            content={"error": str(e)}
         )
 
 @app.get("/")
-async def root():
+def root():
     """Ruta raíz que muestra información básica de la API"""
     return {
         "name": "FinGro API",
         "version": "1.0.0",
         "status": "running",
-        "environment": settings.ENV
+        "env": settings.ENV,
+        "timestamp": datetime.now().isoformat()
     }
 
 @app.get("/webhook")
 async def verify_webhook(request: Request):
-    """Endpoint para verificar webhook de WhatsApp"""
+    """
+    Endpoint para verificar webhook de WhatsApp
+    
+    WhatsApp envía un desafío que debemos responder para verificar
+    que somos dueños del endpoint
+    """
     try:
         # Obtener parámetros
-        mode = request.query_params.get('hub.mode')
-        token = request.query_params.get('hub.verify_token')
-        challenge = request.query_params.get('hub.challenge')
+        mode = request.query_params.get("hub.mode")
+        token = request.query_params.get("hub.verify_token")
+        challenge = request.query_params.get("hub.challenge")
         
-        # Validar modo y token
-        if mode == 'subscribe' and token == settings.WHATSAPP_VERIFY_TOKEN:
-            if not challenge:
-                return JSONResponse(
-                    status_code=400,
-                    content={"error": "Challenge no proporcionado"}
-                )
-            return Response(content=challenge, media_type="text/plain")
-        
-        return JSONResponse(status_code=403, content={"error": "Token inválido"})
+        # Verificar modo y token
+        if mode == "subscribe" and token == settings.WHATSAPP_VERIFY_TOKEN:
+            if challenge:
+                return Response(content=challenge)
+            return Response(status_code=200)
+            
+        # Token inválido
+        raise HTTPException(status_code=403, detail="Token inválido")
         
     except Exception as e:
-        logger.error(f"Error en verificación de webhook: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={"error": "Error interno del servidor"}
-        )
+        logger.error(f"Error verificando webhook: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/health")
-async def health_check():
+def health_check():
     """Endpoint para verificar el estado del servicio"""
     return {
         "status": "healthy",
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now().isoformat(),
+        "env": settings.ENV
     }
 
 if __name__ == "__main__":
@@ -152,9 +155,10 @@ if __name__ == "__main__":
     # Obtener puerto de Render o usar 8000 por defecto
     port = int(os.environ.get("PORT", 8000))
     
+    # Iniciar servidor
     uvicorn.run(
-        "main:app",
+        "app.main:app",
         host="0.0.0.0",
         port=port,
-        reload=settings.DEBUG
+        reload=settings.ENV == "development"
     )
