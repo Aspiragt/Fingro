@@ -102,12 +102,6 @@ async def process_user_message(from_number: str, message: str) -> None:
             
         # Procesar mensaje según el estado actual
         if current_state == ConversationState.INITIAL.value:
-            # Mensaje de bienvenida
-            user_data['name'] = message
-            new_state = ConversationState.ASKING_CROP.value
-            await whatsapp.send_message(from_number, MESSAGES['ask_crop'])
-            
-        elif current_state == ConversationState.ASKING_CROP.value:
             # Guardar cultivo y obtener precio
             user_data['crop'] = message
             
@@ -165,9 +159,9 @@ async def process_user_message(from_number: str, message: str) -> None:
             message = message.lower().strip()
             valid_options = {
                 '1': 'mercado local',
-                '2': 'cooperativa',
-                '3': 'exportacion',
-                '4': 'otro'
+                '2': 'intermediario',
+                '3': 'exportación',
+                '4': 'directo'
             }
             
             if message in valid_options:
@@ -197,12 +191,14 @@ async def process_user_message(from_number: str, message: str) -> None:
                     return
                     
                 # Calcular score y análisis
-                score = scoring_service.calculate_score(
-                    crop=user_data['crop'],
-                    area=float(user_data['area']),
-                    irrigation=user_data['irrigation'],
-                    commercialization=user_data['commercialization'],
-                    historical_data=datos_historicos
+                score = await scoring_service.calculate_score(
+                    data={
+                        'crop': user_data['crop'],
+                        'area': float(user_data['area']),
+                        'irrigation': user_data['irrigation'],
+                        'commercialization': user_data['commercialization']
+                    },
+                    precio_actual=datos_historicos.get('precio_actual')
                 )
                 
                 user_data['score'] = score

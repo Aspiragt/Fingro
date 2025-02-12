@@ -6,7 +6,6 @@ from enum import Enum, auto
 class ConversationState(str, Enum):
     """Estados de la conversación del chatbot"""
     INITIAL = "INITIAL"
-    ASKING_CROP = "ASKING_CROP"
     ASKING_AREA = "ASKING_AREA"
     ASKING_IRRIGATION = "ASKING_IRRIGATION"
     ASKING_COMMERCIALIZATION = "ASKING_COMMERCIALIZATION"
