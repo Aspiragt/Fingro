@@ -19,6 +19,13 @@ class WhatsAppService:
         self.phone_number_id = settings.WHATSAPP_PHONE_ID
         self.access_token = settings.WHATSAPP_TOKEN
         self.client = httpx.AsyncClient(timeout=30.0)
+        
+        # Verificar configuración
+        if not self.phone_number_id or not self.access_token:
+            logger.error("WhatsApp configuration missing")
+            raise ValueError("WhatsApp phone ID and token are required")
+            
+        logger.info("WhatsApp service initialized successfully")
     
     async def send_message(self, to: str, message: str) -> Dict[str, Any]:
         """
@@ -32,6 +39,8 @@ class WhatsAppService:
             Dict con la respuesta de la API
         """
         try:
+            logger.info(f"Sending message to {to}: {message[:50]}...")
+            
             # Preparar payload
             payload = {
                 "messaging_product": "whatsapp",
@@ -40,6 +49,10 @@ class WhatsAppService:
                 "type": "text",
                 "text": {"body": message}
             }
+            
+            # Log del request
+            logger.debug(f"WhatsApp API request - URL: {self.api_url}/{self.phone_number_id}/messages")
+            logger.debug(f"WhatsApp API request - Payload: {payload}")
             
             # Enviar mensaje
             response = await self.client.post(
@@ -51,19 +64,34 @@ class WhatsAppService:
                 }
             )
             
-            # Validar respuesta
+            # Verificar respuesta
             response.raise_for_status()
-            return response.json()
+            response_data = response.json()
             
-        except httpx.HTTPError as e:
-            logger.error(f"Error enviando mensaje: {str(e)}")
-            if e.response:
-                logger.error(f"Response: {e.response.text}")
-            raise
+            logger.info(f"Message sent successfully to {to}")
+            logger.debug(f"WhatsApp API response: {response_data}")
+            
+            return response_data
+            
+        except httpx.HTTPStatusError as e:
+            error_msg = f"HTTP error sending WhatsApp message: {str(e.response.json())}"
+            logger.error(error_msg)
+            raise Exception(error_msg)
+            
+        except httpx.RequestError as e:
+            error_msg = f"Error sending WhatsApp message: {str(e)}"
+            logger.error(error_msg)
+            raise Exception(error_msg)
             
         except Exception as e:
-            logger.error(f"Error inesperado: {str(e)}")
-            raise
+            error_msg = f"Unexpected error sending WhatsApp message: {str(e)}"
+            logger.error(error_msg)
+            raise Exception(error_msg)
+            
+        finally:
+            # Asegurar que el cliente se cierre
+            if not self.client.is_closed:
+                await self.client.aclose()
     
     async def send_template(
         self,
