@@ -55,7 +55,7 @@ class FirebaseDB:
             
             # Si no está en caché, obtener de Firebase
             user_ref = self.db.collection('users').document(phone)
-            doc = user_ref.get()  # No es necesario await aquí
+            doc = user_ref.get()
             
             if doc.exists:
                 data = doc.to_dict()
@@ -67,7 +67,7 @@ class FirebaseDB:
                     'created_at': datetime.utcnow().isoformat(),
                     'updated_at': datetime.utcnow().isoformat()
                 }
-                user_ref.set(data)  # No es necesario await aquí
+                user_ref.set(data)
             
             # Guardar en caché
             self.cache[cache_key] = data
@@ -96,7 +96,7 @@ class FirebaseDB:
             # Actualizar en Firebase
             user_ref = self.db.collection('users').document(phone)
             state['updated_at'] = firestore.SERVER_TIMESTAMP
-            user_ref.set(state, merge=True)  # No es necesario await aquí
+            result = user_ref.set(state, merge=True)
             
             # Actualizar caché de forma segura
             cache_key = f"state_{phone}"
@@ -128,7 +128,7 @@ class FirebaseDB:
             
             # Actualizar en Firebase
             user_ref = self.db.collection('users').document(phone)
-            await user_ref.set(initial_state, merge=True)
+            result = user_ref.set(initial_state, merge=True)
             
             # Limpiar caché
             cache_key = f"state_{phone}"
@@ -138,6 +138,25 @@ class FirebaseDB:
             
         except Exception as e:
             logger.error(f"Error reiniciando estado: {str(e)}")
+            return False
+
+    async def update_conversation_state(self, phone: str, new_state: str) -> bool:
+        """
+        Actualiza el estado de la conversación
+        
+        Args:
+            phone: Número de teléfono del usuario
+            new_state: Nuevo estado de la conversación
+            
+        Returns:
+            bool: True si se actualizó correctamente
+        """
+        try:
+            current_state = await self.get_conversation_state(phone)
+            current_state['state'] = new_state
+            return await self.update_user_state(phone, current_state)
+        except Exception as e:
+            logger.error(f"Error actualizando estado de conversación: {str(e)}")
             return False
     
     async def store_analysis(self, phone: str, analysis: Dict[str, Any]) -> bool:
@@ -163,7 +182,7 @@ class FirebaseDB:
             }
             
             # Guardar en Firebase
-            await self.db.collection('analysis').add(analysis_data)
+            result = self.db.collection('analysis').add(analysis_data)
             return True
             
         except Exception as e:

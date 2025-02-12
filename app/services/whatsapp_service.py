@@ -13,7 +13,8 @@ class WhatsAppService:
     
     def __init__(self):
         """Inicializa el servicio de WhatsApp"""
-        self.api_url = settings.WHATSAPP_API_URL
+        self.api_version = "v21.0"
+        self.api_url = "https://graph.facebook.com"
         self.token = settings.WHATSAPP_TOKEN
         self.phone_number_id = settings.WHATSAPP_PHONE_ID
         self.client = httpx.AsyncClient(timeout=30.0)
@@ -30,12 +31,15 @@ class WhatsAppService:
             bool: True si el mensaje se envió correctamente
         """
         try:
-            url = f"{self.api_url}/v17.0/{self.phone_number_id}/messages"
+            url = f"{self.api_url}/{self.api_version}/{self.phone_number_id}/messages"
             
             headers = {
                 "Authorization": f"Bearer {self.token}",
                 "Content-Type": "application/json"
             }
+            
+            # Asegurar que el número no tenga el símbolo +
+            to = to.lstrip("+")
             
             data = {
                 "messaging_product": "whatsapp",
@@ -43,6 +47,7 @@ class WhatsAppService:
                 "to": to,
                 "type": "text",
                 "text": {
+                    "preview_url": False,
                     "body": message
                 }
             }
@@ -71,7 +76,7 @@ class WhatsAppService:
             bool: True si el mensaje se envió correctamente
         """
         try:
-            url = f"{self.api_url}/{self.phone_number_id}/messages"
+            url = f"{self.api_url}/{self.api_version}/{self.phone_number_id}/messages"
             
             headers = {
                 "Authorization": f"Bearer {self.token}",
