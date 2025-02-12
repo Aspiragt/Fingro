@@ -390,7 +390,7 @@ class ConversationFlow:
                         'commercialization': channel,
                         'irrigation': user_data['data']['get_irrigation'],
                         'location': user_data['data']['get_location'],
-                        'precio_actual': precio_actual
+                        'price_per_unit': precio_actual  # Corregido de precio_actual
                     }
                     
                     # Analizar proyecto
