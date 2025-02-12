@@ -303,6 +303,45 @@ class ConversationFlow:
     def process_confirm_loan(self) -> str:
         """Genera mensaje de confirmación de solicitud"""
         return report_generator.generate_success_message()
+    
+    async def handle_message(self, phone: str, text: str) -> str:
+        """
+        Maneja el mensaje entrante y actualiza el estado de la conversación
+        
+        Args:
+            phone: Número de teléfono del usuario
+            text: Mensaje de texto enviado por el usuario
+            
+        Returns:
+            str: Respuesta generada para el usuario
+        """
+        # Obtener estado actual del usuario
+        current_state = firebase_manager.get_user_state(phone)
+        
+        # Validar entrada del usuario
+        is_valid, processed_input = self.validate_input(current_state, text)
+        
+        if not is_valid:
+            return self.get_error_message(current_state)
+        
+        # Obtener siguiente estado
+        next_state = self.get_next_state(current_state, processed_input)
+        
+        # Actualizar estado del usuario
+        firebase_manager.update_user_state(phone, next_state)
+        
+        # Obtener mensaje de respuesta
+        response_message = self.get_next_message(next_state, {"phone": phone, "input": processed_input})
+        
+        # Procesar estados especiales
+        if next_state == self.STATES['SHOW_REPORT']:
+            response_message = await self.process_show_report({"phone": phone})
+        elif next_state == self.STATES['SHOW_LOAN']:
+            response_message = self.process_show_loan({"phone": phone})
+        elif next_state == self.STATES['CONFIRM_LOAN']:
+            response_message = self.process_confirm_loan()
+        
+        return response_message
 
 # Instancia global
 conversation_flow = ConversationFlow()
