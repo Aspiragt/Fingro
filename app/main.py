@@ -65,7 +65,7 @@ async def verify_webhook_signature(request: Request) -> bool:
         logger.error(f"Error verificando firma: {str(e)}")
         return False
 
-@app.post("/webhook")
+@app.post("/webhook/whatsapp")
 async def webhook(request: Request):
     """
     Endpoint para recibir webhooks de WhatsApp
