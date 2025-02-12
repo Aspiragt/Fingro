@@ -16,7 +16,7 @@ class WhatsAppService:
         self.api_version = "v21.0"
         self.api_url = "https://graph.facebook.com"
         self.token = settings.WHATSAPP_TOKEN
-        self.phone_number_id = settings.WHATSAPP_PHONE_ID
+        self.phone_number_id = settings.WHATSAPP_PHONE_ID.strip()  # Asegurar que no hay espacios
         self.client = httpx.AsyncClient(timeout=30.0)
     
     async def send_message(self, to: str, message: str) -> bool:
@@ -32,14 +32,15 @@ class WhatsAppService:
         """
         try:
             url = f"{self.api_url}/{self.api_version}/{self.phone_number_id}/messages"
+            logger.debug(f"Sending message to URL: {url}")
             
             headers = {
                 "Authorization": f"Bearer {self.token}",
                 "Content-Type": "application/json"
             }
             
-            # Asegurar que el número no tenga el símbolo +
-            to = to.lstrip("+")
+            # Asegurar que el número no tenga el símbolo + y esté limpio
+            to = to.lstrip("+").strip()
             
             data = {
                 "messaging_product": "whatsapp",
@@ -52,9 +53,9 @@ class WhatsAppService:
                 }
             }
             
+            logger.debug(f"Request data: {data}")
             response = await self.client.post(url, headers=headers, json=data)
             response.raise_for_status()
-            
             logger.info(f"Mensaje enviado a {to}")
             return True
             
@@ -77,6 +78,7 @@ class WhatsAppService:
         """
         try:
             url = f"{self.api_url}/{self.api_version}/{self.phone_number_id}/messages"
+            logger.debug(f"Sending template to URL: {url}")
             
             headers = {
                 "Authorization": f"Bearer {self.token}",
@@ -99,9 +101,9 @@ class WhatsAppService:
             if components:
                 data["template"]["components"] = components
             
+            logger.debug(f"Request data: {data}")
             response = await self.client.post(url, headers=headers, json=data)
             response.raise_for_status()
-            
             logger.info(f"Plantilla {template_name} enviada a {to}")
             return True
             

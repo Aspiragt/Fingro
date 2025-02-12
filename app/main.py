@@ -221,12 +221,10 @@ async def process_user_message(from_number: str, message: str) -> None:
             await whatsapp.send_message(from_number, MESSAGES['error'])
             return
             
-        # Actualizar estado
-        await firebase_manager.update_conversation_state(
-            from_number,
-            new_state,
-            user_data
-        )
+        # Actualizar estado y datos
+        conversation_data['state'] = new_state
+        conversation_data['data'] = user_data
+        await firebase_manager.update_user_state(from_number, conversation_data)
         
     except Exception as e:
         logger.error(f"Error procesando mensaje: {str(e)}")
