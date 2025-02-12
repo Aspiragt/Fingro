@@ -35,22 +35,28 @@ class Settings(BaseModel):
     
     # WhatsApp API
     WHATSAPP_TOKEN: str = Field(
-        default=os.getenv("WHATSAPP_TOKEN", ""),
+        default=os.getenv("WHATSAPP_ACCESS_TOKEN", ""),
         description="Token de acceso para la API de WhatsApp"
     )
     WHATSAPP_PHONE_ID: str = Field(
-        default=os.getenv("WHATSAPP_PHONE_ID", ""),
+        default=os.getenv("WHATSAPP_PHONE_NUMBER_ID", ""),
         description="ID del número de teléfono de WhatsApp"
     )
     WHATSAPP_VERIFY_TOKEN: str = Field(
-        default=os.getenv("WHATSAPP_VERIFY_TOKEN", ""),
+        default=os.getenv("WHATSAPP_WEBHOOK_VERIFY_TOKEN", ""),
         description="Token para verificar webhook de WhatsApp"
     )
     
     # Firebase
-    FIREBASE_CREDENTIALS: str = Field(
-        default=os.getenv("FIREBASE_CREDENTIALS", ""),
-        description="Credenciales de Firebase en formato JSON"
+    FIREBASE_CREDENTIALS_PATH: str = Field(
+        default=os.getenv("FIREBASE_CREDENTIALS_PATH", ""),
+        description="Ruta al archivo de credenciales de Firebase"
+    )
+    
+    # Debug
+    DEBUG: bool = Field(
+        default=os.getenv("DEBUG", "False").lower() == "true",
+        description="Modo debug"
     )
     
     # Validaciones
@@ -58,25 +64,30 @@ class Settings(BaseModel):
     def validate_whatsapp_token(cls, v: str) -> str:
         """Valida que el token de WhatsApp esté presente"""
         if not v:
-            raise ValueError("WHATSAPP_TOKEN es requerido")
+            raise ValueError("WHATSAPP_ACCESS_TOKEN es requerido")
         return v
     
     @validator("WHATSAPP_PHONE_ID")
     def validate_whatsapp_phone_id(cls, v: str) -> str:
         """Valida que el phone_id de WhatsApp esté presente"""
         if not v:
-            raise ValueError("WHATSAPP_PHONE_ID es requerido")
+            raise ValueError("WHATSAPP_PHONE_NUMBER_ID es requerido")
         return v
     
-    @validator("FIREBASE_CREDENTIALS")
+    @validator("FIREBASE_CREDENTIALS_PATH")
     def validate_firebase_credentials(cls, v: str) -> str:
-        """Valida que las credenciales de Firebase existan"""
+        """Valida que el archivo de credenciales de Firebase exista"""
         if not v:
-            raise ValueError("FIREBASE_CREDENTIALS es requerido")
+            raise ValueError("FIREBASE_CREDENTIALS_PATH es requerido")
+        if not os.path.exists(v):
+            raise ValueError(f"El archivo de credenciales no existe: {v}")
         try:
-            json.loads(v)
+            with open(v) as f:
+                json.load(f)  # Validar que es JSON válido
         except json.JSONDecodeError:
-            raise ValueError("FIREBASE_CREDENTIALS debe ser un JSON válido")
+            raise ValueError("El archivo de credenciales debe ser un JSON válido")
+        except Exception as e:
+            raise ValueError(f"Error leyendo archivo de credenciales: {str(e)}")
         return v
     
     class Config:

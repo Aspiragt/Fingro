@@ -30,28 +30,36 @@ class FirebaseDB:
         except ValueError:
             # Si no existe, inicializar con las credenciales
             try:
-                if not settings.FIREBASE_CREDENTIALS:
-                    raise ValueError("Firebase credentials not found in environment")
+                if not settings.FIREBASE_CREDENTIALS_PATH:
+                    raise ValueError("Firebase credentials path not found in environment")
                 
-                # Convertir el string JSON a diccionario
-                cred_dict = json.loads(settings.FIREBASE_CREDENTIALS)
+                # Leer el archivo de credenciales
+                with open(settings.FIREBASE_CREDENTIALS_PATH) as f:
+                    cred_dict = json.load(f)
+                
                 if 'project_id' not in cred_dict:
                     raise ValueError("project_id not found in Firebase credentials")
                 
-                cred = credentials.Certificate(cred_dict)
+                # Inicializar Firebase con las credenciales
+                cred = credentials.Certificate(settings.FIREBASE_CREDENTIALS_PATH)
                 self.app = firebase_admin.initialize_app(cred)
                 logger.info(f"Firebase app initialized successfully for project: {cred_dict['project_id']}")
             except json.JSONDecodeError:
-                logger.error("Invalid JSON in FIREBASE_CREDENTIALS")
+                logger.error("Invalid JSON in credentials file")
                 raise FirebaseError("Invalid Firebase credentials format")
             except Exception as e:
                 logger.error(f"Error initializing Firebase: {str(e)}")
-                raise
+                raise FirebaseError(f"Failed to initialize Firebase: {str(e)}")
         
         try:
-            # Inicializar Firestore de manera asíncrona
-            self.db = AsyncClient(self.app)
-            logger.info("Firestore client initialized successfully")
+            # Obtener project_id del archivo de credenciales
+            with open(settings.FIREBASE_CREDENTIALS_PATH) as f:
+                cred_dict = json.load(f)
+                project_id = cred_dict['project_id']
+            
+            # Inicializar Firestore con project_id explícito
+            self.db = AsyncClient(project=project_id)
+            logger.info(f"Firestore client initialized for project: {project_id}")
             
             # Cache para estados de conversación
             self._conversation_cache = {}
