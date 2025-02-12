@@ -31,6 +31,14 @@ class ConversationFlow:
             'DONE': 'done'
         }
         
+        # Comandos especiales
+        self.SPECIAL_COMMANDS = {
+            'reiniciar': 'START',
+            'menu': 'START',
+            'ayuda': 'HELP',
+            'hola': 'START'
+        }
+        
         # Opciones válidas
         self.valid_crops = [
             'maiz', 'frijol', 'papa', 'tomate', 'cafe', 'chile',
@@ -55,7 +63,8 @@ class ConversationFlow:
             "👋 ¡Hola! Soy FinGro, tu asistente financiero agrícola.\n\n"
             "Te ayudaré a analizar la rentabilidad de tu proyecto y "
             "obtener financiamiento. 🌱💰\n\n"
-            "Para empezar, *¿qué cultivo planeas sembrar?* 🌾"
+            "Para empezar, *¿qué cultivo planeas sembrar?* 🌾\n\n"
+            "Ejemplos: maíz, frijol, papa, tomate"
         )
     
     def get_next_message(self, current_state: str, user_data: Dict[str, Any]) -> str:
@@ -116,6 +125,10 @@ class ConversationFlow:
         """
         # Normalizar entrada
         user_input = user_input.lower().strip()
+        
+        # Verificar comandos especiales
+        if user_input in self.SPECIAL_COMMANDS:
+            return True, self.SPECIAL_COMMANDS[user_input]
         
         if current_state == self.STATES['GET_CROP']:
             if user_input in self.valid_crops:
@@ -208,6 +221,10 @@ class ConversationFlow:
         Returns:
             str: Siguiente estado
         """
+        # Si es un comando especial, retornar el estado correspondiente
+        if isinstance(user_input, str) and user_input in self.SPECIAL_COMMANDS:
+            return self.STATES[self.SPECIAL_COMMANDS[user_input]]
+        
         if current_state == self.STATES['START']:
             return self.STATES['GET_CROP']
             
@@ -326,6 +343,16 @@ class ConversationFlow:
                     'state': self.STATES['START'],
                     'data': {}
                 }
+            
+            # Normalizar entrada
+            text = text.lower().strip()
+            
+            # Verificar comandos especiales
+            if text in self.SPECIAL_COMMANDS:
+                current_state = {
+                    'state': self.STATES[self.SPECIAL_COMMANDS[text]],
+                    'data': {}
+                }
                 await firebase_manager.update_user_state(phone, current_state)
                 return self.get_welcome_message()
             
@@ -340,7 +367,7 @@ class ConversationFlow:
             
             # Actualizar datos del usuario
             current_state['state'] = next_state
-            if processed_input:
+            if processed_input and not isinstance(processed_input, str):
                 current_state['data'][current_state['state']] = processed_input
             
             # Actualizar estado del usuario
@@ -360,8 +387,8 @@ class ConversationFlow:
             return response_message
             
         except Exception as e:
-            logger.error(f"Error handling message: {str(e)}")
-            return "Lo siento, hubo un error procesando tu mensaje. Por favor intenta de nuevo."
+            logger.error(f"Error handling message: {str(e)}", exc_info=True)
+            return "❌ Lo siento, hubo un error procesando tu mensaje. Por favor intenta de nuevo."
     
 # Instancia global
 conversation_flow = ConversationFlow()
