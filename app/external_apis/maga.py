@@ -48,7 +48,18 @@ class MagaAPI:
     
     def __init__(self):
         """Inicializa el cliente de MAGA API"""
-        # Datos históricos por defecto
+        # Cargar precios del JSON
+        try:
+            import os
+            json_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'maga_data.json')
+            with open(json_path, 'r', encoding='utf-8') as f:
+                import json
+                self.maga_prices = json.load(f)
+        except Exception as e:
+            logger.error(f"Error cargando precios de MAGA: {str(e)}")
+            self.maga_prices = []
+        
+        # Datos históricos por defecto (como fallback)
         self.default_prices = {
             'maiz': 150,
             'frijol': 500,
@@ -69,7 +80,8 @@ class MagaAPI:
             'lechuga': 180,
             'pepino': 220,
             'sandia': 300,
-            'melon': 350
+            'melon': 350,
+            'camote': 180
         }
         
         # Factores de ajuste por canal de comercialización
@@ -169,14 +181,30 @@ class MagaAPI:
             # Normalizar nombre
             cultivo = self._normalize_text(cultivo)
             
-            # Obtener precio base (150.0 por defecto)
-            base_price = self.default_prices.get(cultivo, 150.0)
+            # Buscar precio en datos de MAGA
+            base_price = None
+            for precio in self.maga_prices:
+                producto = self._normalize_text(precio['Producto'])
+                if cultivo in producto:
+                    base_price = precio['Precio']
+                    medida = precio['Medida']
+                    mercado = precio['Mercado']
+                    break
+            
+            # Si no encontramos precio, usar el default
+            if base_price is None:
+                logger.warning(f"Usando precio por defecto para {cultivo}")
+                base_price = self.default_prices.get(cultivo, 150.0)
+                medida = 'Quintal'
+                mercado = 'Nacional'
             
             # Si se especifica un canal, devolver solo ese precio
             if canal:
                 return {
                     'precio': self._adjust_price(base_price, cultivo, canal),
-                    'canal': canal
+                    'canal': canal,
+                    'medida': medida,
+                    'mercado': mercado
                 }
             
             # Obtener canales recomendados
@@ -190,7 +218,11 @@ class MagaAPI:
             
             return {
                 'precios': prices,
-                'canales_recomendados': channels
+                'canales_recomendados': channels,
+                'precio_base': base_price,
+                'medida': medida,
+                'mercado': mercado,
+                'fuente': 'MAGA' if base_price != self.default_prices.get(cultivo, 150.0) else 'default'
             }
             
         except Exception as e:
@@ -199,7 +231,7 @@ class MagaAPI:
                 'precios': {
                     CanalComercializacion.MAYORISTA: self.default_prices.get(cultivo, 150.0)
                 },
-                'canales_recomendados': [CanalComercializacion.MAYORISTA]
+                'fuente': 'error'
             }
 
 # Instancia global

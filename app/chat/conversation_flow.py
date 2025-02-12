@@ -490,8 +490,8 @@ class ConversationFlow:
             elif next_state == self.STATES['DONE'] and current_state == self.STATES['CONFIRM_LOAN']:
                 if processed_value:  # Si confirmó el préstamo
                     final_message = (
-                        "¡Excelente! 🎉 Tu solicitud de préstamo ha sido registrada.\n\n"
-                        "Pronto un asesor se pondrá en contacto contigo para continuar el proceso. 👨‍💼"
+                        "¡Excelente! 🎉 Su solicitud de préstamo está siendo procesada.\n\n"
+                        "Le notificaremos cuando su préstamo esté aprobado. ¡Gracias por confiar en FinGro! ✨"
                     )
                 else:
                     final_message = (

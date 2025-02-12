@@ -1,0 +1,1290 @@
+[
+  {
+    "Producto": "Achiote seco, sin capsula, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 1000.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Aguacate Booth, grande, de primera",
+    "Fecha": "2024-08-01",
+    "Precio": 600.0,
+    "Mercado": "CENMA",
+    "Medida": "Red (90 - 100 unidades) (64.55 kg)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Aguacate Hass, mediano, importado",
+    "Fecha": "2024-12-01",
+    "Precio": 105.0,
+    "Mercado": "CENMA",
+    "Medida": "Caja (7 kg)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Aguacate Hass, mediano, nacional",
+    "Fecha": "2016-07-01",
+    "Precio": 94.0,
+    "Mercado": "La Terminal",
+    "Medida": "Caja (35 - 40 unidades)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Aguacate criollo, grande, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 400.0,
+    "Mercado": "La Terminal",
+    "Medida": "Red (90 - 100 unidades) (24 kg)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Ajo blanco, mediano, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 70.0,
+    "Mercado": "La Terminal",
+    "Medida": "Mazo (20 trenzas)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Ajonjolí sin descortezar, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 800.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Apio mediano, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 60.0,
+    "Mercado": "La Terminal",
+    "Medida": "Docena",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Arroz oro, blanco de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 440.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Arroz oro, blanco de segunda",
+    "Fecha": "2024-12-01",
+    "Precio": 415.63,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Arroz oro, blanco de tercera",
+    "Fecha": "2013-01-01",
+    "Precio": 271.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Arveja china, revuelta, de primera",
+    "Fecha": "2024-09-01",
+    "Precio": 440.0,
+    "Mercado": "La Terminal",
+    "Medida": "Costal (40 lb)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Arveja dulce en grano",
+    "Fecha": "2024-12-01",
+    "Precio": 148.75,
+    "Mercado": "La Terminal",
+    "Medida": "Arroba (11.34 Kg)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Arveja dulce, revuelta, con vaina, de primera",
+    "Fecha": "2024-09-01",
+    "Precio": 200.0,
+    "Mercado": "La Terminal",
+    "Medida": "Costal (40 lb)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Banano criollo, mediano, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 171.56,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Banano de exportación, mediano, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 64.38,
+    "Mercado": "La Terminal",
+    "Medida": "Caja (100 - 105 unidades)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Bovino en canal, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 20.53,
+    "Mercado": "La Terminal",
+    "Medida": "Libra",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Brócoli mediano, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 135.63,
+    "Mercado": "La Terminal",
+    "Medida": "Bolsa (2 docenas)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Cacao (Despulpado), seco, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 3700.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Camarón blanco, grande, con cabeza, de primera",
+    "Fecha": "2021-12-01",
+    "Precio": 3733.33,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Camarón blanco, grande, sin cabeza, de primera (mar)",
+    "Fecha": "2021-12-01",
+    "Precio": 4100.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Camarón blanco, mediano, con cabeza, de primera",
+    "Fecha": "2021-12-01",
+    "Precio": 3400.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Camarón blanco, mediano, sin cabeza, de primera (mar)",
+    "Fecha": "2021-12-01",
+    "Precio": 3700.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Camarón blanco, pequeño, con cabeza, de primera",
+    "Fecha": "2021-12-01",
+    "Precio": 2400.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Camarón blanco, pequeño, sin cabeza, de primera (mar)",
+    "Fecha": "2021-12-01",
+    "Precio": 3400.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Camarón grande, de primera con cabeza (estanque)",
+    "Fecha": "2024-12-01",
+    "Precio": 3450.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Camarón mediano, de primera con cabeza (estanque)",
+    "Fecha": "2024-12-01",
+    "Precio": 3050.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Camarón pequeño, de primera con cabeza (estanque)",
+    "Fecha": "2024-12-01",
+    "Precio": 2350.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Camarón rojo, grande, sin cabeza, de primera (mar)",
+    "Fecha": "2013-05-01",
+    "Precio": 3937.5,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Camarón rojo, mediano, sin cabeza, de primera (mar)",
+    "Fecha": "2013-07-01",
+    "Precio": 3857.14,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Camarón rojo, pequeño, sin cabeza, de primera (mar)",
+    "Fecha": "2013-08-01",
+    "Precio": 2800.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Cebada, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 666.67,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Cebolla con tallo, blanca, mediana, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 80.0,
+    "Mercado": "La Terminal",
+    "Medida": "Manojo (50 unidades)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Cebolla seca, amarilla, mediana, de primera",
+    "Fecha": "2024-09-01",
+    "Precio": 430.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Cebolla seca, amarilla, mediana, de primera, importada",
+    "Fecha": "2024-12-01",
+    "Precio": 400.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Cebolla seca, blanca, mediana, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 395.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Cebolla seca, blanca, mediana, de primera, importada",
+    "Fecha": "2024-10-01",
+    "Precio": 7.0,
+    "Mercado": "La Terminal",
+    "Medida": "Libra",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Cebolla seca, blanca, mediana, de segunda",
+    "Fecha": "2024-10-01",
+    "Precio": 6.0,
+    "Mercado": "La Terminal",
+    "Medida": "Libra",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Cebolla seca, blanca, mediana, de segunda, importada",
+    "Fecha": "2024-12-01",
+    "Precio": 364.38,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Cebolla seca, blanca, mediana, de segunda, nacional",
+    "Fecha": "2016-05-01",
+    "Precio": 194.55,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Cebolla seca, blanca, mediana, importada, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 442.5,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Cebolla seca, morada, mediana, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 543.13,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Cebolla seca, morada, mediana, de primera, importada",
+    "Fecha": "2024-12-01",
+    "Precio": 547.81,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Chile Chocolate, seco, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 7500.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Chile Cobanero, seco, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 7500.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Chile Jalapeño, grande, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 135.63,
+    "Mercado": "La Terminal",
+    "Medida": "Caja (36 lb)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Chile Jalapeño, mediano, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 112.5,
+    "Mercado": "La Terminal",
+    "Medida": "Caja (36 lb)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Chile Pimiento, grande, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 131.88,
+    "Mercado": "La Terminal",
+    "Medida": "Caja (90 -100 unidades)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Chile Pimiento, mediano, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 115.0,
+    "Mercado": "La Terminal",
+    "Medida": "Caja (100 - 150 unidades)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Chile Serrano, de primera",
+    "Fecha": "2024-10-01",
+    "Precio": 15.0,
+    "Mercado": "La Terminal",
+    "Medida": "Libra",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Cilantro de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 485.0,
+    "Mercado": "La Terminal",
+    "Medida": "Red (100 manojos) (30.83 Kg.)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Coco verde, mediano, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 400.0,
+    "Mercado": "La Terminal",
+    "Medida": "Ciento (136.3 kg)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Coliflor mediana, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 79.38,
+    "Mercado": "La Terminal",
+    "Medida": "Red (13 - 15 unidades)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Corvina entera, revuelta, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 1600.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Durazno blanco, mediano, de primera",
+    "Fecha": "2024-08-01",
+    "Precio": 90.0,
+    "Mercado": "La Terminal",
+    "Medida": "Ciento (7.5 kg)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Ejote chino",
+    "Fecha": "2024-12-01",
+    "Precio": 175.63,
+    "Mercado": "La Terminal",
+    "Medida": "Costal (40 lb)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Ejote criollo, revuelto, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 173.75,
+    "Mercado": "La Terminal",
+    "Medida": "Costal (40 lb)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Ejote francés, revuelto, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 175.0,
+    "Mercado": "La Terminal",
+    "Medida": "Costal (40 lb)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Filete de corvina, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 3200.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Filete de dorado, de primera",
+    "Fecha": "2024-07-01",
+    "Precio": 4200.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Filete de róbalo, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 1912.5,
+    "Mercado": "La Terminal",
+    "Medida": "Arroba (11.34 Kg)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Filete de tiburón, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 2106.25,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Fresa mediana, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 277.5,
+    "Mercado": "La Terminal",
+    "Medida": "Caja (40 lb)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Frijol blanco, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 968.75,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Frijol blanco, de primera (Norte)",
+    "Fecha": "2024-12-01",
+    "Precio": 828.57,
+    "Mercado": "21 Calle",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Frijol blanco, de primera (Oriente)",
+    "Fecha": "2024-12-01",
+    "Precio": 964.29,
+    "Mercado": "21 Calle",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Frijol blanco, de segunda",
+    "Fecha": "2024-12-01",
+    "Precio": 837.5,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Frijol negro, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 688.75,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Frijol negro, de primera (Norte)",
+    "Fecha": "2024-12-01",
+    "Precio": 632.14,
+    "Mercado": "21 Calle",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Frijol negro, de primera (Oriente)",
+    "Fecha": "2024-12-01",
+    "Precio": 682.14,
+    "Mercado": "21 Calle",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Frijol negro, de segunda",
+    "Fecha": "2024-12-01",
+    "Precio": 600.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Frijol rojo, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 800.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Frijol rojo, de primera (Norte)",
+    "Fecha": "2024-12-01",
+    "Precio": 750.0,
+    "Mercado": "21 Calle",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Frijol rojo, de primera (Oriente)",
+    "Fecha": "2024-12-01",
+    "Precio": 800.0,
+    "Mercado": "21 Calle",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Frijol rojo, de primera, importado",
+    "Fecha": "2015-08-01",
+    "Precio": 646.67,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Frijol rojo, de segunda",
+    "Fecha": "2024-12-01",
+    "Precio": 750.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Güicoy sazón, mediano, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 140.31,
+    "Mercado": "La Terminal",
+    "Medida": "Red (12 - 15 unidades) (14.805 Kg.)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Güisquil mediano, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 177.97,
+    "Mercado": "La Terminal",
+    "Medida": "Ciento (40.2 kg)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Haba seca, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 900.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Jocote de Corona, grande, de primera",
+    "Fecha": "2024-11-01",
+    "Precio": 74.0,
+    "Mercado": "La Terminal",
+    "Medida": "Ciento (4.5 kg)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Jocote de Corona, mediano, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 35.0,
+    "Mercado": "La Terminal",
+    "Medida": "Ciento (3.35 kg.)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Lechuga repollada, mediana, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 50.0,
+    "Mercado": "La Terminal",
+    "Medida": "Caja (30 unidades)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Limón Persa, mediano",
+    "Fecha": "2024-12-01",
+    "Precio": 425.0,
+    "Mercado": "La Terminal",
+    "Medida": "Millar (110 kg)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Limón criollo, mediano",
+    "Fecha": "2024-12-01",
+    "Precio": 171.88,
+    "Mercado": "La Terminal",
+    "Medida": "Millar (17.5 kg)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Loroco de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 3793.75,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Mandarina criolla, mediana, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 125.78,
+    "Mercado": "La Terminal",
+    "Medida": "Ciento (13.25 kg)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Mandarina mexicana, mediana, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 295.71,
+    "Mercado": "La Terminal",
+    "Medida": "Caja (250 unidades)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Mango Pashte o Pita, mediano",
+    "Fecha": "2024-07-01",
+    "Precio": 190.0,
+    "Mercado": "La Terminal",
+    "Medida": "Ciento (23.5 kg)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Mango Tommy Atkins, mediano",
+    "Fecha": "2024-07-01",
+    "Precio": 250.0,
+    "Mercado": "La Terminal",
+    "Medida": "Ciento (50 kg)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Manzana Ana, mediana",
+    "Fecha": "2024-05-01",
+    "Precio": 372.5,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Manzana Estrella, mediana",
+    "Fecha": "2024-12-01",
+    "Precio": 658.75,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Manzana Jonathan, mediana",
+    "Fecha": "2015-01-01",
+    "Precio": 220.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Manzana Juárez, mediana",
+    "Fecha": "2024-10-01",
+    "Precio": 550.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Manzana Red Delicious, mediana",
+    "Fecha": "2018-09-01",
+    "Precio": 260.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Manzana Winter, mediana",
+    "Fecha": "2023-06-01",
+    "Precio": 260.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Manzana del Prado, mediana",
+    "Fecha": "2024-08-01",
+    "Precio": 300.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Maní tostado, con cascara, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 1300.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Maíz amarillo, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 174.69,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Maíz amarillo, de primera, otros orígenes",
+    "Fecha": "2024-12-01",
+    "Precio": 173.75,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Maíz amarillo, de segunda",
+    "Fecha": "2024-12-01",
+    "Precio": 168.75,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Maíz blanco, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 173.13,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Maíz blanco, de primera (Norte)",
+    "Fecha": "2024-12-01",
+    "Precio": 170.0,
+    "Mercado": "21 Calle",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Maíz blanco, de primera (Oriente)",
+    "Fecha": "2024-12-01",
+    "Precio": 170.0,
+    "Mercado": "21 Calle",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Maíz blanco, de primera (Sur)",
+    "Fecha": "2019-09-01",
+    "Precio": 130.0,
+    "Mercado": "21 Calle",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Maíz blanco, de primera, otros orígenes",
+    "Fecha": "2024-12-01",
+    "Precio": 165.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Maíz blanco, de segunda",
+    "Fecha": "2024-12-01",
+    "Precio": 160.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Melocotón mediano, de primera",
+    "Fecha": "2024-08-01",
+    "Precio": 97.92,
+    "Mercado": "La Terminal",
+    "Medida": "Ciento (6.85 kg)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Melón Cantaloupe, mediano",
+    "Fecha": "2024-11-01",
+    "Precio": 800.0,
+    "Mercado": "La Terminal",
+    "Medida": "Ciento (75 kg)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Mojarra grande, de primera",
+    "Fecha": "2014-09-01",
+    "Precio": 1166.67,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Mojarra mediana, de primera",
+    "Fecha": "2014-09-01",
+    "Precio": 1033.33,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Mojarra pequeña, de primera",
+    "Fecha": "2014-09-01",
+    "Precio": 933.33,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Mojarra sin clasificar",
+    "Fecha": "2022-03-01",
+    "Precio": 1395.45,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Mora mediana, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 174.69,
+    "Mercado": "La Terminal",
+    "Medida": "Caja (40 lb)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Naranja Piña (Azucarona)",
+    "Fecha": "2024-12-01",
+    "Precio": 73.91,
+    "Mercado": "La Terminal",
+    "Medida": "Ciento (18.9 kg)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Naranja Valencia, mediana, de primera de origen hondureño",
+    "Fecha": "2024-12-01",
+    "Precio": 102.19,
+    "Mercado": "La Terminal",
+    "Medida": "Ciento (23.9 kg)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Papa Loman, lavada, grande, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 314.69,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Papa Loman, lavada, mediana, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 303.75,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Papa Loman, lavada, pequeña, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 250.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Papa larga, lavada, grande, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 338.75,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Papa redonda, lavada, grande, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 290.63,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Papa redonda, sin lavar, grande, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 263.13,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Papaya Tainung, mediana, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 108.75,
+    "Mercado": "La Terminal",
+    "Medida": "Caja (40 lb)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Papaya criolla, mediana",
+    "Fecha": "2022-07-01",
+    "Precio": 773.68,
+    "Mercado": "La Terminal",
+    "Medida": "Ciento (140 kg)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Pargo entero, revuelto, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 2481.25,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Pargo grande, de primera",
+    "Fecha": "2021-10-01",
+    "Precio": 2300.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Pargo mediano, de primera",
+    "Fecha": "2021-10-01",
+    "Precio": 2957.14,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Pargo pequeño, de primera",
+    "Fecha": "2021-10-01",
+    "Precio": 2966.67,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Pepino mediano, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 129.22,
+    "Mercado": "La Terminal",
+    "Medida": "Caja (50 - 60 unidades)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Pepitoria seca, sin descascarar, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 2166.67,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Pimienta gorda, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 2900.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Pitahaya mediana, de primera",
+    "Fecha": "2024-08-01",
+    "Precio": 600.0,
+    "Mercado": "La Terminal",
+    "Medida": "Ciento (26.35 kg)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Piña mediana",
+    "Fecha": "2024-12-01",
+    "Precio": 631.25,
+    "Mercado": "La Terminal",
+    "Medida": "Ciento (105 kg)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Plátano maduro, grande",
+    "Fecha": "2024-12-01",
+    "Precio": 220.0,
+    "Mercado": "La Terminal",
+    "Medida": "Ciento (29 kg)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Plátano maduro, mediano",
+    "Fecha": "2024-12-01",
+    "Precio": 170.0,
+    "Mercado": "La Terminal",
+    "Medida": "Ciento (20.5 kg)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Pollo entero, sin menudos, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 14.5,
+    "Mercado": "La Terminal",
+    "Medida": "Libra",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Porcino en canal",
+    "Fecha": "2024-12-01",
+    "Precio": 16.63,
+    "Mercado": "La Terminal",
+    "Medida": "Libra",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Rambután mediano, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 20.0,
+    "Mercado": "La Terminal",
+    "Medida": "Ciento (2.25 kg)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Remolacha mediana, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 42.03,
+    "Mercado": "La Terminal",
+    "Medida": "Red (4 - 5 docenas) (7.02 Kg.)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Repollo blanco, mediano, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 73.44,
+    "Mercado": "La Terminal",
+    "Medida": "Red (12 - 15 unidades) (27 kg)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Rosa Jamaica, de primera, importada",
+    "Fecha": "2024-12-01",
+    "Precio": 3000.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Rosa Jamaica, nacional",
+    "Fecha": "2024-12-01",
+    "Precio": 4300.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Rábano mediano, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 45.78,
+    "Mercado": "La Terminal",
+    "Medida": "Canasto (200 - 250 unidades)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Róbalo entero, revuelto",
+    "Fecha": "2024-12-01",
+    "Precio": 3450.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Róbalo grande, de primera",
+    "Fecha": "2021-11-01",
+    "Precio": 3700.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Róbalo mediano, de primera",
+    "Fecha": "2021-11-01",
+    "Precio": 3700.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Róbalo pequeño, de primera",
+    "Fecha": "2021-11-01",
+    "Precio": 2900.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Sandia redonda, mediana",
+    "Fecha": "2024-12-01",
+    "Precio": 2000.0,
+    "Mercado": "La Terminal",
+    "Medida": "Ciento (177.35 kg)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Sorgo blanco, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 175.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Soya amarilla, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 600.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Soya verde, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 700.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Tiburón entero, revuelto, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 2106.25,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Tilapia grande, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 1287.38,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Tilapia mediana, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 1287.38,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Tilapia pequeña, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 1287.38,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Tomate de cocina, grande, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 152.81,
+    "Mercado": "La Terminal",
+    "Medida": "Caja (45 - 50 lb)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Tomate de cocina, mediano, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 118.44,
+    "Mercado": "La Terminal",
+    "Medida": "Caja (45 - 50 lb)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Tomate de mesa, mediano, de primera",
+    "Fecha": "2016-05-01",
+    "Precio": 43.08,
+    "Mercado": "La Terminal",
+    "Medida": "Caja (140 - 170 unidades)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Uva roja, importada",
+    "Fecha": "2024-12-01",
+    "Precio": 375.75,
+    "Mercado": "La Terminal",
+    "Medida": "Caja (22 lb)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Yuca entera, mediana, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 201.88,
+    "Mercado": "La Terminal",
+    "Medida": "Red (75 - 80 unidades)(42.4 kg)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Zanahoria mediana, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 43.13,
+    "Mercado": "La Terminal",
+    "Medida": "Red (7 - 8 docenas) (13.92 kg)",
+    "Moneda": "GTQ"
+  },
+  {
+    "Producto": "Zapote mediano, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 300.0,
+    "Mercado": "La Terminal",
+    "Medida": "Ciento (39.6 kg)",
+    "Moneda": "GTQ"
+  }
+]
