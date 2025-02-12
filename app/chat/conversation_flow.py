@@ -270,6 +270,7 @@ class ConversationFlow:
                 await firebase_manager.update_user_data(phone_number, user_data)
                 welcome_message = self.get_welcome_message()
                 await self.whatsapp.send_message(phone_number, welcome_message)
+                await firebase_manager.update_user_state(phone_number, user_data)
                 return
             
             # Obtener o crear datos del usuario
