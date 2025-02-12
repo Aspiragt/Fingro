@@ -4,6 +4,7 @@ Configuración de la aplicación
 import os
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Dict, Any, Optional
 from pydantic import BaseModel, Field, validator
@@ -102,9 +103,11 @@ class Settings(BaseModel):
     
     @validator("WHATSAPP_PHONE_ID")
     def validate_whatsapp_phone_id(cls, v: str) -> str:
-        """Valida que el phone ID de WhatsApp esté presente"""
+        """Valida que el phone_id de WhatsApp esté presente"""
         if not v:
             raise ValueError("WHATSAPP_PHONE_ID es requerido")
+        if not re.match(r'^\d{4,}$', v):
+            raise ValueError("WHATSAPP_PHONE_ID debe ser un número entero de al menos 4 dígitos")
         return v
     
     @validator("FIREBASE_CREDENTIALS")

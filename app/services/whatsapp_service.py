@@ -15,7 +15,7 @@ class WhatsAppService:
         """Inicializa el servicio de WhatsApp"""
         self.api_url = settings.WHATSAPP_API_URL
         self.token = settings.WHATSAPP_TOKEN
-        self.phone_number_id = settings.WHATSAPP_PHONE_NUMBER_ID
+        self.phone_number_id = settings.WHATSAPP_PHONE_ID
         self.client = httpx.AsyncClient(timeout=30.0)
     
     async def send_message(self, to: str, message: str) -> bool:
