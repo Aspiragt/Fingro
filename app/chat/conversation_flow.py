@@ -273,11 +273,10 @@ class ConversationFlow:
             return self.STATES['ASK_LOAN']
             
         elif current_state == self.STATES['ASK_LOAN']:
-            if processed_value:  # Si responde SI
+            if processed_value:  # Si respondió SI
                 return self.STATES['SHOW_LOAN']
-            else:  # Si responde NO
-                return self.STATES['DONE']
-                
+            return self.STATES['DONE']  # Si respondió NO
+            
         elif current_state == self.STATES['SHOW_LOAN']:
             return self.STATES['CONFIRM_LOAN']
             
@@ -388,107 +387,61 @@ class ConversationFlow:
                 await self.whatsapp.send_message(phone_number, error_message)
                 return
                 
-            # Guardar dato procesado
+            # Actualizar datos del usuario
             if current_state == self.STATES['GET_CROP']:
-                # Normalizar nombre del cultivo
-                processed_value = self._normalize_crop(processed_value)
+                user_data['data']['crop'] = processed_value
+            elif current_state == self.STATES['GET_AREA']:
+                user_data['data']['area'] = processed_value
+            elif current_state == self.STATES['GET_CHANNEL']:
+                user_data['data']['channel'] = processed_value
+            elif current_state == self.STATES['GET_IRRIGATION']:
+                user_data['data']['irrigation'] = processed_value
+            elif current_state == self.STATES['GET_LOCATION']:
+                user_data['data']['location'] = processed_value
                 
-            user_data['data'][current_state] = processed_value
-            
             # Obtener siguiente estado
             next_state = self.get_next_state(current_state, message, processed_value)
             user_data['state'] = next_state
             
-            # Si llegamos a SHOW_REPORT, generar reporte
-            if next_state == self.STATES['SHOW_REPORT']:
-                try:
-                    # Preparar datos para el modelo financiero
-                    analysis_data = {
-                        'crop': user_data['data']['get_crop'],
-                        'area': float(user_data['data']['get_area']),
-                        'commercialization': user_data['data']['get_channel'],
-                        'irrigation': user_data['data']['get_irrigation'],
-                        'location': user_data['data']['get_location']
-                    }
-                    
-                    # Analizar proyecto
-                    score_data = await financial_model.analyze_project(analysis_data)
-                    if not score_data:
-                        error_message = (
-                            "❌ Error generando análisis financiero\n\n"
-                            "Por favor intenta de nuevo más tarde."
-                        )
-                        await self.whatsapp.send_message(phone_number, error_message)
-                        return
-
-                    # Guardar datos del análisis
-                    user_data['score_data'] = score_data
-                    
-                    # Generar y enviar reporte
-                    report = report_generator.generate_report(analysis_data, score_data)
-                    await self.whatsapp.send_message(phone_number, report)
-                    
-                    # Preguntar si quiere préstamo de forma amigable
-                    loan_message = (
-                        "Don(ña), ¿le gustaría que le ayude a solicitar un préstamo "
-                        "para este proyecto? 🤝\n\n"
-                        "Responda SI o NO 👇"
-                    )
-                    await self.whatsapp.send_message(phone_number, loan_message)
-                    
-                except Exception as e:
-                    logger.error(f"Error generando reporte: {str(e)}")
-                    error_message = (
-                        "❌ Error generando reporte\n\n"
-                        "Por favor intenta de nuevo más tarde."
-                    )
-                    await self.whatsapp.send_message(phone_number, error_message)
-                    return
-                
-            # Si llegamos a SHOW_LOAN, mostrar oferta
-            elif next_state == self.STATES['SHOW_LOAN']:
-                try:
-                    loan_offer = report_generator.generate_loan_offer(user_data['score_data'])
-                    await self.whatsapp.send_message(phone_number, loan_offer)
-                    
-                    # Preguntar si confirma
-                    confirm_message = "¿Desea proceder con la solicitud del préstamo? Responda SI o NO 👇"
-                    await self.whatsapp.send_message(phone_number, confirm_message)
-                except Exception as e:
-                    logger.error(f"Error generando oferta de préstamo: {str(e)}")
-                    error_message = "❌ Error generando oferta de préstamo. Por favor intente más tarde."
-                    await self.whatsapp.send_message(phone_number, error_message)
-                    return
-                
-            # Si llegamos a DONE después de confirmar préstamo
-            elif next_state == self.STATES['DONE'] and current_state == self.STATES['CONFIRM_LOAN']:
-                if processed_value:  # Si confirmó el préstamo
-                    final_message = (
-                        "¡Excelente! 🎉 Su solicitud de préstamo está siendo procesada.\n\n"
-                        "Le notificaremos cuando su préstamo esté aprobado. ¡Gracias por confiar en FinGro! ✨"
-                    )
-                else:
-                    final_message = (
-                        "Entiendo. Si cambias de opinión o necesitas más información, "
-                        "no dudes en contactarnos nuevamente. ¡Que tengas un excelente día! 👋"
-                    )
-                await self.whatsapp.send_message(phone_number, final_message)
-                
-            # Si llegamos a DONE sin confirmar préstamo
-            elif next_state == self.STATES['DONE']:
-                final_message = (
-                    "Gracias por usar FinGro. Si necesitas analizar otro proyecto "
-                    "o tienes más preguntas, ¡no dudes en escribirnos! 👋"
-                )
-                await self.whatsapp.send_message(phone_number, final_message)
-                
-            # Para cualquier otro estado, enviar siguiente pregunta
-            else:
-                next_message = self.get_next_message(next_state, user_data['data'])
-                await self.whatsapp.send_message(phone_number, next_message)
-            
-            # Guardar datos actualizados
+            # Guardar estado actualizado
             await firebase_manager.update_user_state(phone_number, user_data)
+            
+            # Procesar estado especial
+            if next_state == self.STATES['SHOW_REPORT']:
+                # Mostrar reporte y preguntar por préstamo
+                report = self.process_show_report(user_data['data'])
+                await self.whatsapp.send_message(phone_number, report)
+                
+                # Actualizar estado a ASK_LOAN
+                user_data['state'] = self.STATES['ASK_LOAN']
+                await firebase_manager.update_user_state(phone_number, user_data)
+                
+                loan_message = (
+                    "Don(ña), ¿le gustaría que le ayude a solicitar un préstamo para este proyecto? 🤝\n\n"
+                    "Responda SI o NO 👇"
+                )
+                await self.whatsapp.send_message(phone_number, loan_message)
+                return
+                
+            elif next_state == self.STATES['SHOW_LOAN']:
+                loan_offer = self.process_show_loan(user_data['data'])
+                await self.whatsapp.send_message(phone_number, loan_offer)
+                
+            elif next_state == self.STATES['DONE']:
+                if current_state == self.STATES['CONFIRM_LOAN']:
+                    confirm_message = self.process_confirm_loan()
+                    await self.whatsapp.send_message(phone_number, confirm_message)
+                else:
+                    await self.whatsapp.send_message(
+                        phone_number,
+                        "Gracias por usar FinGro. ¡Que tenga un excelente día! 👋\n\n"
+                        "Puede escribir 'inicio' para comenzar una nueva consulta."
+                    )
+                return
+                
+            # Obtener siguiente mensaje
+            next_message = self.get_next_message(next_state, user_data)
+            await self.whatsapp.send_message(phone_number, next_message)
             
         except Exception as e:
             logger.error(f"Error procesando mensaje: {str(e)}")
@@ -497,7 +450,7 @@ class ConversationFlow:
                 "o contacta a soporte si el problema persiste."
             )
             await self.whatsapp.send_message(phone_number, error_message)
-
+    
     async def process_show_report(self, user_data: Dict[str, Any]) -> str:
         """
         Procesa y muestra el reporte financiero
