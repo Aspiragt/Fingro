@@ -29,8 +29,8 @@ class FinancialReport:
         """
         try:
             # Formatear datos básicos
-            cultivo = user_data['crop'].capitalize()
-            area = float(user_data['area'])
+            cultivo = user_data['get_crop'].capitalize()
+            area = float(user_data['get_area'])
             # Convertir hectáreas a cuerdas (1 hectárea ≈ 16 cuerdas)
             cuerdas = round(area * 16)
             
