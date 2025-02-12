@@ -46,8 +46,8 @@ class Settings(BaseModel):
         default="https://graph.facebook.com",
         description="URL base de la API de WhatsApp"
     )
-    WHATSAPP_ACCESS_TOKEN: str = Field(
-        default=os.getenv("WHATSAPP_ACCESS_TOKEN", ""),
+    WHATSAPP_TOKEN: str = Field(
+        default=os.getenv("WHATSAPP_TOKEN", ""),
         description="Token de acceso para la API de WhatsApp"
     )
     WHATSAPP_PHONE_ID: str = Field(
@@ -90,11 +90,11 @@ class Settings(BaseModel):
     )
     
     # Validaciones
-    @validator("WHATSAPP_ACCESS_TOKEN")
+    @validator("WHATSAPP_TOKEN")
     def validate_whatsapp_token(cls, v: str) -> str:
         """Valida que el token de WhatsApp esté presente"""
         if not v:
-            raise ValueError("WHATSAPP_ACCESS_TOKEN es requerido")
+            raise ValueError("WHATSAPP_TOKEN es requerido")
         return v
     
     @validator("WHATSAPP_PHONE_ID")
