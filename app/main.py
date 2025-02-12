@@ -11,6 +11,8 @@ import hmac
 import hashlib
 from datetime import datetime
 import httpx
+import re
+
 from app.config import settings
 from app.services.whatsapp_service import WhatsAppService
 from app.external_apis.maga import maga_api
@@ -18,6 +20,7 @@ from app.analysis.scoring import ScoringService
 from app.utils.constants import ConversationState, MESSAGES
 from app.utils.currency import format_currency
 from app.utils.text import normalize_crop, normalize_irrigation, normalize_commercialization, normalize_yes_no
+from app.database.firebase import firebase_manager
 
 # Configurar logging
 logging.basicConfig(
@@ -38,6 +41,9 @@ app = FastAPI(
 # Instanciar servicios
 whatsapp = WhatsAppService()
 scoring_service = ScoringService()
+
+# Estado de conversaciones
+conversations: Dict[str, Dict[str, Any]] = {}
 
 async def verify_webhook_signature(request: Request) -> bool:
     """
@@ -158,7 +164,14 @@ async def process_user_message(from_number: str, message: str) -> None:
         elif current_state == ConversationState.ASKING_COMMERCIALIZATION.value:
             # Guardar método de comercialización
             message = normalize_commercialization(message)
-            if not message:
+            valid_options = {
+                'mercado local': 'mercado local',
+                'intermediario': 'intermediario',
+                'exportacion': 'exportacion',
+                'directo': 'directo'
+            }
+            
+            if message not in valid_options.values():
                 await whatsapp.send_message(from_number, MESSAGES['unknown'])
                 return
                 
