@@ -14,7 +14,7 @@ class MagaAPI:
     
     def __init__(self):
         """Inicializa el cliente de MAGA"""
-        self.data_file = Path(__file__).parent.parent.parent / 'maga_data.json'
+        self.data_file = Path(__file__).parent.parent / 'data' / 'maga_data.json'
         self._load_data()
     
     def _load_data(self):
