@@ -1,122 +1,212 @@
 """
-Módulo para interactuar con Firebase
+Módulo para manejar la interacción con Firebase
 """
-import json
 import logging
 from typing import Dict, Any, Optional
-import firebase_admin
-from firebase_admin import credentials, firestore
 from datetime import datetime, timedelta
-
+from cachetools import TTLCache
+import firebase_admin
+from firebase_admin import credentials, firestore, App
 from app.config import settings
-from app.utils.text import sanitize_data
+from app.utils.constants import ConversationState
 
 logger = logging.getLogger(__name__)
 
-class FirebaseError(Exception):
-    """Excepción personalizada para errores de Firebase"""
-    pass
-
 class FirebaseDB:
-    """Clase para manejar la conexión con Firebase"""
+    """Maneja la interacción con Firebase y el caché local"""
     
     def __init__(self):
-        """Inicializa la conexión con Firebase"""
+        """Inicializa el cliente de Firestore y el caché"""
         try:
-            # Intentar obtener la app existente
-            self.app = firebase_admin.get_app()
-            logger.info("Using existing Firebase app")
-        except ValueError:
-            # Si no existe, inicializar con las credenciales
+            # Intentar obtener app existente o crear nueva
             try:
-                if not settings.FIREBASE_CREDENTIALS_PATH:
-                    raise ValueError("Firebase credentials path not found in environment")
-                
-                # Inicializar Firebase con las credenciales
-                cred = credentials.Certificate(settings.FIREBASE_CREDENTIALS_PATH)
+                self.app = firebase_admin.get_app()
+            except ValueError:
+                cred = credentials.Certificate(settings.FIREBASE_CREDENTIALS)
                 self.app = firebase_admin.initialize_app(cred)
-                
-                # Obtener project_id del archivo de credenciales
-                with open(settings.FIREBASE_CREDENTIALS_PATH) as f:
-                    cred_dict = json.load(f)
-                    project_id = cred_dict['project_id']
-                    logger.info(f"Firebase app initialized successfully for project: {project_id}")
-            except Exception as e:
-                logger.error(f"Error initializing Firebase: {str(e)}")
-                raise FirebaseError(f"Failed to initialize Firebase: {str(e)}")
-        
-        try:
-            # Obtener project_id del archivo de credenciales
-            with open(settings.FIREBASE_CREDENTIALS_PATH) as f:
-                cred_dict = json.load(f)
-                project_id = cred_dict['project_id']
             
-            # Inicializar Firestore con project_id explícito
-            self.db = firestore.Client(project=project_id)
-            logger.info(f"Firestore client initialized for project: {project_id}")
-            
-            # Cache para estados de conversación
-            self._conversation_cache = {}
-            self._cache_timeout = timedelta(minutes=5)
+            self.db = firestore.client()
+            # Caché con tiempo de vida configurable
+            self.cache = TTLCache(
+                maxsize=settings.FIREBASE_CACHE_MAXSIZE,
+                ttl=settings.FIREBASE_CACHE_TTL
+            )
             
         except Exception as e:
-            logger.error(f"Error initializing Firestore client: {str(e)}")
-            raise FirebaseError(f"Failed to initialize Firestore: {str(e)}")
-        
-    async def get_conversation_state(self, phone: str) -> Optional[Dict[str, Any]]:
-        """
-        Obtiene el estado de la conversación para un usuario
-        
-        Args:
-            phone: Número de teléfono del usuario (debe estar validado)
-            
-        Returns:
-            Optional[Dict[str, Any]]: Estado de la conversación o None si no existe
-        """
-        try:
-            # Verificar caché primero
-            if phone in self._conversation_cache:
-                cached_state, timestamp = self._conversation_cache[phone]
-                if datetime.now() - timestamp < self._cache_timeout:
-                    return cached_state
-            
-            # Si no está en caché o expiró, obtener de Firestore
-            doc_ref = self.db.collection('conversations').document(phone)
-            doc = doc_ref.get()
-            
-            if doc.exists:
-                state = doc.to_dict()
-                # Actualizar caché
-                self._conversation_cache[phone] = (state, datetime.now())
-                return state
-            return None
-            
-        except Exception as e:
-            logger.error(f"Error getting conversation state: {str(e)}")
-            raise FirebaseError(f"Failed to get conversation state: {str(e)}")
+            logger.error(f"Error inicializando Firebase: {str(e)}")
+            raise
     
-    async def update_user_state(self, phone: str, state: Dict[str, Any]):
+    async def get_conversation_state(self, phone: str) -> Dict[str, Any]:
         """
-        Actualiza el estado de un usuario
+        Obtiene el estado actual de la conversación
         
         Args:
             phone: Número de teléfono del usuario
-            state: Nuevo estado
+            
+        Returns:
+            Dict[str, Any]: Estado actual de la conversación y datos del usuario
         """
         try:
-            # Sanitizar datos antes de guardar
-            clean_state = sanitize_data(state)
+            # Intentar obtener del caché de forma segura
+            cache_key = f"state_{phone}"
+            cached_data = self.cache.get(cache_key)
+            if cached_data is not None:
+                return cached_data
             
-            # Guardar en Firestore
-            doc_ref = self.db.collection('conversations').document(phone)
-            doc_ref.set(clean_state, merge=True)
+            # Si no está en caché, obtener de Firebase
+            user_ref = self.db.collection('users').document(phone)
+            doc = user_ref.get()
             
-            # Actualizar caché
-            self._conversation_cache[phone] = (clean_state, datetime.now())
+            if doc.exists:
+                data = doc.to_dict()
+            else:
+                # Si no existe, crear estado inicial
+                data = {
+                    'state': ConversationState.INITIAL.value,
+                    'data': {},
+                    'created_at': datetime.utcnow().isoformat(),
+                    'updated_at': datetime.utcnow().isoformat()
+                }
+                user_ref.set(data)
+            
+            # Guardar en caché
+            self.cache[cache_key] = data
+            return data
             
         except Exception as e:
-            logger.error(f"Error updating user state: {str(e)}")
-            raise FirebaseError(f"Failed to update user state: {str(e)}")
+            logger.error(f"Error obteniendo estado de conversación: {str(e)}")
+            # Retornar estado inicial en caso de error
+            return {
+                'state': ConversationState.INITIAL.value,
+                'data': {}
+            }
+    
+    async def update_user_state(self, phone: str, state: Dict[str, Any]) -> bool:
+        """
+        Actualiza el estado de la conversación del usuario
+        
+        Args:
+            phone: Número de teléfono del usuario
+            state: Nuevo estado de la conversación
+            
+        Returns:
+            bool: True si se actualizó correctamente
+        """
+        try:
+            # Actualizar en Firebase
+            user_ref = self.db.collection('users').document(phone)
+            state['updated_at'] = firestore.SERVER_TIMESTAMP
+            result = user_ref.set(state, merge=True)
+            
+            # Actualizar caché de forma segura
+            cache_key = f"state_{phone}"
+            self.cache[cache_key] = state
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error actualizando estado: {str(e)}")
+            return False
+    
+    async def reset_user_state(self, phone: str) -> bool:
+        """
+        Reinicia el estado de la conversación del usuario
+        
+        Args:
+            phone: Número de teléfono del usuario
+            
+        Returns:
+            bool: True si se reinició correctamente
+        """
+        try:
+            # Crear estado inicial
+            initial_state = {
+                'state': ConversationState.INITIAL.value,
+                'data': {},
+                'updated_at': firestore.SERVER_TIMESTAMP
+            }
+            
+            # Actualizar en Firebase
+            user_ref = self.db.collection('users').document(phone)
+            result = user_ref.set(initial_state, merge=True)
+            
+            # Limpiar caché
+            cache_key = f"state_{phone}"
+            self.cache.pop(cache_key, None)
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error reiniciando estado: {str(e)}")
+            return False
+
+    async def update_conversation_state(self, phone: str, new_state: str) -> bool:
+        """
+        Actualiza el estado de la conversación
+        
+        Args:
+            phone: Número de teléfono del usuario
+            new_state: Nuevo estado de la conversación
+            
+        Returns:
+            bool: True si se actualizó correctamente
+        """
+        try:
+            current_state = await self.get_conversation_state(phone)
+            current_state['state'] = new_state
+            return await self.update_user_state(phone, current_state)
+        except Exception as e:
+            logger.error(f"Error actualizando estado de conversación: {str(e)}")
+            return False
+    
+    async def store_analysis(self, phone: str, analysis: Dict[str, Any]) -> bool:
+        """
+        Guarda el análisis generado para un usuario
+        
+        Args:
+            phone: Número de teléfono del usuario
+            analysis: Datos del análisis
+            
+        Returns:
+            bool: True si se guardó correctamente
+        """
+        try:
+            # Sanitizar datos sensibles
+            safe_analysis = self._sanitize_data(analysis)
+            
+            # Crear documento de análisis
+            analysis_data = {
+                'user_phone': phone,
+                'analysis': safe_analysis,
+                'created_at': firestore.SERVER_TIMESTAMP
+            }
+            
+            # Guardar en Firebase
+            result = self.db.collection('analysis').add(analysis_data)
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error guardando análisis: {str(e)}")
+            return False
+    
+    def _sanitize_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Sanitiza datos sensibles antes de guardar o loggear
+        
+        Args:
+            data: Datos a sanitizar
+            
+        Returns:
+            Dict[str, Any]: Datos sanitizados
+        """
+        sensitive_fields = ['phone', 'email', 'address']
+        safe_data = data.copy()
+        
+        for field in sensitive_fields:
+            if field in safe_data:
+                safe_data[field] = '[REDACTED]'
+        
+        return safe_data
 
 # Instancia global
 firebase_manager = FirebaseDB()

@@ -1,736 +1,234 @@
 """
-API para obtener precios de productos agrícolas del MAGA usando datos predefinidos
+Cliente para obtener precios del MAGA (Ministerio de Agricultura, Ganadería y Alimentación)
+usando Selenium para acceder a la página https://precios.maga.gob.gt/tool/public/
 """
-
+import httpx
+from typing import Optional, Dict, Any, List
 import logging
-from typing import Dict, Any, Optional, List
+from datetime import datetime, timedelta
+import json
+from bs4 import BeautifulSoup
+import re
+import pandas as pd
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.options import Options
+import time
 
 logger = logging.getLogger(__name__)
 
-class MagaAPI:
-    """Cliente para el API de precios del MAGA"""
+class MAGAPreciosClient:
+    """Cliente para obtener datos de cultivos del MAGA usando Selenium"""
+    
+    BASE_URL = "https://precios.maga.gob.gt/tool/public"
+    CACHE_DURATION = 1 * 60 * 60  # 1 hora en segundos
+    
+    # Mapeo de cultivos a sus nombres en la página
+    CROP_MAPPING = {
+        'tomate': 'Tomate de cocina',
+        'papa': 'Papa',
+        'maiz': 'Maíz blanco',
+        'frijol': 'Frijol negro',
+        'cafe': 'Café',
+        'chile': 'Chile pimiento',
+        'cebolla': 'Cebolla',
+        'repollo': 'Repollo',
+        'arveja': 'Arveja china'
+    }
     
     def __init__(self):
-        """Inicializa el cliente de MAGA"""
-        # Diccionario de cultivos y sus variaciones
-        self.crops = {
-            # Granos básicos
-            'maiz': {
-                'nombre': 'Maíz blanco, de primera',
-                'precio': 173.13,
-                'unidad': 'Quintal',
-                'fecha': '2025-02-12',
-                'mercado': 'La Terminal',
-                'fuente': 'MAGA'
-            },
-            'frijol_negro': {
-                'nombre': 'Frijol negro, de primera',
-                'precio': 688.75,
-                'unidad': 'Quintal',
-                'fecha': '2025-02-12',
-                'mercado': 'La Terminal',
-                'fuente': 'MAGA'
-            },
-            'frijol_rojo': {
-                'nombre': 'Frijol rojo, de primera',
-                'precio': 800.00,
-                'unidad': 'Quintal',
-                'fecha': '2025-02-12',
-                'mercado': 'La Terminal',
-                'fuente': 'MAGA'
-            },
-            'frijol_blanco': {
-                'nombre': 'Frijol blanco, de primera',
-                'precio': 968.75,
-                'unidad': 'Quintal',
-                'fecha': '2025-02-12',
-                'mercado': 'La Terminal',
-                'fuente': 'MAGA'
-            },
-            'arroz': {
-                'nombre': 'Arroz oro, blanco de primera',
-                'precio': 440.00,
-                'unidad': 'Quintal',
-                'fecha': '2025-02-12',
-                'mercado': 'La Terminal',
-                'fuente': 'MAGA'
-            },
-            'sorgo': {
-                'nombre': 'Sorgo blanco, de primera',
-                'precio': 175.00,
-                'unidad': 'Quintal',
-                'fecha': '2025-02-12',
-                'mercado': 'La Terminal',
-                'fuente': 'MAGA'
-            },
-
-            # Hortalizas
-            'papa': {
-                'nombre': 'Papa Loman, lavada, grande, de primera',
-                'precio': 314.69,
-                'unidad': 'Quintal',
-                'fecha': '2025-02-12',
-                'mercado': 'La Terminal',
-                'fuente': 'MAGA'
-            },
-            'tomate': {
-                'nombre': 'Tomate de cocina, grande, de primera',
-                'precio': 152.81,
-                'unidad': 'Caja (45 - 50 lb)',
-                'fecha': '2025-02-12',
-                'mercado': 'La Terminal',
-                'fuente': 'MAGA'
-            },
-            'cebolla': {
-                'nombre': 'Cebolla seca, blanca, mediana, de primera',
-                'precio': 395.00,
-                'unidad': 'Quintal',
-                'fecha': '2025-02-12',
-                'mercado': 'La Terminal',
-                'fuente': 'MAGA'
-            },
-            'chile_pimiento': {
-                'nombre': 'Chile Pimiento, grande, de primera',
-                'precio': 131.88,
-                'unidad': 'Caja (90 -100 unidades)',
-                'fecha': '2025-02-12',
-                'mercado': 'La Terminal',
-                'fuente': 'MAGA'
-            },
-            'zanahoria': {
-                'nombre': 'Zanahoria mediana, de primera',
-                'precio': 43.13,
-                'unidad': 'Red (7 - 8 docenas)',
-                'fecha': '2025-02-12',
-                'mercado': 'La Terminal',
-                'fuente': 'MAGA'
-            },
-            'remolacha': {
-                'nombre': 'Remolacha mediana, de primera',
-                'precio': 42.03,
-                'unidad': 'Red (4 - 5 docenas)',
-                'fecha': '2025-02-12',
-                'mercado': 'La Terminal',
-                'fuente': 'MAGA'
-            },
-            'guisquil': {
-                'nombre': 'Güisquil mediano, de primera',
-                'precio': 177.97,
-                'unidad': 'Ciento',
-                'fecha': '2025-02-12',
-                'mercado': 'La Terminal',
-                'fuente': 'MAGA'
-            },
-            'brocoli': {
-                'nombre': 'Brócoli mediano, de primera',
-                'precio': 135.63,
-                'unidad': 'Bolsa (2 docenas)',
-                'fecha': '2025-02-12',
-                'mercado': 'La Terminal',
-                'fuente': 'MAGA'
-            },
-            'coliflor': {
-                'nombre': 'Coliflor mediana, de primera',
-                'precio': 79.38,
-                'unidad': 'Red (13 - 15 unidades)',
-                'fecha': '2025-02-12',
-                'mercado': 'La Terminal',
-                'fuente': 'MAGA'
-            },
-            'repollo': {
-                'nombre': 'Repollo blanco, mediano, de primera',
-                'precio': 43.13,
-                'unidad': 'Red',
-                'fecha': '2025-02-12',
-                'mercado': 'La Terminal',
-                'fuente': 'MAGA'
-            },
-            'apio': {
-                'nombre': 'Apio mediano, de primera',
-                'precio': 60.00,
-                'unidad': 'Docena',
-                'fecha': '2025-02-12',
-                'mercado': 'La Terminal',
-                'fuente': 'MAGA'
-            },
-            'pepino': {
-                'nombre': 'Pepino mediano, de primera',
-                'precio': 129.22,
-                'unidad': 'Caja (50 - 60 unidades)',
-                'fecha': '2025-02-12',
-                'mercado': 'La Terminal',
-                'fuente': 'MAGA'
-            },
-            'ejote': {
-                'nombre': 'Ejote francés, revuelto, de primera',
-                'precio': 175.00,
-                'unidad': 'Costal (40 lb)',
-                'fecha': '2025-02-12',
-                'mercado': 'La Terminal',
-                'fuente': 'MAGA'
-            },
-            'arveja': {
-                'nombre': 'Arveja china, revuelta, de primera',
-                'precio': 440.00,
-                'unidad': 'Costal (40 lb)',
-                'fecha': '2025-02-12',
-                'mercado': 'La Terminal',
-                'fuente': 'MAGA'
-            },
-            'yuca': {
-                'nombre': 'Yuca entera, mediana, de primera',
-                'precio': 201.88,
-                'unidad': 'Red (75 - 80 unidades)',
-                'fecha': '2025-02-12',
-                'mercado': 'La Terminal',
-                'fuente': 'MAGA'
-            },
-
-            # Frutas
-            'aguacate': {
-                'nombre': 'Aguacate Hass, mediano, importado',
-                'precio': 105.00,
-                'unidad': 'Caja (7 kg)',
-                'fecha': '2025-02-12',
-                'mercado': 'La Terminal',
-                'fuente': 'MAGA'
-            },
-            'banano': {
-                'nombre': 'Banano criollo, mediano, de primera',
-                'precio': 171.56,
-                'unidad': 'Quintal',
-                'fecha': '2025-02-12',
-                'mercado': 'La Terminal',
-                'fuente': 'MAGA'
-            },
-            'mango': {
-                'nombre': 'Mango Tommy Atkins, mediano',
-                'precio': 250.00,
-                'unidad': 'Ciento (50 kg)',
-                'fecha': '2025-02-12',
-                'mercado': 'La Terminal',
-                'fuente': 'MAGA'
-            },
-            'papaya': {
-                'nombre': 'Papaya Tainung, mediana, de primera',
-                'precio': 108.75,
-                'unidad': 'Caja (40 lb)',
-                'fecha': '2025-02-12',
-                'mercado': 'La Terminal',
-                'fuente': 'MAGA'
-            },
-            'piña': {
-                'nombre': 'Piña mediana',
-                'precio': 631.25,
-                'unidad': 'Ciento (105 kg)',
-                'fecha': '2025-02-12',
-                'mercado': 'La Terminal',
-                'fuente': 'MAGA'
-            },
-            'melon': {
-                'nombre': 'Melón Cantaloupe, mediano',
-                'precio': 800.00,
-                'unidad': 'Ciento (75 kg)',
-                'fecha': '2025-02-12',
-                'mercado': 'La Terminal',
-                'fuente': 'MAGA'
-            },
-            'sandia': {
-                'nombre': 'Sandia redonda, mediana',
-                'precio': 2000.00,
-                'unidad': 'Ciento (177.35 kg)',
-                'fecha': '2025-02-12',
-                'mercado': 'La Terminal',
-                'fuente': 'MAGA'
-            },
-            'limon': {
-                'nombre': 'Limón Persa, mediano',
-                'precio': 425.00,
-                'unidad': 'Millar (110 kg)',
-                'fecha': '2025-02-12',
-                'mercado': 'La Terminal',
-                'fuente': 'MAGA'
-            },
-            'naranja': {
-                'nombre': 'Naranja Valencia, mediana, de primera de origen hondureño',
-                'precio': 102.19,
-                'unidad': 'Ciento (23.9 kg)',
-                'fecha': '2025-02-12',
-                'mercado': 'La Terminal',
-                'fuente': 'MAGA'
-            },
-            'mandarina': {
-                'nombre': 'Mandarina criolla, mediana, de primera',
-                'precio': 125.78,
-                'unidad': 'Ciento (13.25 kg)',
-                'fecha': '2025-02-12',
-                'mercado': 'La Terminal',
-                'fuente': 'MAGA'
-            },
-            'manzana': {
-                'nombre': 'Manzana Estrella, mediana',
-                'precio': 658.75,
-                'unidad': 'Quintal',
-                'fecha': '2025-02-12',
-                'mercado': 'La Terminal',
-                'fuente': 'MAGA'
-            },
-
-            # Especias y otros
-            'achiote': {
-                'nombre': 'Achiote seco, sin capsula, de primera',
-                'precio': 1000.00,
-                'unidad': 'Quintal',
-                'fecha': '2025-02-12',
-                'mercado': 'La Terminal',
-                'fuente': 'MAGA'
-            },
-            'chile_seco': {
-                'nombre': 'Chile Cobanero, seco, de primera',
-                'precio': 7500.00,
-                'unidad': 'Quintal',
-                'fecha': '2025-02-12',
-                'mercado': 'La Terminal',
-                'fuente': 'MAGA'
-            },
-            'rosa_jamaica': {
-                'nombre': 'Rosa Jamaica, nacional',
-                'precio': 4300.00,
-                'unidad': 'Quintal',
-                'fecha': '2025-02-12',
-                'mercado': 'La Terminal',
-                'fuente': 'MAGA'
-            },
-            'loroco': {
-                'nombre': 'Loroco de primera',
-                'precio': 3793.75,
-                'unidad': 'Quintal',
-                'fecha': '2025-02-12',
-                'mercado': 'La Terminal',
-                'fuente': 'MAGA'
-            }
-        }
+        """Inicializa el cliente de MAGA Precios"""
+        self._cache = {}
+        self._last_update = {}
+        self._driver = None
         
-        # Mapeo de variaciones de nombres
-        self.name_mapping = {
-            # Granos básicos
-            'maiz': 'maiz',
-            'maíz': 'maiz',
-            'mais': 'maiz',
-            'maís': 'maiz',
-            'elote': 'maiz',
+    def _init_driver(self):
+        """Inicializa el driver de Selenium"""
+        if self._driver is None:
+            chrome_options = Options()
+            chrome_options.add_argument('--headless')  # Modo headless
+            chrome_options.add_argument('--no-sandbox')
+            chrome_options.add_argument('--disable-dev-shm-usage')
             
-            'frijol negro': 'frijol_negro',
-            'frijol': 'frijol_negro',
-            'frijoles negros': 'frijol_negro',
-            
-            'frijol rojo': 'frijol_rojo',
-            'frijoles rojos': 'frijol_rojo',
-            
-            'frijol blanco': 'frijol_blanco',
-            'frijoles blancos': 'frijol_blanco',
-            
-            'arroz': 'arroz',
-            'arroz blanco': 'arroz',
-            'arroz de primera': 'arroz',
-            
-            'sorgo': 'sorgo',
-            'sorgo blanco': 'sorgo',
-            'maicillo': 'sorgo',
-            
-            # Hortalizas
-            'papa': 'papa',
-            'papas': 'papa',
-            'papa loman': 'papa',
-            'papa grande': 'papa',
-            
-            'tomate': 'tomate',
-            'tomates': 'tomate',
-            'jitomate': 'tomate',
-            'tomate de cocina': 'tomate',
-            
-            'cebolla': 'cebolla',
-            'cebollas': 'cebolla',
-            'cebolla blanca': 'cebolla',
-            'cebolla seca': 'cebolla',
-            
-            'chile': 'chile_pimiento',
-            'chile pimiento': 'chile_pimiento',
-            'pimiento': 'chile_pimiento',
-            'chiles': 'chile_pimiento',
-            'morron': 'chile_pimiento',
-            'morrón': 'chile_pimiento',
-            
-            'brocoli': 'brocoli',
-            'brócoli': 'brocoli',
-            'brecol': 'brocoli',
-            
-            'zanahoria': 'zanahoria',
-            'zanahorias': 'zanahoria',
-            
-            'repollo': 'repollo',
-            'col': 'repollo',
-            
-            'apio': 'apio',
-            'apios': 'apio',
-            
-            'pepino': 'pepino',
-            'pepinos': 'pepino',
-            
-            'ejote': 'ejote',
-            'ejotes': 'ejote',
-            'ejote frances': 'ejote',
-            
-            'arveja': 'arveja',
-            'arvejas': 'arveja',
-            'arveja china': 'arveja',
-            
-            'yuca': 'yuca',
-            'yucas': 'yuca',
-            
-            # Frutas
-            'aguacate': 'aguacate',
-            'aguacates': 'aguacate',
-            'aguacate hass': 'aguacate',
-            'palta': 'aguacate',
-            
-            'banano': 'banano',
-            'bananos': 'banano',
-            'platano': 'banano',
-            'plátano': 'banano',
-            
-            'mango': 'mango',
-            'mangos': 'mango',
-            'mango tommy': 'mango',
-            
-            'papaya': 'papaya',
-            'papayas': 'papaya',
-            
-            'piña': 'piña',
-            'piñas': 'piña',
-            
-            'melon': 'melon',
-            'melón': 'melon',
-            'melones': 'melon',
-            
-            'sandia': 'sandia',
-            'sandía': 'sandia',
-            'sandias': 'sandia',
-            'sandías': 'sandia',
-            
-            'limon': 'limon',
-            'limón': 'limon',
-            'limones': 'limon',
-            
-            'naranja': 'naranja',
-            'naranjas': 'naranja',
-            
-            'mandarina': 'mandarina',
-            'mandarinas': 'mandarina',
-            
-            'manzana': 'manzana',
-            'manzanas': 'manzana',
-            
-            # Especias y otros
-            'achiote': 'achiote',
-            
-            'chile seco': 'chile_seco',
-            'chile cobanero': 'chile_seco',
-            'chile chocolate': 'chile_seco',
-            
-            'rosa jamaica': 'rosa_jamaica',
-            'flor de jamaica': 'rosa_jamaica',
-            'jamaica': 'rosa_jamaica',
-            
-            'loroco': 'loroco'
-        }
+            self._driver = webdriver.Chrome(options=chrome_options)
         
-        self.variations = {
-            'maiz': 'maiz',
-            'maíz': 'maiz',
-            'mais': 'maiz',
-            'maís': 'maiz',
-            'elote': 'maiz',
-            
-            'frijol negro': 'frijol_negro',
-            'frijol': 'frijol_negro',
-            'frijoles negros': 'frijol_negro',
-            
-            'frijol rojo': 'frijol_rojo',
-            'frijoles rojos': 'frijol_rojo',
-            
-            'frijol blanco': 'frijol_blanco',
-            'frijoles blancos': 'frijol_blanco',
-            
-            'arroz': 'arroz',
-            'arroz blanco': 'arroz',
-            'arroz de primera': 'arroz',
-            
-            'sorgo': 'sorgo',
-            'sorgo blanco': 'sorgo',
-            'maicillo': 'sorgo',
-            
-            # Hortalizas
-            'papa': 'papa',
-            'papas': 'papa',
-            'papa loman': 'papa',
-            'papa grande': 'papa',
-            
-            'tomate': 'tomate',
-            'tomates': 'tomate',
-            'jitomate': 'tomate',
-            'tomate de cocina': 'tomate',
-            
-            'cebolla': 'cebolla',
-            'cebollas': 'cebolla',
-            'cebolla blanca': 'cebolla',
-            'cebolla seca': 'cebolla',
-            
-            'chile': 'chile_pimiento',
-            'chile pimiento': 'chile_pimiento',
-            'pimiento': 'chile_pimiento',
-            'chiles': 'chile_pimiento',
-            'morron': 'chile_pimiento',
-            'morrón': 'chile_pimiento',
-            
-            'brocoli': 'brocoli',
-            'brócoli': 'brocoli',
-            'brecol': 'brocoli',
-            
-            'zanahoria': 'zanahoria',
-            'zanahorias': 'zanahoria',
-            
-            'repollo': 'repollo',
-            'col': 'repollo',
-            
-            'apio': 'apio',
-            'apios': 'apio',
-            
-            'pepino': 'pepino',
-            'pepinos': 'pepino',
-            
-            'ejote': 'ejote',
-            'ejotes': 'ejote',
-            'ejote frances': 'ejote',
-            
-            'arveja': 'arveja',
-            'arvejas': 'arveja',
-            'arveja china': 'arveja',
-            
-            'yuca': 'yuca',
-            'yucas': 'yuca',
-            
-            # Frutas
-            'aguacate': 'aguacate',
-            'aguacates': 'aguacate',
-            'aguacate hass': 'aguacate',
-            'palta': 'aguacate',
-            
-            'banano': 'banano',
-            'bananos': 'banano',
-            'platano': 'banano',
-            'plátano': 'banano',
-            
-            'mango': 'mango',
-            'mangos': 'mango',
-            'mango tommy': 'mango',
-            
-            'papaya': 'papaya',
-            'papayas': 'papaya',
-            
-            'piña': 'piña',
-            'piñas': 'piña',
-            
-            'melon': 'melon',
-            'melón': 'melon',
-            'melones': 'melon',
-            
-            'sandia': 'sandia',
-            'sandía': 'sandia',
-            'sandias': 'sandia',
-            'sandías': 'sandia',
-            
-            'limon': 'limon',
-            'limón': 'limon',
-            'limones': 'limon',
-            
-            'naranja': 'naranja',
-            'naranjas': 'naranja',
-            
-            'mandarina': 'mandarina',
-            'mandarinas': 'mandarina',
-            
-            'manzana': 'manzana',
-            'manzanas': 'manzana',
-            
-            # Especias y otros
-            'achiote': 'achiote',
-            
-            'chile seco': 'chile_seco',
-            'chile cobanero': 'chile_seco',
-            'chile chocolate': 'chile_seco',
-            
-            'rosa jamaica': 'rosa_jamaica',
-            'flor de jamaica': 'rosa_jamaica',
-            'jamaica': 'rosa_jamaica',
-            
-            'loroco': 'loroco',
-            
-            # Errores comunes adicionales
-            'sandilla': 'sandia',
-            'zanaoria': 'zanahoria',
-            'zanoria': 'zanahoria',
-            'broculi': 'brocoli',
-            'brocolin': 'brocoli',
-            'chile morron': 'chile_pimiento',
-            'pimiento morron': 'chile_pimiento',
-            'tomate de cosina': 'tomate',
-            'aguacate jass': 'aguacate',
-            'guineo': 'banano',
-            'platanos': 'banano',
-            'elotes': 'maiz',
-            'maiz elote': 'maiz',
-            'frijoles': 'frijol_negro',
-            'limon persa': 'limon',
-            'limon criollo': 'limon',
-            'naranja agria': 'naranja',
-            'naranja dulce': 'naranja',
-            'papas': 'papa',
-            'patatas': 'papa'
-        }
+    def _quit_driver(self):
+        """Cierra el driver de Selenium"""
+        if self._driver is not None:
+            self._driver.quit()
+            self._driver = None
         
-        logger.info("MagaAPI inicializado con datos predefinidos")
-    
-    def _normalize_text(self, text):
-        """Normaliza el texto para búsqueda
-        
-        Args:
-            text (str): Texto a normalizar
-            
-        Returns:
-            str: Texto normalizado
+    async def _get_price_data(self, crop_name: str) -> Optional[Dict]:
         """
-        if not text:
-            return ""
-            
-        # Convertir a minúsculas
-        text = text.lower()
-        
-        # Remover acentos
-        replacements = {
-            'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u',
-            'ü': 'u', 'ñ': 'n'
-        }
-        for a, b in replacements.items():
-            text = text.replace(a, b)
-            
-        # Corregir errores comunes
-        common_mistakes = {
-            'sandilla': 'sandia',
-            'zanaoria': 'zanahoria',
-            'zanoria': 'zanahoria',
-            'broculi': 'brocoli',
-            'brocolin': 'brocoli',
-            'chile morron': 'chile pimiento',
-            'chile morró': 'chile pimiento',
-            'chile morrón': 'chile pimiento',
-            'tomate de cosina': 'tomate de cocina',
-            'aguacate jass': 'aguacate hass',
-            'pimiento morron': 'chile pimiento',
-            'frijoles': 'frijol',
-            'elotes': 'maiz',
-            'platanos': 'platano',
-            'guineo': 'banano',
-            'limon persa': 'limon',
-            'naranja agria': 'naranja',
-            'papas': 'papa'
-        }
-        
-        # Aplicar correcciones de errores comunes
-        for mistake, correction in common_mistakes.items():
-            if mistake in text:
-                text = text.replace(mistake, correction)
-            
-        # Remover caracteres especiales
-        text = ''.join(c for c in text if c.isalnum() or c.isspace())
-        
-        # Remover espacios extra
-        text = ' '.join(text.split())
-        
-        return text
-
-    async def search_crop(self, query: str) -> Optional[Dict[str, Any]]:
-        """
-        Busca un cultivo en los datos predefinidos
-        
+        Obtiene datos de precios de un cultivo usando Selenium
         Args:
-            query: Nombre del cultivo a buscar
-            
+            crop_name: Nombre del cultivo en español
         Returns:
-            Dict con información del cultivo o None si no se encuentra
+            Dict con los datos o None si hay error
         """
         try:
-            # Normalizar búsqueda
-            query = self._normalize_text(query)
-            logger.info(f"Buscando cultivo normalizado: {query}")
+            # Verificar cache
+            cache_key = f"price_data_{crop_name}"
+            now = datetime.now().timestamp()
             
-            # Buscar en el mapeo de nombres
-            crop_key = self.name_mapping.get(query)
-            if not crop_key:
-                # Si no se encuentra exactamente, buscar por palabras
-                query_words = set(query.split())
-                max_word_matches = 0
-                best_match = None
-                
-                for name, key in self.name_mapping.items():
-                    name_words = set(name.split())
-                    word_matches = len(query_words.intersection(name_words))
-                    
-                    if word_matches > max_word_matches:
-                        max_word_matches = word_matches
-                        best_match = key
-                
-                if best_match:
-                    crop_key = best_match
-                else:
-                    logger.warning(f"Cultivo no encontrado en mapeo: {query}")
-                    return None
+            if (cache_key in self._cache and 
+                now - self._last_update.get(cache_key, 0) <= self.CACHE_DURATION):
+                return self._cache[cache_key]
             
-            # Obtener datos del cultivo
-            crop_data = self.crops.get(crop_key)
-            if not crop_data:
-                logger.warning(f"Cultivo no encontrado en datos: {crop_key}")
+            # Inicializar driver
+            self._init_driver()
+            
+            # Cargar página
+            logger.info(f"Obteniendo precios de MAGA para {crop_name}")
+            self._driver.get(self.BASE_URL)
+            
+            # Esperar a que cargue la tabla
+            wait = WebDriverWait(self._driver, 10)
+            table = wait.until(EC.presence_of_element_located((By.CLASS_NAME, 'price-table')))
+            
+            # Dar tiempo para que se carguen los datos
+            time.sleep(2)
+            
+            # Obtener HTML actualizado
+            html = self._driver.page_source
+            soup = BeautifulSoup(html, 'html.parser')
+            
+            # Buscar tabla de precios
+            table = soup.find('table', {'class': 'price-table'})
+            if not table:
+                logger.error("No se encontró la tabla de precios")
                 return None
             
-            logger.info(f"Cultivo encontrado: {crop_data}")
-            return crop_data
+            # Extraer datos
+            rows = table.find_all('tr')
+            precios = []
             
+            for row in rows[1:]:  # Ignorar header
+                cols = row.find_all('td')
+                if len(cols) >= 4:  # Producto, Precio, Unidad, Fecha
+                    producto = cols[0].text.strip()
+                    if producto.lower() == crop_name.lower():
+                        precio = {
+                            'producto': producto,
+                            'precio': float(re.sub(r'[^\d.]', '', cols[1].text)),
+                            'unidad': cols[2].text.strip(),
+                            'fecha': datetime.strptime(cols[3].text.strip(), '%d/%m/%Y').strftime('%Y-%m-%d'),
+                            'mercado': 'Nacional'
+                        }
+                        precios.append(precio)
+            
+            data = {'precios': precios}
+            
+            # Guardar en cache
+            self._cache[cache_key] = data
+            self._last_update[cache_key] = now
+            
+            return data
+                
         except Exception as e:
-            logger.error(f"Error buscando cultivo: {str(e)}")
+            logger.error(f"Error obteniendo precios: {str(e)}", exc_info=True)
             return None
-
-    async def get_historical_prices(self, query: str, days: int = 30) -> List[Dict[str, Any]]:
-        """
-        Obtiene historial de precios para un cultivo
-        
-        Args:
-            query: Nombre del cultivo
-            days: Número de días de historial
+        finally:
+            # Cerrar driver
+            self._quit_driver()
             
+    async def get_crop_price(self, crop_name: str) -> Optional[Dict[str, Any]]:
+        """
+        Obtiene el precio más reciente de un cultivo
+        Args:
+            crop_name: Nombre del cultivo
         Returns:
-            Lista de precios históricos
+            Dict con datos del precio o None si hay error
         """
         try:
-            crop_data = await self.search_crop(query)
-            if not crop_data:
-                return []
+            # Normalizar nombre
+            crop_name = crop_name.lower().strip()
             
-            # Por ahora solo retornamos el precio actual
-            return [crop_data]
+            # Obtener nombre completo del cultivo
+            crop_full_name = self.CROP_MAPPING.get(crop_name)
+            if not crop_full_name:
+                logger.warning(f"Cultivo no encontrado en mapeo MAGA: {crop_name}")
+                return None
+            
+            # Obtener datos
+            data = await self._get_price_data(crop_full_name)
+            if data is None or not data.get('precios'):
+                return None
+            
+            # Obtener último precio disponible
+            precios = sorted(data['precios'], key=lambda x: x.get('fecha', ''), reverse=True)
+            if not precios:
+                return None
+                
+            latest = precios[0]
+            
+            return {
+                'nombre': crop_full_name,
+                'precio': latest['precio'],
+                'unidad': latest['unidad'],
+                'mercado': latest['mercado'],
+                'fecha': latest['fecha'],
+                'fuente': 'MAGA'
+            }
             
         except Exception as e:
-            logger.error(f"Error obteniendo historial: {str(e)}")
-            return []
+            logger.error(f"Error obteniendo precio para {crop_name}: {str(e)}")
+            return None
+            
+    async def get_historical_prices(self, crop_name: str, days: int = 30) -> Optional[List[Dict[str, Any]]]:
+        """
+        Obtiene precios históricos de un cultivo
+        Args:
+            crop_name: Nombre del cultivo
+            days: Número de días hacia atrás
+        Returns:
+            Lista de precios históricos o None si hay error
+        """
+        try:
+            # Normalizar nombre
+            crop_name = crop_name.lower().strip()
+            
+            # Obtener nombre completo del cultivo
+            crop_full_name = self.CROP_MAPPING.get(crop_name)
+            if not crop_full_name:
+                return None
+                
+            # Obtener datos
+            data = await self._get_price_data(crop_full_name)
+            if data is None or not data.get('precios'):
+                return None
+            
+            # Filtrar por fecha y convertir a lista de diccionarios
+            cutoff_date = datetime.now() - timedelta(days=days)
+            precios = []
+            
+            for precio in data['precios']:
+                fecha = datetime.strptime(precio['fecha'], '%Y-%m-%d')
+                if fecha >= cutoff_date:
+                    precios.append({
+                        'nombre': crop_full_name,
+                        'precio': precio['precio'],
+                        'unidad': precio['unidad'],
+                        'mercado': precio['mercado'],
+                        'fecha': precio['fecha'],
+                        'fuente': 'MAGA'
+                    })
+            
+            return sorted(precios, key=lambda x: x['fecha'], reverse=True)
+            
+        except Exception as e:
+            logger.error(f"Error obteniendo precios históricos para {crop_name}: {str(e)}")
+            return None
+            
+    async def get_available_crops(self) -> List[str]:
+        """
+        Obtiene lista de cultivos disponibles
+        Returns:
+            Lista de cultivos
+        """
+        return list(self.CROP_MAPPING.keys())
 
-# Instancia global del API
-maga_api = MagaAPI()
+# Cliente global
+maga_precios_client = MAGAPreciosClient()

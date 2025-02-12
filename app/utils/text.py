@@ -1,10 +1,9 @@
 """
 Utilidades para procesar texto con errores comunes
 """
-from typing import Dict, List, Any
+from typing import Dict, List
 import re
 from unidecode import unidecode
-from datetime import datetime
 
 def normalize_text(text: str) -> str:
     """
@@ -119,103 +118,3 @@ def normalize_yes_no(text: str) -> str:
         return 'no'
         
     return text
-
-def normalize_crop_new(crop: str) -> str:
-    """
-    Normaliza el nombre de un cultivo
-    
-    Args:
-        crop: Nombre del cultivo
-        
-    Returns:
-        str: Nombre normalizado
-    """
-    # Diccionario de correcciones comunes
-    corrections = {
-        'mais': 'maiz',
-        'maís': 'maiz',
-        'mayz': 'maiz',
-        'frijol': 'frijol_negro',
-        'frijoles': 'frijol_negro',
-        'frijol negro': 'frijol_negro',
-        'papa': 'papa',
-        'papas': 'papa',
-        'tomate': 'tomate',
-        'jitomate': 'tomate'
-    }
-    
-    # Normalizar texto
-    normalized = crop.lower().strip()
-    
-    # Aplicar correcciones
-    return corrections.get(normalized, normalized)
-
-def sanitize_data(data: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Sanitiza datos para logging y almacenamiento
-    
-    Args:
-        data: Datos a sanitizar
-        
-    Returns:
-        Dict[str, Any]: Datos sanitizados
-    """
-    # Campos sensibles a redactar
-    sensitive_fields = {
-        'phone', 'telefono', 'email', 'correo', 'address', 'direccion',
-        'password', 'contraseña', 'token', 'api_key', 'secret'
-    }
-    
-    # Patrones de datos sensibles
-    patterns = {
-        'phone': r'^\+?[\d\s-]{8,}$',
-        'email': r'^[\w\.-]+@[\w\.-]+\.\w+$',
-        'token': r'^[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.?[A-Za-z0-9-_.+/=]*$'
-    }
-    
-    def _sanitize_value(key: str, value: Any) -> Any:
-        """Sanitiza un valor individual"""
-        if isinstance(value, dict):
-            return sanitize_data(value)
-        elif isinstance(value, list):
-            return [_sanitize_value(key, v) for v in value]
-        elif isinstance(value, str):
-            # Verificar si el campo es sensible
-            key_lower = key.lower()
-            if key_lower in sensitive_fields:
-                return '[REDACTED]'
-            
-            # Verificar patrones de datos sensibles
-            for pattern in patterns.values():
-                if re.match(pattern, value):
-                    return '[REDACTED]'
-                    
-        return value
-    
-    return {k: _sanitize_value(k, v) for k, v in data.items()}
-
-def format_currency(amount: float, currency: str = 'GTQ') -> str:
-    """
-    Formatea un monto como moneda
-    
-    Args:
-        amount: Monto a formatear
-        currency: Código de moneda (default: GTQ)
-        
-    Returns:
-        str: Monto formateado
-    """
-    return f"{currency} {amount:,.2f}"
-
-def format_date(date: datetime, format: str = '%Y-%m-%d') -> str:
-    """
-    Formatea una fecha
-    
-    Args:
-        date: Fecha a formatear
-        format: Formato deseado
-        
-    Returns:
-        str: Fecha formateada
-    """
-    return date.strftime(format)

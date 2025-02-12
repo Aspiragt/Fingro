@@ -4,6 +4,7 @@ Configuración de la aplicación
 import os
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Dict, Any, Optional
 from pydantic import BaseModel, Field, validator
@@ -27,26 +28,30 @@ class Settings(BaseModel):
     """Configuración de la aplicación"""
     
     # Entorno
-    PORT: int = Field(
-        default=int(os.getenv("PORT", "8000")),
-        description="Puerto para el servidor"
+    ENV: str = Field(
+        default=os.getenv("ENV", "development"),
+        description="Entorno de ejecución"
     )
     DEBUG: bool = Field(
-        default=os.getenv("DEBUG", "False").lower() == "true",
+        default=os.getenv("DEBUG", "false").lower() == "true",
         description="Modo debug"
     )
     LOG_LEVEL: str = Field(
-        default=os.getenv("LOG_LEVEL", "INFO"),
+        default=os.getenv("LOG_LEVEL", "INFO").upper(),
         description="Nivel de logging"
     )
     
     # WhatsApp API
-    WHATSAPP_ACCESS_TOKEN: str = Field(
+    WHATSAPP_API_URL: str = Field(
+        default="https://graph.facebook.com",
+        description="URL base de la API de WhatsApp"
+    )
+    WHATSAPP_TOKEN: str = Field(
         default=os.getenv("WHATSAPP_ACCESS_TOKEN", ""),
         description="Token de acceso para la API de WhatsApp"
     )
-    WHATSAPP_PHONE_NUMBER_ID: str = Field(
-        default=os.getenv("WHATSAPP_PHONE_NUMBER_ID", ""),
+    WHATSAPP_PHONE_ID: str = Field(
+        default=os.getenv("WHATSAPP_PHONE_ID", ""),
         description="ID del número de teléfono de WhatsApp"
     )
     WHATSAPP_WEBHOOK_VERIFY_TOKEN: str = Field(
@@ -55,46 +60,69 @@ class Settings(BaseModel):
     )
     
     # Firebase
-    FIREBASE_CREDENTIALS_PATH: str = Field(
-        default=os.getenv("FIREBASE_CREDENTIALS_PATH", ""),
-        description="Ruta al archivo de credenciales de Firebase"
+    FIREBASE_CREDENTIALS: Dict[str, Any] = Field(
+        default_factory=lambda: json.loads(os.getenv("FIREBASE_CREDENTIALS_JSON", "{}")),
+        description="Credenciales de Firebase en formato JSON"
+    )
+    FIREBASE_CACHE_TTL: int = Field(
+        default=int(os.getenv("FIREBASE_CACHE_TTL", "300")),
+        description="Tiempo de vida del caché en segundos"
+    )
+    FIREBASE_CACHE_MAXSIZE: int = Field(
+        default=int(os.getenv("FIREBASE_CACHE_MAXSIZE", "1000")),
+        description="Tamaño máximo del caché"
+    )
+    
+    # MAGA API
+    MAGA_BASE_URL: str = Field(
+        default="https://maga.gt/api/v1",
+        description="URL base de la API de MAGA"
+    )
+    
+    # Seguridad
+    CORS_ORIGINS: list = Field(
+        default=json.loads(os.getenv("CORS_ORIGINS", '["*"]')),
+        description="Orígenes permitidos para CORS"
+    )
+    RATE_LIMIT_PER_MINUTE: int = Field(
+        default=int(os.getenv("RATE_LIMIT_PER_MINUTE", "60")),
+        description="Límite de requests por minuto"
     )
     
     # Validaciones
-    @validator("WHATSAPP_ACCESS_TOKEN")
+    @validator("WHATSAPP_TOKEN")
     def validate_whatsapp_token(cls, v: str) -> str:
         """Valida que el token de WhatsApp esté presente"""
         if not v:
-            raise ValueError("WHATSAPP_ACCESS_TOKEN es requerido")
+            raise ValueError("WHATSAPP_TOKEN es requerido")
         return v
     
-    @validator("WHATSAPP_PHONE_NUMBER_ID")
+    @validator("WHATSAPP_PHONE_ID")
     def validate_whatsapp_phone_id(cls, v: str) -> str:
         """Valida que el phone_id de WhatsApp esté presente"""
         if not v:
-            raise ValueError("WHATSAPP_PHONE_NUMBER_ID es requerido")
+            raise ValueError("WHATSAPP_PHONE_ID es requerido")
+        if not re.match(r'^\d{4,}$', v):
+            raise ValueError("WHATSAPP_PHONE_ID debe ser un número entero de al menos 4 dígitos")
         return v
     
-    @validator("FIREBASE_CREDENTIALS_PATH")
-    def validate_firebase_credentials(cls, v: str) -> str:
-        """Valida que el archivo de credenciales de Firebase exista"""
+    @validator("FIREBASE_CREDENTIALS")
+    def validate_firebase_credentials(cls, v: Dict[str, Any]) -> Dict[str, Any]:
+        """Valida que las credenciales de Firebase existan"""
         if not v:
-            raise ValueError("FIREBASE_CREDENTIALS_PATH es requerido")
-        if not os.path.exists(v):
-            raise ValueError(f"El archivo de credenciales no existe: {v}")
-        try:
-            with open(v) as f:
-                json.load(f)  # Validar que es JSON válido
-        except json.JSONDecodeError:
-            raise ValueError("El archivo de credenciales debe ser un JSON válido")
-        except Exception as e:
-            raise ValueError(f"Error leyendo archivo de credenciales: {str(e)}")
+            raise ValueError("FIREBASE_CREDENTIALS es requerido")
         return v
+    
+    class Config:
+        """Configuración del modelo"""
+        case_sensitive = True
+        env_file = ".env"
+        env_file_encoding = "utf-8"
 
 # Instancia global de configuración
 try:
     settings = Settings()
-    logger.info(f"Configuración cargada en puerto: {settings.PORT}")
+    logger.info(f"Configuración cargada para entorno: {settings.ENV}")
 except Exception as e:
     logger.error(f"Error cargando configuración: {str(e)}")
     raise

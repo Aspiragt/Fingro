@@ -1,19 +1,14 @@
-"""
-Rutas para el webhook de WhatsApp
-"""
 from fastapi import APIRouter, Request, Response, HTTPException, Depends
 from typing import Any
 from app.services.whatsapp_service import WhatsAppService
-from app.database.firebase import firebase_manager
-from app.chat.conversation_flow import conversation_flow
-from app.config.settings import settings
+from app.database.firebase import get_firebase_db
 import logging
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/webhook")
+router = APIRouter()
 
-@router.get("/whatsapp")
+@router.get("/webhook")
 async def verify_webhook(request: Request):
     """Verify webhook for WhatsApp API"""
     try:
@@ -35,14 +30,14 @@ async def verify_webhook(request: Request):
         logger.error(f"Error verifying webhook: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/whatsapp")
+@router.post("/webhook")
 async def receive_message(request: Request, whatsapp: WhatsAppService = Depends()):
     """Handle incoming WhatsApp messages"""
     try:
         body = await request.json()
         
         # Log incoming webhook
-        logger.info(f"Received webhook body: {body}")
+        logger.debug(f"Received webhook: {body}")
         
         # Extract message data
         entry = body.get("entry", [{}])[0]
@@ -50,10 +45,7 @@ async def receive_message(request: Request, whatsapp: WhatsAppService = Depends(
         value = changes.get("value", {})
         messages = value.get("messages", [])
         
-        logger.info(f"Extracted messages: {messages}")
-        
         if not messages:
-            logger.info("No messages found in webhook")
             return {"status": "no_messages"}
             
         # Process each message
@@ -61,26 +53,15 @@ async def receive_message(request: Request, whatsapp: WhatsAppService = Depends(
             from_number = message.get("from")
             message_type = message.get("type")
             
-            logger.info(f"Processing message - From: {from_number}, Type: {message_type}")
-            
             if not from_number or not message_type:
-                logger.warning(f"Invalid message format - from: {from_number}, type: {message_type}")
                 continue
                 
-            if message_type == "text":
-                text = message.get("text", {}).get("body", "")
-                logger.info(f"Processing text message: {text}")
-                # Procesar el mensaje usando conversation_flow
-                response = await conversation_flow.handle_message(from_number, text)
-                logger.info(f"Generated response: {response}")
-                # Enviar respuesta al usuario
-                await whatsapp.send_message(from_number, response)
-                logger.info(f"Response sent to {from_number}")
+            await whatsapp.process_message(from_number, message)
             
         return {"status": "processed"}
         
     except Exception as e:
-        logger.error(f"Error processing webhook: {str(e)}", exc_info=True)
+        logger.error(f"Error processing webhook: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/health")
@@ -88,7 +69,7 @@ async def health_check():
     """Health check endpoint"""
     try:
         # Check Firebase connection
-        db = firebase_manager.get_firebase_db()
+        db = get_firebase_db()
         if not db:
             raise Exception("Firebase connection failed")
             
