@@ -11,12 +11,12 @@ import hmac
 import hashlib
 from datetime import datetime
 import httpx
-from app.utils.constants import ConversationState, MESSAGES, format_currency
-from app.services.whatsapp_service import WhatsAppService
-from app.database.firebase import firebase_manager
-from app.external_apis.maga import maga_api
-from app.analysis.scoring import scoring_service
 from app.config import settings
+from app.services.whatsapp_service import WhatsAppService
+from app.external_apis.maga import maga_api
+from app.analysis.scoring import ScoringService
+from app.utils.constants import ConversationState, MESSAGES, format_currency
+from app.database.firebase import firebase_manager
 
 # Configurar logging
 logging.basicConfig(
@@ -36,6 +36,7 @@ app = FastAPI(
 
 # Instanciar servicios
 whatsapp = WhatsAppService()
+scoring_service = ScoringService()
 
 async def verify_webhook_signature(request: Request) -> bool:
     """
@@ -190,13 +191,10 @@ async def process_user_message(from_number: str, message: str) -> None:
             user_data['location'] = message
             
             try:
-                # Obtener datos históricos
-                datos_historicos = await maga_api.get_datos_historicos(user_data['crop'])
-                if not datos_historicos:
-                    logger.error(f"No hay datos para el cultivo: {user_data['crop']}")
-                    await whatsapp.send_message(from_number, MESSAGES['error'])
-                    return
-                    
+                # Obtener precio actual
+                precio = await maga_api.get_precio_cultivo(user_data['crop'])
+                logger.info(f"Precio obtenido para {user_data['crop']}: Q{precio}")
+                
                 # Calcular score y análisis
                 score = await scoring_service.calculate_score(
                     data={
@@ -205,7 +203,7 @@ async def process_user_message(from_number: str, message: str) -> None:
                         'irrigation': user_data['irrigation'],
                         'commercialization': user_data['commercialization']
                     },
-                    precio_actual=datos_historicos.get('precio_actual')
+                    precio_actual=precio
                 )
                 
                 user_data['score'] = score
@@ -215,12 +213,18 @@ async def process_user_message(from_number: str, message: str) -> None:
                 await whatsapp.send_message(
                     from_number,
                     MESSAGES['analysis'].format(
-                        cultivo=user_data['crop'],
+                        cultivo=user_data['crop'].capitalize(),
                         area=user_data['area'],
                         ingresos=format_currency(score['expected_income']),
                         costos=format_currency(score['estimated_costs']),
                         ganancia=format_currency(score['expected_profit'])
                     )
+                )
+                
+                # Preguntar si está interesado en el préstamo
+                await whatsapp.send_message(
+                    from_number,
+                    MESSAGES['ask_loan_interest']
                 )
                 
             except Exception as e:

@@ -57,14 +57,14 @@ Puede indicarlo en cuerdas, manzanas o hectáreas 🌾""",
         "¿Te gustaría aplicar?"
     ),
     
-    'analysis': """¡Perfecto! Según los precios actuales del mercado, con su siembra de {cultivo} en {area}:
+    'analysis': """📊 *Análisis Financiero*
 
-📈 PROYECCIÓN:
-• Ingresos esperados: Q{ingresos}
-• Costos estimados: Q{costos}
-• Ganancia potencial: Q{ganancia}
+Cultivo: {cultivo}
+Área: {area} hectáreas
 
-¿Le gustaría conocer las opciones de financiamiento disponibles? 💪""",
+💰 Ingresos esperados: {ingresos}
+💸 Costos estimados: {costos}
+✨ Ganancia potencial: {ganancia}""",
     
     'credit_offer': """¡Buenas noticias! 🎉 Califica para:
 
@@ -77,18 +77,19 @@ Este préstamo le permite cubrir sus costos de siembra y le da la oportunidad de
 
 ¿Desea iniciar su solicitud? Es rápido y fácil 📝""",
     
-    'ask_loan_interest': "🤔 ¿Aplicar para un préstamo?\n\nResponde 'si' o 'no'",
+    'ask_loan_interest': """¿Te gustaría recibir más información sobre nuestros préstamos? 🤝
+
+Responde 'si' o 'no'""",
     
-    'loan_yes': (
-        "🎉 ¡Excelente!\n\n"
-        "Documentos necesarios:\n"
-        "• DPI\n"
-        "• Recibo de servicios\n"
-        "• Estado de cuenta\n\n"
-        "¿Cuándo quieres empezar?"
-    ),
+    'loan_yes': """¡Excelente decisión! 🎉
+
+Un asesor se pondrá en contacto contigo pronto para explicarte los detalles y resolver tus dudas.
+
+Gracias por confiar en FinGro 🌱""",
     
-    'loan_no': "👋 ¡Gracias! Escribe 'reiniciar' cuando quieras intentar de nuevo",
+    'loan_no': """Entendido, gracias por tu interés en FinGro 🌱
+
+Si cambias de opinión, puedes escribirnos cuando quieras.""",
     
     'error': """¡Disculpe! Tuvimos un pequeño problema técnico 😅 
 ¿Podría intentar escribir su mensaje nuevamente?""",
