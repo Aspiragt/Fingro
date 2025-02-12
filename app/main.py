@@ -11,7 +11,7 @@ import hmac
 import hashlib
 from datetime import datetime
 import httpx
-from app.utils.constants import ConversationState, MESSAGES
+from app.utils.constants import ConversationState, MESSAGES, format_currency
 from app.services.whatsapp_service import WhatsAppService
 from app.database.firebase import firebase_manager
 from app.external_apis.maga import maga_api
@@ -120,13 +120,20 @@ async def process_user_message(from_number: str, message: str) -> None:
         elif current_state == ConversationState.ASKING_AREA.value:
             # Validar y guardar área
             try:
-                area = float(message)
+                # Extraer el primer número del mensaje usando regex
+                import re
+                number_match = re.search(r'\d+\.?\d*', message)
+                if not number_match:
+                    raise ValueError("No se encontró un número válido")
+                
+                area = float(number_match.group())
                 if area <= 0:
                     raise ValueError("Área debe ser mayor a 0")
+                    
                 user_data['area'] = area
                 new_state = ConversationState.ASKING_IRRIGATION.value
                 await whatsapp.send_message(from_number, MESSAGES['ask_irrigation'])
-            except ValueError:
+            except ValueError as e:
                 await whatsapp.send_message(from_number, MESSAGES['invalid_area'])
                 return
                 

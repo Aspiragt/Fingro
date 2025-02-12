@@ -44,8 +44,7 @@ Puede indicarlo en cuerdas, manzanas o hectáreas 🌾""",
 
 1. Mercado local
 2. Intermediario
-3. Exportación
-4. Directo""",
+3. Exportación""",
     
     'ask_payment_method': "💵 ¿Forma de pago?\n\n- Efectivo\n- Transferencia\n- Cheque",
     
