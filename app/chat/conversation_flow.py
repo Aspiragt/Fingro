@@ -7,6 +7,7 @@ from app.models.financial_model import financial_model
 from app.views.financial_report import report_generator
 from app.external_apis.maga import CanalComercializacion
 from app.database.firebase import firebase_manager
+from app.external_apis.maga_precios import maga_api
 
 logger = logging.getLogger(__name__)
 
@@ -39,13 +40,6 @@ class ConversationFlow:
             'hola': 'START'
         }
         
-        # Opciones válidas
-        self.valid_crops = [
-            'maiz', 'frijol', 'papa', 'tomate', 'cafe', 'chile',
-            'cebolla', 'repollo', 'arveja', 'aguacate', 'platano',
-            'limon', 'zanahoria', 'brocoli'
-        ]
-        
         self.valid_channels = [
             CanalComercializacion.MAYORISTA,
             CanalComercializacion.COOPERATIVA,
@@ -64,7 +58,7 @@ class ConversationFlow:
             "Te ayudaré a analizar la rentabilidad de tu proyecto y "
             "obtener financiamiento. 🌱💰\n\n"
             "Para empezar, *¿qué cultivo planeas sembrar?* 🌾\n\n"
-            "Ejemplos: maíz, frijol, papa, tomate"
+            "Por ejemplo: maíz, frijol, papa, tomate, etc."
         )
     
     def get_next_message(self, current_state: str, user_data: Dict[str, Any]) -> str:
@@ -112,7 +106,7 @@ class ConversationFlow:
             
         return "❌ Estado no válido"
     
-    def validate_input(self, current_state: str, user_input: str) -> tuple:
+    async def validate_input(self, current_state: str, user_input: str) -> tuple:
         """
         Valida la entrada del usuario
         
@@ -127,8 +121,13 @@ class ConversationFlow:
         user_input = user_input.lower().strip()
         
         if current_state == self.STATES['GET_CROP']:
-            if user_input in self.valid_crops:
-                return True, user_input
+            # Buscar el cultivo en MAGA
+            try:
+                crop_info = await maga_api.search_crop(user_input)
+                if crop_info:
+                    return True, user_input
+            except Exception as e:
+                logger.error(f"Error buscando cultivo en MAGA: {str(e)}")
             return False, None
             
         elif current_state == self.STATES['GET_AREA']:
@@ -182,8 +181,8 @@ class ConversationFlow:
         """
         if current_state == self.STATES['GET_CROP']:
             return (
-                "❌ Por favor ingresa un cultivo válido\n\n"
-                "Algunos ejemplos: maíz, frijol, papa, tomate"
+                "❌ No encontré información sobre ese cultivo\n\n"
+                "Por favor intenta con otro cultivo o verifica el nombre"
             )
             
         elif current_state == self.STATES['GET_AREA']:
@@ -351,7 +350,7 @@ class ConversationFlow:
                 return self.get_welcome_message()
             
             # Validar entrada del usuario
-            is_valid, processed_input = self.validate_input(current_state['state'], text)
+            is_valid, processed_input = await self.validate_input(current_state['state'], text)
             
             if not is_valid:
                 return self.get_error_message(current_state['state'])
