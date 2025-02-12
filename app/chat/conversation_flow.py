@@ -273,7 +273,17 @@ class ConversationFlow:
                 return
             
             # Obtener o crear datos del usuario
-            user_data = await firebase_manager.get_user_data(phone_number)
+            try:
+                user_data = await firebase_manager.get_conversation_state(phone_number)
+            except Exception as e:
+                logger.error(f"Error obteniendo datos del usuario: {str(e)}")
+                error_message = (
+                    "Lo siento, ha ocurrido un error. Por favor intenta nuevamente "
+                    "o contacta a soporte si el problema persiste."
+                )
+                await self.whatsapp.send_message(phone_number, error_message)
+                return
+                
             if not user_data:
                 user_data = {
                     'state': self.STATES['START'],
