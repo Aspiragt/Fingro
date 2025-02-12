@@ -29,10 +29,10 @@ class ScoringService:
     
     # Factores de ajuste por tipo de comercialización
     FACTOR_COMERCIALIZACION = {
-        'exportación': 1.3,  # 30% más caro por estándares de calidad
-        'mercado local': 1.0,
-        'directo': 0.9,     # 10% más barato por menos intermediarios
-        'intermediario': 1.1 # 10% más caro por comisiones
+        'exportacion': 1.3,     # 30% más caro por estándares de calidad
+        'mercado local': 1.0,   # Precio base del mercado
+        'directo': 0.9,         # 10% más barato por menos intermediarios
+        'intermediario': 1.1    # 10% más caro por comisiones
     }
     
     # Puntajes base por tipo de riego
@@ -45,10 +45,10 @@ class ScoringService:
     
     # Puntajes base por tipo de comercialización
     SCORE_COMERCIALIZACION = {
-        'exportación': 100,    # Mejor mercado
-        'mercado local': 80,   # Buen mercado
-        'directo': 70,         # Mercado limitado
-        'intermediario': 60    # Menor control
+        'exportacion': 100,     # Mejor mercado
+        'mercado local': 80,    # Buen mercado
+        'directo': 70,          # Mercado limitado
+        'intermediario': 60     # Menor control
     }
     
     async def calculate_score(self, data: Dict[str, Any], precio_actual: Optional[float] = None) -> Dict[str, Any]:
@@ -135,18 +135,7 @@ class ScoringService:
         Returns:
             float: Factor de ajuste
         """
-        comercializacion = comercializacion.lower().strip()
-        
-        if '1' in comercializacion or 'local' in comercializacion:
-            return 1.0  # Mercado local
-        elif '2' in comercializacion or 'intermediario' in comercializacion:
-            return 1.1  # Intermediario
-        elif '3' in comercializacion or 'exportacion' in comercializacion or 'exportación' in comercializacion:
-            return 1.3  # Exportación
-        elif '4' in comercializacion or 'directo' in comercializacion:
-            return 0.9  # Directo
-        else:
-            return 1.0  # Valor por defecto
+        return self.FACTOR_COMERCIALIZACION.get(comercializacion.lower().strip(), 1.0)
     
     def _calcular_score_comercializacion(self, comercializacion: str) -> float:
         """
@@ -158,18 +147,7 @@ class ScoringService:
         Returns:
             float: Score entre 0 y 1
         """
-        comercializacion = comercializacion.lower().strip()
-        
-        if '1' in comercializacion or 'local' in comercializacion:
-            return 0.6  # Mercado local
-        elif '2' in comercializacion or 'intermediario' in comercializacion:
-            return 0.4  # Intermediario
-        elif '3' in comercializacion or 'exportacion' in comercializacion or 'exportación' in comercializacion:
-            return 1.0  # Exportación
-        elif '4' in comercializacion or 'directo' in comercializacion:
-            return 0.8  # Directo
-        else:
-            return 0.5  # Valor por defecto
+        return self.SCORE_COMERCIALIZACION.get(comercializacion.lower().strip(), 60) / 100.0
     
     def _estimar_rendimiento(self, tipo_riego: str) -> float:
         """

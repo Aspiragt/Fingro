@@ -80,36 +80,27 @@ def normalize_irrigation(text: str) -> str:
     return corrections.get(text, text)
     
 def normalize_commercialization(text: str) -> str:
-    """
-    Normaliza métodos de comercialización con errores comunes
-    """
+    """Normaliza el método de comercialización"""
     text = normalize_text(text)
     
-    # Mapa de correcciones comunes
-    corrections = {
-        'local': 'mercado local',
-        'mercado': 'mercado local',
-        'pueblo': 'mercado local',
-        'plaza': 'mercado local',
-        'terminal': 'mercado local',
-        'intermediario': 'intermediario',
-        'coyote': 'intermediario',
-        'revendedor': 'intermediario',
-        'comprador': 'intermediario',
-        'exportacion': 'exportacion',
-        'exportar': 'exportacion',
-        'extranjero': 'exportacion',
-        'internacional': 'exportacion',
-        'directo': 'directo',
-        'propio': 'directo',
-        'personal': 'directo',
-        'cooperativa': 'directo',
-        'coop': 'directo',
-        'asociacion': 'directo'
-    }
+    # Mercado local
+    if any(word in text for word in ['1', 'mercado', 'local', 'plaza', 'terminal']):
+        return 'mercado local'
     
-    return corrections.get(text, text)
+    # Intermediario
+    if any(word in text for word in ['2', 'intermediario', 'coyote', 'comprador']):
+        return 'intermediario'
     
+    # Exportación
+    if any(word in text for word in ['3', 'exportacion', 'exportador']):
+        return 'exportacion'
+    
+    # Directo
+    if any(word in text for word in ['4', 'directo', 'cooperativa', 'coop', 'asociacion']):
+        return 'directo'
+    
+    return text
+
 def normalize_yes_no(text: str) -> str:
     """
     Normaliza respuestas afirmativas/negativas con errores comunes
