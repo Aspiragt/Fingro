@@ -22,8 +22,7 @@ class FirebaseDB:
             try:
                 self.app = firebase_admin.get_app()
             except ValueError:
-                cred = credentials.Certificate(settings.FIREBASE_CREDENTIALS)
-                self.app = firebase_admin.initialize_app(cred)
+                self.app = firebase_admin.initialize_app(settings.FIREBASE_CREDENTIALS)
             
             self.db = firestore.client()
             # Caché con tiempo de vida configurable
