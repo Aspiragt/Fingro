@@ -21,26 +21,36 @@ class ConversationState(str, Enum):
 
 # Mensajes del bot
 MESSAGES = {
-    'welcome': (
-        "👋 ¡Hola! Soy FinGro\n\n"
-        "🌱 Préstamos para el campo desde Q5,000 hasta Q100,000\n"
-        "⚡️ Respuesta en 24 horas\n\n"
-        "¿Cuál es tu nombre?"
-    ),
-    
+    'welcome': """¡Hola! 👋 Soy el asistente de FinGro, una empresa guatemalteca dedicada a apoyar agricultores con financiamiento rápido y justo.
+
+Le ayudamos a obtener el préstamo que necesita para su siembra, sin exceso de papeleo y desde la comodidad de su teléfono 🌱
+
+¿Qué cultivo está sembrando o planea sembrar? Por ejemplo: maíz, frijol, café, etc.""",
+
     'ask_crop': "🌿 ¿Qué cultivo planeas sembrar?",
     
-    'ask_area': "📏 ¿Cuántas hectáreas? (ejemplo: 2.5)",
+    'ask_area': """¡Excelente! ¿Qué extensión de terreno cultivará? 
+Puede indicarlo en cuerdas, manzanas o hectáreas 🌾""",
     
     'invalid_area': "❌ Ingresa un número válido (ejemplo: 2.5)",
     
-    'ask_irrigation': "💧 ¿Sistema de riego?\n\n- Goteo\n- Aspersión\n- Gravedad\n- Temporal",
+    'ask_irrigation': """¿Qué sistema de riego utiliza en su terreno? 💧
+
+1. Temporal (lluvia)
+2. Goteo
+3. Aspersión
+4. Otro""",
     
-    'ask_commercialization': "🏪 ¿Cómo venderás?\n\n- Mercado local\n- Exportación\n- Intermediario\n- Directo",
+    'ask_commercialization': """¿Cómo planea comercializar su cosecha? 🚛
+
+1. Mercado local
+2. Cooperativa agrícola
+3. Exportación
+4. Otro""",
     
     'ask_payment_method': "💵 ¿Forma de pago?\n\n- Efectivo\n- Transferencia\n- Cheque",
     
-    'ask_location': "📍 ¿Municipio y departamento?\n\nEjemplo: San Juan Sacatepéquez, Guatemala",
+    'ask_location': "¿En qué municipio está ubicado su terreno? 📍",
     
     'analysis_ready': (
         "✅ ¡Análisis listo!\n\n"
@@ -48,6 +58,26 @@ MESSAGES = {
         "💰 Préstamo sugerido: {monto}\n\n"
         "¿Te gustaría aplicar?"
     ),
+    
+    'analysis': """¡Perfecto! Según los precios actuales del mercado, con su siembra de {cultivo} en {area}:
+
+📈 PROYECCIÓN:
+• Ingresos esperados: Q{ingresos}
+• Costos estimados: Q{costos}
+• Ganancia potencial: Q{ganancia}
+
+¿Le gustaría conocer las opciones de financiamiento disponibles? 💪""",
+    
+    'credit_offer': """¡Buenas noticias! 🎉 Califica para:
+
+💰 Monto: hasta Q{monto}
+📊 Tasa: {tasa}% anual
+⏱️ Plazo: {plazo} meses
+📅 Cuotas: Q{cuota}/mes
+
+Este préstamo le permite cubrir sus costos de siembra y le da la oportunidad de pagar con su cosecha 🌱
+
+¿Desea iniciar su solicitud? Es rápido y fácil 📝""",
     
     'ask_loan_interest': "🤔 ¿Aplicar para un préstamo?\n\nResponde 'si' o 'no'",
     
@@ -62,9 +92,12 @@ MESSAGES = {
     
     'loan_no': "👋 ¡Gracias! Escribe 'reiniciar' cuando quieras intentar de nuevo",
     
-    'error': "❌ Error. Escribe 'reiniciar' para comenzar de nuevo",
+    'error': """¡Disculpe! Tuvimos un pequeño problema técnico 😅 
+¿Podría intentar escribir su mensaje nuevamente?""",
     
-    'error_restart': "❌ Error. Empecemos de nuevo.\n\n¿Cuál es tu nombre?"
+    'error_restart': "❌ Error. Empecemos de nuevo.\n\n¿Cuál es tu nombre?",
+    
+    'unknown': "Disculpe, no comprendí bien. ¿Podría reformular su respuesta?"
 }
 
 def format_currency(amount: float) -> str:
