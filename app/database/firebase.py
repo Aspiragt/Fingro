@@ -97,12 +97,14 @@ class FirebaseDB:
             bool: True si se actualizó correctamente
         """
         try:
+            # Actualizar timestamp
+            state['updated_at'] = datetime.utcnow().isoformat()
+            
             # Actualizar en Firebase
             user_ref = self.db.collection('users').document(phone)
-            state['updated_at'] = firestore.SERVER_TIMESTAMP
-            result = user_ref.set(state, merge=True)
+            user_ref.set(state, merge=True)
             
-            # Actualizar caché de forma segura
+            # Actualizar caché
             cache_key = f"state_{phone}"
             self.cache[cache_key] = state
             
@@ -112,6 +114,20 @@ class FirebaseDB:
             logger.error(f"Error actualizando estado: {str(e)}")
             return False
     
+    async def clear_user_cache(self, phone: str) -> None:
+        """
+        Limpia el caché para un usuario específico
+        
+        Args:
+            phone: Número de teléfono del usuario
+        """
+        try:
+            cache_key = f"state_{phone}"
+            if cache_key in self.cache:
+                del self.cache[cache_key]
+        except Exception as e:
+            logger.error(f"Error limpiando caché: {str(e)}")
+            
     async def reset_user_state(self, phone: str) -> bool:
         """
         Reinicia el estado de la conversación del usuario
@@ -127,12 +143,12 @@ class FirebaseDB:
             initial_state = {
                 'state': ConversationState.INITIAL.value,
                 'data': {},
-                'updated_at': firestore.SERVER_TIMESTAMP
+                'updated_at': datetime.utcnow().isoformat()
             }
             
             # Actualizar en Firebase
             user_ref = self.db.collection('users').document(phone)
-            result = user_ref.set(initial_state, merge=True)
+            user_ref.set(initial_state, merge=True)
             
             # Limpiar caché
             cache_key = f"state_{phone}"
@@ -182,7 +198,7 @@ class FirebaseDB:
             analysis_data = {
                 'user_phone': phone,
                 'analysis': safe_analysis,
-                'created_at': firestore.SERVER_TIMESTAMP
+                'created_at': datetime.utcnow().isoformat()
             }
             
             # Guardar en Firebase

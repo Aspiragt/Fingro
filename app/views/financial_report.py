@@ -34,6 +34,12 @@ class FinancialReport:
             # Convertir hectáreas a cuerdas (1 hectárea ≈ 16 cuerdas)
             cuerdas = round(area * 16)
             
+            # Obtener precio por unidad
+            precio_unidad = score_data.get('price_per_unit', 0)
+            if precio_unidad == 0 and score_data.get('expected_yield', 0) > 0:
+                # Si no hay precio, calcularlo de los ingresos y rendimiento
+                precio_unidad = score_data['expected_income'] / score_data['expected_yield']
+            
             # Formatear datos financieros
             costos = cls.format_currency(score_data['total_costs'])
             ingresos = cls.format_currency(score_data['expected_income'])
@@ -41,27 +47,27 @@ class FinancialReport:
             
             # Calcular rendimiento por cuerda
             rendimiento_total = score_data.get('expected_yield', 0)
-            rendimiento_cuerda = round(rendimiento_total / (area * 16))
+            rendimiento_cuerda = round(rendimiento_total / cuerdas) if cuerdas > 0 else 0
             
             # Construir reporte
             report = [
                 f"✨ *Análisis de su siembra de {cultivo}*\n",
                 f"🌱 *Área:* {cuerdas} cuerdas",
                 f"📊 *Rendimiento esperado:* {rendimiento_cuerda} quintales por cuerda",
-                f"💰 *Precio de venta:* {cls.format_currency(score_data.get('price_per_unit', 0))} por quintal\n",
+                f"💰 *Precio de venta:* {cls.format_currency(precio_unidad)} por quintal\n",
                 f"💵 *Lo que puede ganar:*",
-                f"• Ingresos totales: {ingresos}",
-                f"• Costos de siembra: {costos}",
-                f"• Ganancia esperada: {ganancia}\n"
+                f"•⁠  ⁠Ingresos totales: {ingresos}",
+                f"•⁠  ⁠Costos de siembra: {costos}",
+                f"•⁠  ⁠Ganancia esperada: {ganancia}\n"
             ]
             
             # Si el proyecto es rentable
             if score_data['expected_profit'] > 0:
                 # Calcular retorno por cuerda
-                ganancia_cuerda = round(score_data['expected_profit'] / cuerdas)
+                ganancia_cuerda = round(score_data['expected_profit'] / cuerdas) if cuerdas > 0 else 0
                 report.extend([
                     "✅ *¡Su proyecto puede ser rentable!*",
-                    f"Por cada cuerda podría ganar {cls.format_currency(ganancia_cuerda)}",
+                    f"Por cada cuerda podría ganar {cls.format_currency(ganancia_cuerda)}"
                 ])
             else:
                 report.extend([

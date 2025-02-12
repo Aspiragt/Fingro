@@ -162,39 +162,39 @@ class ConversationFlow:
         Returns:
             tuple: (es_valido, valor_procesado)
         """
-        # Normalizar entrada
-        user_input = user_input.lower().strip()
-        
-        if current_state == self.STATES['GET_CROP']:
-            # Aceptar cualquier cultivo que no esté vacío
-            if len(user_input) > 0:
-                return True, user_input
+        if not user_input:
             return False, None
+
+        # Normalizar input
+        user_input = self._normalize_text(user_input)
+            
+        if current_state == self.STATES['GET_CROP']:
+            return True, self._normalize_crop(user_input)
             
         elif current_state == self.STATES['GET_AREA']:
             try:
                 area = float(user_input.replace(',', '.'))
                 if 0.1 <= area <= 100:
                     return True, area
-            except:
+            except ValueError:
                 pass
             return False, None
             
         elif current_state == self.STATES['GET_CHANNEL']:
             try:
-                option = int(user_input)
-                if 1 <= option <= len(self.valid_channels):
-                    return True, self.valid_channels[option - 1]
-            except:
+                channel = int(user_input)
+                if 1 <= channel <= 4:
+                    return True, self.valid_channels[channel - 1]
+            except ValueError:
                 pass
             return False, None
             
         elif current_state == self.STATES['GET_IRRIGATION']:
             try:
-                option = int(user_input)
-                if 1 <= option <= len(self.valid_irrigation):
-                    return True, self.valid_irrigation[option - 1]
-            except:
+                irrigation = int(user_input)
+                if 1 <= irrigation <= 4:
+                    return True, self.valid_irrigation[irrigation - 1]
+            except ValueError:
                 pass
             return False, None
             
@@ -204,15 +204,22 @@ class ConversationFlow:
             return False, None
             
         elif current_state in [self.STATES['ASK_LOAN'], self.STATES['CONFIRM_LOAN']]:
-            user_input = user_input.lower()
-            if user_input in ['si', 'sí', 'yes']:
+            # Limpiar espacios y convertir a minúsculas
+            user_input = user_input.strip().lower()
+            
+            # Lista de variaciones positivas
+            positive_responses = ['si', 'sí', 'yes', 's', 'ok', 'vale']
+            negative_responses = ['no', 'not', 'n', 'nop']
+            
+            if any(user_input == resp for resp in positive_responses):
                 return True, True
-            elif user_input in ['no', 'not']:
+            elif any(user_input == resp for resp in negative_responses):
                 return True, False
+                
             return False, None
             
         return False, None
-    
+
     def get_error_message(self, current_state: str) -> str:
         """
         Obtiene mensaje de error según el estado
@@ -283,7 +290,7 @@ class ConversationFlow:
             return self.STATES['ASK_LOAN']
             
         elif current_state == self.STATES['ASK_LOAN']:
-            if isinstance(processed_value, bool) and processed_value:
+            if processed_value is True:
                 return self.STATES['SHOW_LOAN']
             return self.STATES['DONE']
             
@@ -291,7 +298,9 @@ class ConversationFlow:
             return self.STATES['CONFIRM_LOAN']
             
         elif current_state == self.STATES['CONFIRM_LOAN']:
-            return self.STATES['DONE']
+            if processed_value is True:
+                return self.STATES['DONE']
+            return self.STATES['ASK_LOAN']
             
         return self.STATES['START']
 
@@ -332,6 +341,9 @@ class ConversationFlow:
             
             # Comando de reinicio
             if message in ['reiniciar', 'reset', 'comenzar', 'inicio']:
+                # Limpiar caché de Firebase
+                await firebase_manager.clear_user_cache(phone_number)
+                
                 user_data = {
                     'state': self.STATES['GET_CROP'],
                     'data': {}
@@ -354,25 +366,35 @@ class ConversationFlow:
                 return
                 
             if not user_data:
+                # Limpiar caché de Firebase
+                await firebase_manager.clear_user_cache(phone_number)
+                
+                # Nuevo usuario, iniciar conversación
                 user_data = {
-                    'state': self.STATES['START'],
+                    'state': self.STATES['GET_CROP'],
                     'data': {}
                 }
+                await firebase_manager.update_user_state(phone_number, user_data)
+                welcome_message = self.get_welcome_message()
+                await self.whatsapp.send_message(phone_number, welcome_message)
+                return
                 
             current_state = user_data['state']
             
-            # Si es nuevo usuario o conversación terminada, reiniciar
-            if current_state == self.STATES['START'] or current_state == self.STATES['DONE']:
-                # Actualizar estado a GET_CROP
-                user_data['state'] = self.STATES['GET_CROP']
+            # Si conversación terminada, reiniciar
+            if current_state == self.STATES['DONE']:
+                # Limpiar caché de Firebase
+                await firebase_manager.clear_user_cache(phone_number)
+                
+                user_data = {
+                    'state': self.STATES['GET_CROP'],
+                    'data': {}
+                }
                 await firebase_manager.update_user_state(phone_number, user_data)
-                
-                # Solo enviar mensaje de bienvenida si es START
-                if current_state == self.STATES['START']:
-                    welcome_message = self.get_welcome_message()
-                    await self.whatsapp.send_message(phone_number, welcome_message)
+                welcome_message = self.get_welcome_message()
+                await self.whatsapp.send_message(phone_number, welcome_message)
                 return
-                
+            
             # Validar entrada del usuario
             is_valid, processed_value = self.validate_input(current_state, message)
             
