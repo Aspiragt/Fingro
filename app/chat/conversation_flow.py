@@ -126,10 +126,6 @@ class ConversationFlow:
         # Normalizar entrada
         user_input = user_input.lower().strip()
         
-        # Verificar comandos especiales
-        if user_input in self.SPECIAL_COMMANDS:
-            return True, self.SPECIAL_COMMANDS[user_input]
-        
         if current_state == self.STATES['GET_CROP']:
             if user_input in self.valid_crops:
                 return True, user_input
@@ -221,10 +217,6 @@ class ConversationFlow:
         Returns:
             str: Siguiente estado
         """
-        # Si es un comando especial, retornar el estado correspondiente
-        if isinstance(user_input, str) and user_input in self.SPECIAL_COMMANDS:
-            return self.STATES[self.SPECIAL_COMMANDS[user_input]]
-        
         if current_state == self.STATES['START']:
             return self.STATES['GET_CROP']
             
@@ -337,13 +329,6 @@ class ConversationFlow:
             # Obtener estado actual del usuario
             current_state = await firebase_manager.get_conversation_state(phone)
             
-            # Si es un usuario nuevo o no tiene estado, inicializar
-            if not current_state or 'state' not in current_state:
-                current_state = {
-                    'state': self.STATES['START'],
-                    'data': {}
-                }
-            
             # Normalizar entrada
             text = text.lower().strip()
             
@@ -356,6 +341,15 @@ class ConversationFlow:
                 await firebase_manager.update_user_state(phone, current_state)
                 return self.get_welcome_message()
             
+            # Si es un usuario nuevo o no tiene estado, inicializar
+            if not current_state or 'state' not in current_state:
+                current_state = {
+                    'state': self.STATES['START'],
+                    'data': {}
+                }
+                await firebase_manager.update_user_state(phone, current_state)
+                return self.get_welcome_message()
+            
             # Validar entrada del usuario
             is_valid, processed_input = self.validate_input(current_state['state'], text)
             
@@ -363,12 +357,12 @@ class ConversationFlow:
                 return self.get_error_message(current_state['state'])
             
             # Obtener siguiente estado
-            next_state = self.get_next_state(current_state['state'], processed_input)
+            next_state = self.get_next_state(current_state['state'], text)
             
             # Actualizar datos del usuario
-            current_state['state'] = next_state
-            if processed_input and not isinstance(processed_input, str):
+            if processed_input is not None:
                 current_state['data'][current_state['state']] = processed_input
+            current_state['state'] = next_state
             
             # Actualizar estado del usuario
             await firebase_manager.update_user_state(phone, current_state)
