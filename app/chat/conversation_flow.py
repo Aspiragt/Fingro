@@ -251,6 +251,20 @@ class ConversationFlow:
             message: Contenido del mensaje
         """
         try:
+            # Normalizar mensaje
+            message = message.lower().strip()
+            
+            # Comando de reinicio
+            if message in ['reiniciar', 'reset', 'comenzar', 'inicio']:
+                user_data = {
+                    'state': self.STATES['START'],
+                    'data': {}
+                }
+                await firebase_manager.update_user_data(phone_number, user_data)
+                welcome_message = self.get_welcome_message()
+                await whatsapp.send_message(phone_number, welcome_message)
+                return
+            
             # Obtener o crear datos del usuario
             user_data = await firebase_manager.get_user_data(phone_number)
             if not user_data:
