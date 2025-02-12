@@ -197,69 +197,44 @@ class FinancialModel:
             canal = user_data.get('commercialization', CanalComercializacion.MAYORISTA)
             
             # 1. Obtener precios
-            price_data = await maga_api.get_precio_cultivo(cultivo)
-            
-            # Usar el precio del canal especificado o el mejor disponible
-            if canal in price_data['precios']:
-                precio = price_data['precios'][canal]
-            else:
-                # Usar el primer canal recomendado
-                canal = price_data['canales_recomendados'][0]
-                precio = price_data['precios'][canal]
+            price_data = await maga_api.get_precio_cultivo(cultivo, canal)
+            if not price_data or 'precio' not in price_data:
+                logger.error(f"Error obteniendo precio para {cultivo}")
+                return None
+                
+            precio_actual = price_data['precio']
             
             # 2. Calcular costos
             costos = self._get_costos_cultivo(cultivo, area)
-            total_costs = sum(costos.values())
+            costos_totales = sum(costos.values())
             
-            # 3. Calcular rendimiento
-            rendimiento = self._get_rendimiento_esperado(cultivo, area, riego)
+            # 3. Calcular rendimiento esperado (en quintales)
+            rendimiento_total = self._get_rendimiento_esperado(cultivo, area, riego)
+            rendimiento_por_hectarea = rendimiento_total / area if area > 0 else 0
             
-            # 4. Calcular ingresos y ganancia
-            ingresos = rendimiento * precio
-            ganancia = ingresos - total_costs
+            # 4. Calcular ingresos
+            ingresos_totales = rendimiento_total * precio_actual
             
-            # 5. Calcular ROI
-            roi = (ganancia / total_costs) * 100 if total_costs > 0 else 0
+            # 5. Calcular ganancias
+            ganancia_total = ingresos_totales - costos_totales
+            ganancia_por_hectarea = ganancia_total / area if area > 0 else 0
             
             # 6. Calcular riesgo
             risk_score = self._calculate_risk_score(cultivo, canal, riego)
             
-            # 7. Calcular score (0-1000)
-            score = int((1 - risk_score) * 1000)
-            
-            # 8. Determinar nivel de riesgo
-            if risk_score < 0.3:
-                risk_level = "Bajo ✅"
-            elif risk_score < 0.6:
-                risk_level = "Medio ⚠️"
-            else:
-                risk_level = "Alto ⛔"
-            
-            # 9. Calcular préstamo recomendado (80% de costos si riesgo es bajo)
-            max_loan = total_costs * (1 - risk_score)
-            
-            # 10. Calcular cuota mensual (tasa 15% anual, 12 meses)
-            tasa_mensual = 0.15 / 12
-            cuota = (max_loan * tasa_mensual) / (1 - (1 + tasa_mensual) ** -12)
-            
             return {
-                'total_costs': total_costs,
-                'cost_breakdown': costos,
-                'expected_yield': rendimiento,
-                'price_info': {
-                    'base_price': precio,
-                    'adjusted_price': precio,
-                    'channel': canal,
-                    'recommended_channels': price_data['canales_recomendados']
-                },
-                'expected_income': ingresos,
-                'expected_profit': ganancia,
-                'roi': roi,
+                'cultivo': cultivo,
+                'area': area,
+                'precio_actual': precio_actual,
+                'rendimiento_total': rendimiento_total,
+                'rendimiento_por_hectarea': rendimiento_por_hectarea,
+                'costos_totales': costos_totales,
+                'ingresos_totales': ingresos_totales,
+                'ganancia_total': ganancia_total,
+                'ganancia_por_hectarea': ganancia_por_hectarea,
                 'risk_score': risk_score,
-                'score': score,
-                'risk_level': risk_level,
-                'recommended_loan': max_loan,
-                'monthly_payment': cuota
+                'medida': price_data.get('medida', 'Quintal'),
+                'mercado': price_data.get('mercado', 'Nacional')
             }
             
         except Exception as e:

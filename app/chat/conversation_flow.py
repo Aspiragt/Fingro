@@ -118,7 +118,7 @@ class ConversationFlow:
             str: Mensaje para el usuario
         """
         if current_state == self.STATES['GET_AREA']:
-            return "¿Cuántas hectáreas planeas sembrar? 🌱"
+            return "¿Cuántas hectáreas planea sembrar? 🌱"
             
         elif current_state == self.STATES['GET_CHANNEL']:
             channels = [
@@ -204,17 +204,17 @@ class ConversationFlow:
             return False, None
             
         elif current_state in [self.STATES['ASK_LOAN'], self.STATES['CONFIRM_LOAN']]:
-            # Limpiar espacios y convertir a minúsculas
-            user_input = user_input.strip().lower()
+            # Normalizar el texto usando la función existente
+            user_input = self._normalize_text(user_input)
             
             # Lista de variaciones positivas y negativas
-            positive_responses = ['si', 'sí', 'yes', 's', 'ok', 'vale']
+            positive_responses = ['si', 'sí', 's', 'ok', 'vale']
             negative_responses = ['no', 'not', 'n', 'nop']
             
-            # Comparación más flexible usando in
-            if any(resp in user_input for resp in positive_responses):
+            # Verificar coincidencia exacta después de normalizar
+            if user_input in positive_responses:
                 return True, True
-            elif any(resp in user_input for resp in negative_responses):
+            elif user_input in negative_responses:
                 return True, False
             
             return False, None
