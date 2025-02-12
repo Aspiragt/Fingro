@@ -300,7 +300,7 @@ class ConversationFlow:
                 
                 # Actualizar estado
                 user_data['state'] = self.STATES['GET_CROP']
-                await firebase_manager.update_user_data(phone_number, user_data)
+                await firebase_manager.update_user_state(phone_number, user_data)
                 return
                 
             # Validar entrada del usuario
@@ -365,7 +365,7 @@ class ConversationFlow:
                 await self.whatsapp.send_message(phone_number, next_message)
             
             # Guardar datos actualizados
-            await firebase_manager.update_user_data(phone_number, user_data)
+            await firebase_manager.update_user_state(phone_number, user_data)
             
         except Exception as e:
             logger.error(f"Error procesando mensaje: {str(e)}")
