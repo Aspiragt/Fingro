@@ -60,6 +60,12 @@ class ConversationFlow:
         - Remueve espacios extra
         """
         import unicodedata
+        if not text:
+            return ""
+            
+        # Convertir a string si no lo es
+        text = str(text)
+        
         # Normalizar NFD y eliminar diacríticos
         text = unicodedata.normalize('NFD', text).encode('ascii', 'ignore').decode('utf-8')
         # A minúsculas y remover espacios extra
@@ -204,19 +210,12 @@ class ConversationFlow:
             return False, None
             
         elif current_state in [self.STATES['ASK_LOAN'], self.STATES['CONFIRM_LOAN']]:
-            # Normalizar el texto usando la función existente
-            user_input = self._normalize_text(user_input)
-            
-            # Lista de variaciones positivas y negativas
-            positive_responses = ['si', 'sí', 's', 'ok', 'vale']
-            negative_responses = ['no', 'not', 'n', 'nop']
-            
-            # Verificar coincidencia exacta después de normalizar
-            if user_input in positive_responses:
+            # Simplemente verificar si es si o no
+            text = user_input.lower().strip()
+            if text.startswith('si') or text.startswith('sí'):
                 return True, True
-            elif user_input in negative_responses:
+            elif text.startswith('no'):
                 return True, False
-            
             return False, None
             
         return False, None
@@ -419,28 +418,12 @@ class ConversationFlow:
             if next_state == self.STATES['SHOW_REPORT']:
                 try:
                     # Preparar datos para el modelo financiero
-                    crop = user_data['data']['get_crop']
-                    channel = user_data['data']['get_channel']
-                    
-                    # Obtener precio actual del cultivo
-                    precio_data = await maga_api.get_precio_cultivo(crop, channel)
-                    if not precio_data or 'precio' not in precio_data:
-                        error_message = (
-                            "❌ Error obteniendo precio del cultivo\n\n"
-                            "Por favor intenta de nuevo más tarde."
-                        )
-                        await self.whatsapp.send_message(phone_number, error_message)
-                        return
-                        
-                    precio_actual = precio_data['precio']
-                    
                     analysis_data = {
-                        'crop': crop,
-                        'area': user_data['data']['get_area'],
-                        'commercialization': channel,
+                        'crop': user_data['data']['get_crop'],
+                        'area': float(user_data['data']['get_area']),
+                        'commercialization': user_data['data']['get_channel'],
                         'irrigation': user_data['data']['get_irrigation'],
-                        'location': user_data['data']['get_location'],
-                        'price_per_unit': precio_actual  # Corregido de precio_actual
+                        'location': user_data['data']['get_location']
                     }
                     
                     # Analizar proyecto
@@ -457,14 +440,14 @@ class ConversationFlow:
                     user_data['score_data'] = score_data
                     
                     # Generar y enviar reporte
-                    report = report_generator.generate_report(user_data['data'], score_data)
+                    report = report_generator.generate_report(analysis_data, score_data)
                     await self.whatsapp.send_message(phone_number, report)
                     
                     # Preguntar si quiere préstamo de forma amigable
                     loan_message = (
                         "Don(ña), ¿le gustaría que le ayude a solicitar un préstamo "
                         "para este proyecto? 🤝\n\n"
-                        "Responda *SI* o *NO* 👇"
+                        "Responda SI o NO 👇"
                     )
                     await self.whatsapp.send_message(phone_number, loan_message)
                     
@@ -479,12 +462,18 @@ class ConversationFlow:
                 
             # Si llegamos a SHOW_LOAN, mostrar oferta
             elif next_state == self.STATES['SHOW_LOAN']:
-                loan_offer = report_generator.generate_loan_offer(user_data['data'])
-                await self.whatsapp.send_message(phone_number, loan_offer)
-                
-                # Preguntar si confirma
-                confirm_message = "¿Deseas proceder con la solicitud del préstamo? (SI/NO)"
-                await self.whatsapp.send_message(phone_number, confirm_message)
+                try:
+                    loan_offer = report_generator.generate_loan_offer(user_data['score_data'])
+                    await self.whatsapp.send_message(phone_number, loan_offer)
+                    
+                    # Preguntar si confirma
+                    confirm_message = "¿Desea proceder con la solicitud del préstamo? Responda SI o NO 👇"
+                    await self.whatsapp.send_message(phone_number, confirm_message)
+                except Exception as e:
+                    logger.error(f"Error generando oferta de préstamo: {str(e)}")
+                    error_message = "❌ Error generando oferta de préstamo. Por favor intente más tarde."
+                    await self.whatsapp.send_message(phone_number, error_message)
+                    return
                 
             # Si llegamos a DONE después de confirmar préstamo
             elif next_state == self.STATES['DONE'] and current_state == self.STATES['CONFIRM_LOAN']:
