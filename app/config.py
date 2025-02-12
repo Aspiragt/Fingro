@@ -4,7 +4,6 @@ Configuración de la aplicación
 import os
 import json
 import logging
-import re
 from pathlib import Path
 from typing import Dict, Any, Optional
 from pydantic import BaseModel, Field, validator
@@ -32,17 +31,25 @@ class Settings(BaseModel):
         default=int(os.getenv("PORT", "8000")),
         description="Puerto para el servidor"
     )
+    DEBUG: bool = Field(
+        default=os.getenv("DEBUG", "False").lower() == "true",
+        description="Modo debug"
+    )
+    LOG_LEVEL: str = Field(
+        default=os.getenv("LOG_LEVEL", "INFO"),
+        description="Nivel de logging"
+    )
     
     # WhatsApp API
-    WHATSAPP_TOKEN: str = Field(
+    WHATSAPP_ACCESS_TOKEN: str = Field(
         default=os.getenv("WHATSAPP_ACCESS_TOKEN", ""),
         description="Token de acceso para la API de WhatsApp"
     )
-    WHATSAPP_PHONE_ID: str = Field(
+    WHATSAPP_PHONE_NUMBER_ID: str = Field(
         default=os.getenv("WHATSAPP_PHONE_NUMBER_ID", ""),
         description="ID del número de teléfono de WhatsApp"
     )
-    WHATSAPP_VERIFY_TOKEN: str = Field(
+    WHATSAPP_WEBHOOK_VERIFY_TOKEN: str = Field(
         default=os.getenv("WHATSAPP_WEBHOOK_VERIFY_TOKEN", ""),
         description="Token para verificar webhook de WhatsApp"
     )
@@ -53,21 +60,15 @@ class Settings(BaseModel):
         description="Ruta al archivo de credenciales de Firebase"
     )
     
-    # Debug
-    DEBUG: bool = Field(
-        default=os.getenv("DEBUG", "False").lower() == "true",
-        description="Modo debug"
-    )
-    
     # Validaciones
-    @validator("WHATSAPP_TOKEN")
+    @validator("WHATSAPP_ACCESS_TOKEN")
     def validate_whatsapp_token(cls, v: str) -> str:
         """Valida que el token de WhatsApp esté presente"""
         if not v:
             raise ValueError("WHATSAPP_ACCESS_TOKEN es requerido")
         return v
     
-    @validator("WHATSAPP_PHONE_ID")
+    @validator("WHATSAPP_PHONE_NUMBER_ID")
     def validate_whatsapp_phone_id(cls, v: str) -> str:
         """Valida que el phone_id de WhatsApp esté presente"""
         if not v:
@@ -89,13 +90,6 @@ class Settings(BaseModel):
         except Exception as e:
             raise ValueError(f"Error leyendo archivo de credenciales: {str(e)}")
         return v
-    
-    class Config:
-        """Configuración del modelo"""
-        case_sensitive = True
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        extra = "allow"  # Permitir variables extra en el modelo
 
 # Instancia global de configuración
 try:

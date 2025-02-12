@@ -6,7 +6,6 @@ import logging
 from typing import Dict, Any, Optional
 import firebase_admin
 from firebase_admin import credentials, firestore
-from google.cloud.firestore import AsyncClient
 from datetime import datetime, timedelta
 
 from app.config import settings
@@ -33,20 +32,15 @@ class FirebaseDB:
                 if not settings.FIREBASE_CREDENTIALS_PATH:
                     raise ValueError("Firebase credentials path not found in environment")
                 
-                # Leer el archivo de credenciales
-                with open(settings.FIREBASE_CREDENTIALS_PATH) as f:
-                    cred_dict = json.load(f)
-                
-                if 'project_id' not in cred_dict:
-                    raise ValueError("project_id not found in Firebase credentials")
-                
                 # Inicializar Firebase con las credenciales
                 cred = credentials.Certificate(settings.FIREBASE_CREDENTIALS_PATH)
                 self.app = firebase_admin.initialize_app(cred)
-                logger.info(f"Firebase app initialized successfully for project: {cred_dict['project_id']}")
-            except json.JSONDecodeError:
-                logger.error("Invalid JSON in credentials file")
-                raise FirebaseError("Invalid Firebase credentials format")
+                
+                # Obtener project_id del archivo de credenciales
+                with open(settings.FIREBASE_CREDENTIALS_PATH) as f:
+                    cred_dict = json.load(f)
+                    project_id = cred_dict['project_id']
+                    logger.info(f"Firebase app initialized successfully for project: {project_id}")
             except Exception as e:
                 logger.error(f"Error initializing Firebase: {str(e)}")
                 raise FirebaseError(f"Failed to initialize Firebase: {str(e)}")
@@ -58,7 +52,7 @@ class FirebaseDB:
                 project_id = cred_dict['project_id']
             
             # Inicializar Firestore con project_id explícito
-            self.db = AsyncClient(project=project_id)
+            self.db = firestore.Client(project=project_id)
             logger.info(f"Firestore client initialized for project: {project_id}")
             
             # Cache para estados de conversación
@@ -88,7 +82,7 @@ class FirebaseDB:
             
             # Si no está en caché o expiró, obtener de Firestore
             doc_ref = self.db.collection('conversations').document(phone)
-            doc = await doc_ref.get()
+            doc = doc_ref.get()
             
             if doc.exists:
                 state = doc.to_dict()
@@ -115,7 +109,7 @@ class FirebaseDB:
             
             # Guardar en Firestore
             doc_ref = self.db.collection('conversations').document(phone)
-            await doc_ref.set(clean_state, merge=True)
+            doc_ref.set(clean_state, merge=True)
             
             # Actualizar caché
             self._conversation_cache[phone] = (clean_state, datetime.now())
