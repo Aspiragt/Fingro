@@ -141,7 +141,10 @@ async def process_user_message(from_number: str, message: str) -> None:
             try:
                 # Extraer el primer número del mensaje usando regex
                 import re
-                number_match = re.search(r'\d+\.?\d*', message)
+                # Eliminar caracteres especiales y convertir a minúsculas
+                clean_message = message.lower().strip()
+                # Buscar números con decimales o enteros
+                number_match = re.search(r'\d+\.?\d*', clean_message)
                 if not number_match:
                     raise ValueError("No se encontró un número válido")
                 
@@ -153,6 +156,7 @@ async def process_user_message(from_number: str, message: str) -> None:
                 new_state = ConversationState.ASKING_IRRIGATION.value
                 await whatsapp.send_message(from_number, MESSAGES['ask_irrigation'])
             except ValueError as e:
+                logger.error(f"Error procesando área: {str(e)} - Input: {message}")
                 await whatsapp.send_message(from_number, MESSAGES['invalid_area'])
                 return
                 
@@ -209,25 +213,21 @@ async def process_user_message(from_number: str, message: str) -> None:
                 new_state = ConversationState.ASKING_LOAN_INTEREST.value
                 
                 # Enviar análisis financiero
-                await whatsapp.send_message(
-                    from_number,
-                    MESSAGES['analysis'].format(
-                        cultivo=user_data['crop'].capitalize(),
-                        area=user_data['area'],
-                        ingresos=format_currency(score['expected_income']),
-                        costos=format_currency(score['estimated_costs']),
-                        ganancia=format_currency(score['expected_profit'])
-                    )
+                analysis_message = MESSAGES['analysis'].format(
+                    cultivo=user_data['crop'].capitalize(),
+                    area=user_data['area'],
+                    ingresos=format_currency(score['expected_income']),
+                    costos=format_currency(score['estimated_costs']),
+                    ganancia=format_currency(score['expected_profit'])
                 )
+                
+                await whatsapp.send_message(from_number, analysis_message)
                 
                 # Preguntar si está interesado en el préstamo
-                await whatsapp.send_message(
-                    from_number,
-                    MESSAGES['ask_loan_interest']
-                )
+                await whatsapp.send_message(from_number, MESSAGES['ask_loan_interest'])
                 
             except Exception as e:
-                logger.error(f"Error en análisis: {str(e)}")
+                logger.error(f"Error en análisis para {user_data}: {str(e)}")
                 await whatsapp.send_message(from_number, MESSAGES['error'])
                 return
                 

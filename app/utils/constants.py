@@ -31,7 +31,8 @@ Le ayudamos a obtener el préstamo que necesita para su siembra, sin exceso de p
     'ask_area': """¡Excelente! ¿Qué extensión de terreno cultivará? 
 Puede indicarlo en cuerdas, manzanas o hectáreas 🌾""",
     
-    'invalid_area': "❌ Ingresa un número válido (ejemplo: 2.5)",
+    'invalid_area': """❌ Por favor ingresa solo el número.
+Por ejemplo: 5""",
     
     'ask_irrigation': """¿Qué sistema de riego utiliza en su terreno? 💧
 
@@ -42,10 +43,10 @@ Puede indicarlo en cuerdas, manzanas o hectáreas 🌾""",
     
     'ask_commercialization': """¿Cómo planea comercializar su cosecha? 🚛
 
-1. Mercado local (plaza, terminal)
-2. Intermediario (coyote, comprador)
+1. Mercado local
+2. Intermediario
 3. Exportación
-4. Directo (cooperativa, asociación)""",
+4. Directo""",
     
     'ask_payment_method': "💵 ¿Forma de pago?\n\n- Efectivo\n- Transferencia\n- Cheque",
     
@@ -94,12 +95,90 @@ Gracias por confiar en FinGro 🌱""",
 
 Si cambias de opinión, puedes escribirnos cuando quieras.""",
     
-    'error': """¡Disculpe! Tuvimos un pequeño problema técnico 😅 
-¿Podría intentar escribir su mensaje nuevamente?""",
+    'error': """¡Disculpe! Tuvimos un pequeño problema técnico 😅
+
+Por favor intenta escribir tu respuesta nuevamente.""",
     
     'error_restart': "❌ Error. Empecemos de nuevo.\n\n¿Cuál es tu nombre?",
     
-    'unknown': "Disculpe, no comprendí bien. ¿Podría reformular su respuesta?"
+    'unknown': """❌ No entendí tu respuesta. Por favor, elige una de las opciones mostradas.""",
+    
+    'ask_crop': "🌿 ¿Qué cultivo planeas sembrar?",
+    
+    'ask_area': """¡Excelente! ¿Qué extensión de terreno cultivará? 
+Puede indicarlo en cuerdas, manzanas o hectáreas 🌾""",
+    
+    'invalid_area': """❌ Por favor ingresa solo el número.
+Por ejemplo: 5""",
+    
+    'ask_irrigation': """¿Qué sistema de riego utiliza en su terreno? 💧
+
+1. Temporal (lluvia)
+2. Goteo
+3. Aspersión
+4. Otro""",
+    
+    'ask_commercialization': """¿Cómo planea comercializar su cosecha? 🚛
+
+1. Mercado local
+2. Intermediario
+3. Exportación
+4. Directo""",
+    
+    'ask_payment_method': "💵 ¿Forma de pago?\n\n- Efectivo\n- Transferencia\n- Cheque",
+    
+    'ask_location': "¿En qué municipio está ubicado su terreno? 📍",
+    
+    'analysis_ready': (
+        "✅ ¡Análisis listo!\n\n"
+        "📊 FinGro Score: {score}/100\n"
+        "💰 Préstamo sugerido: {monto}\n\n"
+        "¿Te gustaría aplicar?"
+    ),
+    
+    'analysis': """📊 *Análisis Financiero*
+
+Cultivo: {cultivo}
+Área: {area} hectáreas
+
+💰 Ingresos esperados: {ingresos}
+💸 Costos estimados: {costos}
+✨ Ganancia potencial: {ganancia}""",
+    
+    'credit_offer': """¡Buenas noticias! 🎉 Califica para:
+
+💰 Monto: hasta Q{monto}
+📊 Tasa: {tasa}% anual
+⏱️ Plazo: {plazo} meses
+📅 Cuotas: Q{cuota}/mes
+
+Este préstamo le permite cubrir sus costos de siembra y le da la oportunidad de pagar con su cosecha 🌱
+
+¿Desea iniciar su solicitud? Es rápido y fácil 📝""",
+    
+    'ask_loan_interest': """¿Te gustaría recibir más información sobre nuestros préstamos? 🤝
+
+Responde 'si' o 'no'""",
+    
+    'ask_yes_no': """❌ Por favor responde 'si' o 'no'""",
+    
+    'loan_yes': """¡Excelente decisión! 🎉
+
+Un asesor se pondrá en contacto contigo pronto para explicarte los detalles y resolver tus dudas.
+
+Gracias por confiar en FinGro 🌱""",
+    
+    'loan_no': """Entendido, gracias por tu interés en FinGro 🌱
+
+Si cambias de opinión, puedes escribirnos cuando quieras.""",
+    
+    'error': """¡Disculpe! Tuvimos un pequeño problema técnico 😅
+
+Por favor intenta escribir tu respuesta nuevamente.""",
+    
+    'error_restart': "❌ Error. Empecemos de nuevo.\n\n¿Cuál es tu nombre?",
+    
+    'unknown': """❌ No entendí tu respuesta. Por favor, elige una de las opciones mostradas.""",
 }
 
 def format_currency(amount: float) -> str:
