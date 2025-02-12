@@ -177,17 +177,41 @@ class ConversationFlow:
         if current_state == self.STATES['GET_CROP']:
             # Buscar el cultivo en MAGA
             try:
-                logger.info(f"Buscando cultivo: {user_input}")
+                # Normalizar y limpiar la entrada
+                user_input = user_input.strip().lower()
+                logger.info(f"Validando cultivo (entrada original): {user_input}")
+                
+                # Intentar búsqueda
                 crop_info = await maga_api.search_crop(user_input)
                 logger.info(f"Resultado búsqueda: {crop_info}")
                 
                 if crop_info:
+                    logger.info(f"Cultivo encontrado: {crop_info['nombre']}")
                     return True, {
                         'nombre': crop_info['nombre'],
                         'precio': crop_info['precio'],
                         'unidad': crop_info['unidad']
                     }
                 else:
+                    # Si no se encuentra, intentar con variaciones comunes
+                    variations = [
+                        user_input.replace('maiz', 'maíz'),
+                        user_input.replace('frijol', 'frijol_negro'),
+                        user_input.replace('platano', 'plátano'),
+                    ]
+                    
+                    for variation in variations:
+                        if variation != user_input:
+                            logger.info(f"Intentando con variación: {variation}")
+                            crop_info = await maga_api.search_crop(variation)
+                            if crop_info:
+                                logger.info(f"Cultivo encontrado con variación: {crop_info['nombre']}")
+                                return True, {
+                                    'nombre': crop_info['nombre'],
+                                    'precio': crop_info['precio'],
+                                    'unidad': crop_info['unidad']
+                                }
+                    
                     logger.warning(f"Cultivo no encontrado: {user_input}")
                     return False, None
                     
