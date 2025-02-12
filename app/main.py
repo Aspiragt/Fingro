@@ -235,7 +235,7 @@ async def root():
         "env": settings.ENV
     }
 
-@app.post("/webhook")
+@app.post("/webhook/whatsapp")
 async def webhook(request: Request):
     """
     Endpoint para recibir webhooks de WhatsApp
@@ -273,7 +273,7 @@ async def webhook(request: Request):
         logger.error(f"Error en webhook: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
-@app.get("/webhook")
+@app.get("/webhook/whatsapp")
 async def verify_webhook(request: Request):
     """
     Endpoint para verificar webhook de WhatsApp
