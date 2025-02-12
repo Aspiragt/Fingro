@@ -15,8 +15,9 @@ from app.config import settings
 from app.services.whatsapp_service import WhatsAppService
 from app.external_apis.maga import maga_api
 from app.analysis.scoring import ScoringService
-from app.utils.constants import ConversationState, MESSAGES, format_currency
-from app.database.firebase import firebase_manager
+from app.utils.constants import ConversationState, MESSAGES
+from app.utils.currency import format_currency
+from app.utils.text import normalize_crop, normalize_irrigation, normalize_commercialization, normalize_yes_no
 
 # Configurar logging
 logging.basicConfig(
@@ -104,6 +105,11 @@ async def process_user_message(from_number: str, message: str) -> None:
         # Procesar mensaje según el estado actual
         if current_state == ConversationState.INITIAL.value:
             # Guardar cultivo y obtener precio
+            message = normalize_crop(message)
+            if not message:
+                await whatsapp.send_message(from_number, MESSAGES['unknown'])
+                return
+                
             user_data['crop'] = message
             
             try:
@@ -139,23 +145,10 @@ async def process_user_message(from_number: str, message: str) -> None:
                 return
                 
         elif current_state == ConversationState.ASKING_IRRIGATION.value:
-            # Guardar sistema de riego
-            message = message.lower().strip()
-            valid_options = {
-                '1': 'temporal',
-                '2': 'goteo',
-                '3': 'aspersion',
-                '4': 'otro'
-            }
-            
-            if message in valid_options:
-                message = valid_options[message]
-                
-            if message not in valid_options.values():
-                await whatsapp.send_message(
-                    from_number,
-                    MESSAGES['unknown']
-                )
+            # Validar y guardar sistema de riego
+            message = normalize_irrigation(message)
+            if not message:
+                await whatsapp.send_message(from_number, MESSAGES['unknown'])
                 return
                 
             user_data['irrigation'] = message
@@ -164,22 +157,9 @@ async def process_user_message(from_number: str, message: str) -> None:
             
         elif current_state == ConversationState.ASKING_COMMERCIALIZATION.value:
             # Guardar método de comercialización
-            message = message.lower().strip()
-            valid_options = {
-                '1': 'mercado local',
-                '2': 'intermediario',
-                '3': 'exportación',
-                '4': 'directo'
-            }
-            
-            if message in valid_options:
-                message = valid_options[message]
-            
-            if message not in valid_options.values():
-                await whatsapp.send_message(
-                    from_number,
-                    MESSAGES['unknown']
-                )
+            message = normalize_commercialization(message)
+            if not message:
+                await whatsapp.send_message(from_number, MESSAGES['unknown'])
                 return
                 
             user_data['commercialization'] = message
@@ -234,7 +214,7 @@ async def process_user_message(from_number: str, message: str) -> None:
                 
         elif current_state == ConversationState.ASKING_LOAN_INTEREST.value:
             # Procesar interés en préstamo
-            message = message.lower().strip()
+            message = normalize_yes_no(message)
             if message == 'si':
                 await whatsapp.send_message(from_number, MESSAGES['loan_yes'])
                 new_state = ConversationState.COMPLETED.value
@@ -242,10 +222,7 @@ async def process_user_message(from_number: str, message: str) -> None:
                 await whatsapp.send_message(from_number, MESSAGES['loan_no'])
                 new_state = ConversationState.COMPLETED.value
             else:
-                await whatsapp.send_message(
-                    from_number,
-                    "❌ Por favor responde 'si' o 'no'"
-                )
+                await whatsapp.send_message(from_number, MESSAGES['ask_yes_no'])
                 return
                 
         else:

@@ -81,6 +81,8 @@ Este préstamo le permite cubrir sus costos de siembra y le da la oportunidad de
 
 Responde 'si' o 'no'""",
     
+    'ask_yes_no': """❌ Por favor responde 'si' o 'no'""",
+    
     'loan_yes': """¡Excelente decisión! 🎉
 
 Un asesor se pondrá en contacto contigo pronto para explicarte los detalles y resolver tus dudas.
