@@ -67,10 +67,12 @@ async def verify_webhook_signature(request: Request) -> bool:
 async def webhook(request: Request):
     """Endpoint para recibir webhooks de WhatsApp"""
     try:
-        # Verificar firma
-        if not settings.DEBUG and not await verify_webhook_signature(request):
-            logger.warning("Firma inválida en webhook")
-            return JSONResponse(status_code=401, content={"error": "Firma inválida"})
+        # En modo debug, no verificar firma
+        if not settings.DEBUG:
+            # Verificar firma
+            if not await verify_webhook_signature(request):
+                logger.warning("Firma inválida en webhook")
+                return JSONResponse(status_code=401, content={"error": "Firma inválida"})
             
         # Procesar webhook
         body = await request.json()
