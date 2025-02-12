@@ -27,13 +27,24 @@ class MagaAPI:
     """Cliente para obtener información de precios y datos históricos del MAGA"""
     
     def __init__(self):
-        """Inicializa el cliente de MAGA"""
+        """Inicializa el cliente de MAGA API"""
         self.base_url = settings.MAGA_BASE_URL
-        self.client = httpx.AsyncClient(
-            timeout=30.0,
-            limits=httpx.Limits(max_keepalive_connections=5, max_connections=10),
-            http2=True
-        )
+        
+        # Intentar usar HTTP/2 si está disponible
+        try:
+            self.client = httpx.AsyncClient(
+                base_url=self.base_url,
+                http2=True,
+                timeout=30.0
+            )
+        except ImportError:
+            # Si no está disponible HTTP/2, usar HTTP/1.1
+            self.client = httpx.AsyncClient(
+                base_url=self.base_url,
+                http2=False,
+                timeout=30.0
+            )
+        
         self.ua = UserAgent()
         
         # Caché de precios con TTL de 6 horas
