@@ -249,13 +249,14 @@ class ConversationFlow:
             
         return "❌ Error desconocido"
     
-    def get_next_state(self, current_state: str, user_input: str = None) -> str:
+    def get_next_state(self, current_state: str, user_input: str = None, processed_value: bool = None) -> str:
         """
         Obtiene el siguiente estado de la conversación
         
         Args:
             current_state: Estado actual
             user_input: Entrada opcional del usuario
+            processed_value: Valor procesado para SI/NO
             
         Returns:
             str: Siguiente estado
@@ -282,7 +283,7 @@ class ConversationFlow:
             return self.STATES['ASK_LOAN']
             
         elif current_state == self.STATES['ASK_LOAN']:
-            if processed_value:  # Si respondió que sí
+            if isinstance(processed_value, bool) and processed_value:
                 return self.STATES['SHOW_LOAN']
             return self.STATES['DONE']
             
@@ -294,6 +295,29 @@ class ConversationFlow:
             
         return self.STATES['START']
 
+    def _normalize_crop(self, crop: str) -> str:
+        """Normaliza el nombre del cultivo"""
+        crop = self._normalize_text(crop)
+        
+        # Mapa de nombres normalizados
+        crop_names = {
+            'maiz': 'maíz',
+            'frijo': 'frijol',
+            'papa': 'papa',
+            'tomate': 'tomate',
+            'cafe': 'café',
+            'platano': 'plátano',
+            'limon': 'limón',
+            'brocoli': 'brócoli'
+        }
+        
+        # Buscar coincidencia parcial
+        for normalized, full_name in crop_names.items():
+            if crop.startswith(normalized):
+                return full_name
+                
+        return crop.capitalize()
+    
     async def handle_message(self, phone_number: str, message: str):
         """
         Procesa un mensaje entrante de WhatsApp
@@ -309,14 +333,14 @@ class ConversationFlow:
             # Comando de reinicio
             if message in ['reiniciar', 'reset', 'comenzar', 'inicio']:
                 user_data = {
-                    'state': self.STATES['GET_CROP'],  # Cambiado de START a GET_CROP
+                    'state': self.STATES['GET_CROP'],
                     'data': {}
                 }
                 await firebase_manager.update_user_state(phone_number, user_data)
                 welcome_message = self.get_welcome_message()
                 await self.whatsapp.send_message(phone_number, welcome_message)
                 return
-            
+                
             # Obtener o crear datos del usuario
             try:
                 user_data = await firebase_manager.get_conversation_state(phone_number)
@@ -359,10 +383,14 @@ class ConversationFlow:
                 return
                 
             # Guardar dato procesado
+            if current_state == self.STATES['GET_CROP']:
+                # Normalizar nombre del cultivo
+                processed_value = self._normalize_crop(processed_value)
+                
             user_data['data'][current_state] = processed_value
             
             # Obtener siguiente estado
-            next_state = self.get_next_state(current_state, message)
+            next_state = self.get_next_state(current_state, message, processed_value)
             user_data['state'] = next_state
             
             # Si llegamos a SHOW_REPORT, generar reporte
