@@ -319,7 +319,21 @@ class ConversationFlow:
             
             # Si llegamos a SHOW_REPORT, generar reporte
             if next_state == self.STATES['SHOW_REPORT']:
-                report = report_generator.generate_report(user_data['data'])
+                # Analizar proyecto
+                score_data = await financial_model.analyze_project(user_data['data'])
+                if not score_data:
+                    error_message = (
+                        "❌ Error generando análisis financiero\n\n"
+                        "Por favor intenta de nuevo más tarde."
+                    )
+                    await self.whatsapp.send_message(phone_number, error_message)
+                    return
+
+                # Guardar datos del análisis
+                user_data['score_data'] = score_data
+                
+                # Generar y enviar reporte
+                report = report_generator.generate_report(user_data['data'], score_data)
                 await self.whatsapp.send_message(phone_number, report)
                 
                 # Preguntar si quiere préstamo
