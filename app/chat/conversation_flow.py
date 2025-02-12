@@ -316,33 +316,52 @@ class ConversationFlow:
         Returns:
             str: Respuesta generada para el usuario
         """
-        # Obtener estado actual del usuario
-        current_state = await firebase_manager.get_conversation_state(phone)
-        
-        # Validar entrada del usuario
-        is_valid, processed_input = self.validate_input(current_state, text)
-        
-        if not is_valid:
-            return self.get_error_message(current_state)
-        
-        # Obtener siguiente estado
-        next_state = self.get_next_state(current_state, processed_input)
-        
-        # Actualizar estado del usuario
-        firebase_manager.update_user_state(phone, next_state)
-        
-        # Obtener mensaje de respuesta
-        response_message = self.get_next_message(next_state, {"phone": phone, "input": processed_input})
-        
-        # Procesar estados especiales
-        if next_state == self.STATES['SHOW_REPORT']:
-            response_message = await self.process_show_report({"phone": phone})
-        elif next_state == self.STATES['SHOW_LOAN']:
-            response_message = self.process_show_loan({"phone": phone})
-        elif next_state == self.STATES['CONFIRM_LOAN']:
-            response_message = self.process_confirm_loan()
-        
-        return response_message
-
+        try:
+            # Obtener estado actual del usuario
+            current_state = await firebase_manager.get_conversation_state(phone)
+            
+            # Si es un usuario nuevo o no tiene estado, inicializar
+            if not current_state or 'state' not in current_state:
+                current_state = {
+                    'state': self.STATES['START'],
+                    'data': {}
+                }
+                await firebase_manager.update_user_state(phone, current_state)
+                return self.get_welcome_message()
+            
+            # Validar entrada del usuario
+            is_valid, processed_input = self.validate_input(current_state['state'], text)
+            
+            if not is_valid:
+                return self.get_error_message(current_state['state'])
+            
+            # Obtener siguiente estado
+            next_state = self.get_next_state(current_state['state'], processed_input)
+            
+            # Actualizar datos del usuario
+            current_state['state'] = next_state
+            if processed_input:
+                current_state['data'][current_state['state']] = processed_input
+            
+            # Actualizar estado del usuario
+            await firebase_manager.update_user_state(phone, current_state)
+            
+            # Obtener mensaje de respuesta
+            response_message = self.get_next_message(next_state, current_state['data'])
+            
+            # Procesar estados especiales
+            if next_state == self.STATES['SHOW_REPORT']:
+                response_message = await self.process_show_report(current_state['data'])
+            elif next_state == self.STATES['SHOW_LOAN']:
+                response_message = self.process_show_loan(current_state['data'])
+            elif next_state == self.STATES['CONFIRM_LOAN']:
+                response_message = self.process_confirm_loan()
+            
+            return response_message
+            
+        except Exception as e:
+            logger.error(f"Error handling message: {str(e)}")
+            return "Lo siento, hubo un error procesando tu mensaje. Por favor intenta de nuevo."
+    
 # Instancia global
 conversation_flow = ConversationFlow()
