@@ -137,12 +137,22 @@ async def process_user_message(from_number: str, message: str) -> None:
                 return
                 
         elif current_state == ConversationState.ASKING_IRRIGATION.value:
-            # Guardar método de riego
+            # Guardar sistema de riego
             message = message.lower().strip()
-            if message not in ['goteo', 'aspersion', 'gravedad', 'temporal']:
+            valid_options = {
+                '1': 'temporal',
+                '2': 'goteo',
+                '3': 'aspersion',
+                '4': 'otro'
+            }
+            
+            if message in valid_options:
+                message = valid_options[message]
+                
+            if message not in valid_options.values():
                 await whatsapp.send_message(
-                    from_number, 
-                    "❌ Método de riego inválido. Opciones: goteo, aspersion, gravedad, temporal"
+                    from_number,
+                    MESSAGES['unknown']
                 )
                 return
                 
@@ -153,10 +163,20 @@ async def process_user_message(from_number: str, message: str) -> None:
         elif current_state == ConversationState.ASKING_COMMERCIALIZATION.value:
             # Guardar método de comercialización
             message = message.lower().strip()
-            if message not in ['mercado local', 'exportacion', 'intermediario', 'directo']:
+            valid_options = {
+                '1': 'mercado local',
+                '2': 'cooperativa',
+                '3': 'exportacion',
+                '4': 'otro'
+            }
+            
+            if message in valid_options:
+                message = valid_options[message]
+            
+            if message not in valid_options.values():
                 await whatsapp.send_message(
                     from_number,
-                    "❌ Método inválido. Opciones: mercado local, exportacion, intermediario, directo"
+                    MESSAGES['unknown']
                 )
                 return
                 
@@ -172,12 +192,14 @@ async def process_user_message(from_number: str, message: str) -> None:
                 # Obtener datos históricos
                 datos_historicos = await maga_api.get_datos_historicos(user_data['crop'])
                 if not datos_historicos:
-                    raise ValueError(f"No hay datos para el cultivo: {user_data['crop']}")
+                    logger.error(f"No hay datos para el cultivo: {user_data['crop']}")
+                    await whatsapp.send_message(from_number, MESSAGES['error'])
+                    return
                     
                 # Calcular score y análisis
                 score = scoring_service.calculate_score(
                     crop=user_data['crop'],
-                    area=user_data['area'],
+                    area=float(user_data['area']),
                     irrigation=user_data['irrigation'],
                     commercialization=user_data['commercialization'],
                     historical_data=datos_historicos
@@ -186,12 +208,15 @@ async def process_user_message(from_number: str, message: str) -> None:
                 user_data['score'] = score
                 new_state = ConversationState.ASKING_LOAN_INTEREST.value
                 
-                # Enviar resultado
+                # Enviar análisis financiero
                 await whatsapp.send_message(
                     from_number,
-                    MESSAGES['analysis_ready'].format(
-                        score=score['total'],
-                        monto=score['suggested_loan']
+                    MESSAGES['analysis'].format(
+                        cultivo=user_data['crop'],
+                        area=user_data['area'],
+                        ingresos=format_currency(score['expected_income']),
+                        costos=format_currency(score['estimated_costs']),
+                        ganancia=format_currency(score['expected_profit'])
                     )
                 )
                 
