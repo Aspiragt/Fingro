@@ -119,55 +119,35 @@ class MagaAPI:
             cultivo: Nombre del cultivo
             
         Returns:
-            float: Precio por quintal en quetzales
-            
-        Raises:
-            ValueError: Si el cultivo no es válido
+            float: Precio en quetzales por quintal
         """
         try:
             # Normalizar nombre del cultivo
             cultivo = cultivo.lower().strip()
             
-            # Verificar si es un cultivo conocido
-            cultivo_normalizado = None
-            for nombre, variaciones in CROP_VARIATIONS.items():
-                if cultivo in variaciones:
-                    cultivo_normalizado = nombre
-                    break
-            
-            if not cultivo_normalizado:
-                logger.warning(f"Cultivo no reconocido: {cultivo}")
-                raise ValueError(f"Cultivo no reconocido: {cultivo}")
-            
-            # Verificar caché
-            if cultivo_normalizado in self.price_cache:
-                precio = self.price_cache[cultivo_normalizado]
-                logger.info(f"Precio en caché para {cultivo_normalizado}: Q{precio}")
-                return precio
-            
-            # Obtener precio de la web
+            # Buscar en caché primero
+            if cultivo in self.price_cache:
+                return self.price_cache[cultivo]
+                
+            # Intentar obtener precio de la web
             try:
-                precio = await self._fetch_precio_web(cultivo_normalizado)
+                precio = await self._fetch_precio_web(cultivo)
                 if precio:
-                    self.price_cache[cultivo_normalizado] = precio
-                    logger.info(f"Precio web para {cultivo_normalizado}: Q{precio}")
+                    self.price_cache[cultivo] = precio
                     return precio
             except Exception as e:
-                logger.error(f"Error obteniendo precio web para {cultivo_normalizado}: {str(e)}")
-            
-            # Si no se encuentra, usar precio por defecto
-            precio_default = self.default_prices.get(cultivo_normalizado)
-            if not precio_default:
-                raise ValueError(f"No hay precio por defecto para: {cultivo}")
+                logger.error(f"Error en _fetch_precio_web para {cultivo}: {str(e)}")
                 
-            logger.info(f"Usando precio por defecto para {cultivo_normalizado}: Q{precio_default}")
-            return precio_default
+            # Si no se pudo obtener, usar precio por defecto
+            default_price = self.default_prices.get(cultivo, 200)
+            logger.info(f"Usando precio por defecto para {cultivo}: Q{default_price}")
+            return default_price
             
         except Exception as e:
-            logger.error(f"Error en get_precio_cultivo para {cultivo}: {str(e)}")
-            raise
-    
-    async def get_datos_historicos(self, cultivo: str) -> Optional[Dict[str, Any]]:
+            logger.error(f"Error obteniendo precio para {cultivo}: {str(e)}")
+            return self.default_prices.get(cultivo, 200)
+
+    async def get_datos_historicos(self, cultivo: str) -> Dict[str, Any]:
         """
         Obtiene datos históricos de un cultivo
         
@@ -175,53 +155,50 @@ class MagaAPI:
             cultivo: Nombre del cultivo
             
         Returns:
-            Optional[Dict[str, Any]]: Datos históricos del cultivo
-            
-        Raises:
-            ValueError: Si el cultivo no es válido
+            Dict[str, Any]: Datos históricos del cultivo
         """
         try:
             # Normalizar nombre del cultivo
             cultivo = cultivo.lower().strip()
             
-            # Verificar si es un cultivo conocido
-            cultivo_normalizado = None
-            for nombre, variaciones in CROP_VARIATIONS.items():
-                if cultivo in variaciones:
-                    cultivo_normalizado = nombre
-                    break
-            
-            if not cultivo_normalizado:
-                logger.warning(f"Cultivo no reconocido: {cultivo}")
-                raise ValueError(f"Cultivo no reconocido: {cultivo}")
-            
-            # Verificar caché
-            if cultivo_normalizado in self.history_cache:
-                datos = self.history_cache[cultivo_normalizado]
-                logger.info(f"Datos históricos en caché para {cultivo_normalizado}")
-                return datos.dict()
-            
-            # Obtener datos históricos de la web
-            try:
-                datos = await self._fetch_datos_web(cultivo_normalizado)
-                if datos:
-                    self.history_cache[cultivo_normalizado] = datos
-                    logger.info(f"Datos históricos web para {cultivo_normalizado}")
-                    return datos.dict()
-            except Exception as e:
-                logger.error(f"Error obteniendo datos web para {cultivo_normalizado}: {str(e)}")
-            
-            # Si no se encuentra, usar datos por defecto
-            datos_default = self.default_history.get(cultivo_normalizado)
-            if not datos_default:
-                raise ValueError(f"No hay datos históricos para: {cultivo}")
+            # Buscar en caché primero
+            if cultivo in self.history_cache:
+                return self.history_cache[cultivo]
                 
-            logger.info(f"Usando datos históricos por defecto para {cultivo_normalizado}")
-            return datos_default.dict()
-            
+            # Intentar obtener datos de la web
+            try:
+                datos = await self._fetch_datos_web(cultivo)
+                if datos:
+                    self.history_cache[cultivo] = datos
+                    return datos
+            except Exception as e:
+                logger.error(f"Error en _fetch_datos_web para {cultivo}: {str(e)}")
+                
+            # Si no se pudo obtener, usar datos por defecto
+            default_data = self.default_history.get(cultivo)
+            if default_data:
+                logger.info(f"Usando datos históricos por defecto para {cultivo}")
+                return default_data.dict()
+            else:
+                # Si no hay datos por defecto, usar datos genéricos
+                logger.info(f"Usando datos históricos genéricos para {cultivo}")
+                return DatosCultivo(
+                    rendimiento_promedio=50,
+                    costos_fijos=3000,
+                    costos_variables=5000,
+                    riesgo_mercado=0.2,
+                    ciclo_cultivo=4
+                ).dict()
+                
         except Exception as e:
-            logger.error(f"Error en get_datos_historicos para {cultivo}: {str(e)}")
-            raise
+            logger.error(f"Error obteniendo datos históricos para {cultivo}: {str(e)}")
+            return DatosCultivo(
+                rendimiento_promedio=50,
+                costos_fijos=3000,
+                costos_variables=5000,
+                riesgo_mercado=0.2,
+                ciclo_cultivo=4
+            ).dict()
     
     async def _fetch_precio_web(self, cultivo: str) -> Optional[float]:
         """
@@ -231,7 +208,7 @@ class MagaAPI:
             cultivo: Nombre del cultivo
             
         Returns:
-            Optional[float]: Precio por quintal si se encuentra
+            Optional[float]: Precio en quetzales por quintal si se encuentra
         """
         try:
             # Construir URL
@@ -269,7 +246,7 @@ class MagaAPI:
             logger.error(f"Error en _fetch_precio_web para {cultivo}: {str(e)}")
             return None
     
-    async def _fetch_datos_web(self, cultivo: str) -> Optional[DatosCultivo]:
+    async def _fetch_datos_web(self, cultivo: str) -> Optional[Dict[str, Any]]:
         """
         Obtiene datos históricos de un cultivo desde la web del MAGA
         
@@ -277,7 +254,7 @@ class MagaAPI:
             cultivo: Nombre del cultivo
             
         Returns:
-            Optional[DatosCultivo]: Datos históricos si se encuentran
+            Optional[Dict[str, Any]]: Datos históricos del cultivo si se encuentran
         """
         try:
             # Construir URL

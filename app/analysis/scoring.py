@@ -71,7 +71,7 @@ class ScoringService:
             # Calcular costos
             costos_base = sum(self.COSTOS_BASE.values()) * data['area']
             costos_riego = self.COSTOS_RIEGO.get(data['irrigation'], 0) * data['area']
-            factor_comercializacion = self.FACTOR_COMERCIALIZACION.get(data['commercialization'], 1.0)
+            factor_comercializacion = self._calcular_factor_comercializacion(data['commercialization'])
             
             costos_totales = (costos_base + costos_riego) * factor_comercializacion
             
@@ -85,7 +85,7 @@ class ScoringService:
             
             # Calcular Fingro Score
             score_riego = self.SCORE_RIEGO.get(data['irrigation'], 0)
-            score_comercializacion = self.SCORE_COMERCIALIZACION.get(data['commercialization'], 0)
+            score_comercializacion = self._calcular_score_comercializacion(data['commercialization'])
             
             # Ajustar score por área
             score_area = min(100, data['area'] * 10)  # 10 puntos por hectárea, máximo 100
@@ -124,6 +124,52 @@ class ScoringService:
         except Exception as e:
             logger.error(f"Error calculando Fingro Score: {str(e)}")
             raise
+    
+    def _calcular_factor_comercializacion(self, comercializacion: str) -> float:
+        """
+        Calcula el factor de ajuste por tipo de comercialización
+        
+        Args:
+            comercializacion: Método de comercialización
+        
+        Returns:
+            float: Factor de ajuste
+        """
+        comercializacion = comercializacion.lower().strip()
+        
+        if '1' in comercializacion or 'local' in comercializacion:
+            return 1.0  # Mercado local
+        elif '2' in comercializacion or 'intermediario' in comercializacion:
+            return 1.1  # Intermediario
+        elif '3' in comercializacion or 'exportacion' in comercializacion or 'exportación' in comercializacion:
+            return 1.3  # Exportación
+        elif '4' in comercializacion or 'directo' in comercializacion:
+            return 0.9  # Directo
+        else:
+            return 1.0  # Valor por defecto
+    
+    def _calcular_score_comercializacion(self, comercializacion: str) -> float:
+        """
+        Calcula el score basado en el método de comercialización
+        
+        Args:
+            comercializacion: Método de comercialización
+        
+        Returns:
+            float: Score entre 0 y 1
+        """
+        comercializacion = comercializacion.lower().strip()
+        
+        if '1' in comercializacion or 'local' in comercializacion:
+            return 0.6  # Mercado local
+        elif '2' in comercializacion or 'intermediario' in comercializacion:
+            return 0.4  # Intermediario
+        elif '3' in comercializacion or 'exportacion' in comercializacion or 'exportación' in comercializacion:
+            return 1.0  # Exportación
+        elif '4' in comercializacion or 'directo' in comercializacion:
+            return 0.8  # Directo
+        else:
+            return 0.5  # Valor por defecto
     
     def _estimar_rendimiento(self, tipo_riego: str) -> float:
         """
