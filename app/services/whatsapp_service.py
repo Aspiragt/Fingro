@@ -19,7 +19,7 @@ class WhatsAppService:
         """Inicializa el servicio de WhatsApp"""
         self.api_url = "https://graph.facebook.com/v17.0"
         self.phone_number_id = settings.WHATSAPP_PHONE_ID
-        self.access_token = settings.WHATSAPP_ACCESS_TOKEN
+        self.access_token = settings.WHATSAPP_TOKEN
         self.client = httpx.AsyncClient(timeout=30.0)
     
     async def send_message(self, to: str, message: str) -> Dict[str, Any]:
