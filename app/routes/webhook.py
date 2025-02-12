@@ -38,7 +38,7 @@ async def receive_message(request: Request, whatsapp: WhatsAppService = Depends(
         body = await request.json()
         
         # Log incoming webhook
-        logger.debug(f"Received webhook: {body}")
+        logger.info(f"Received webhook body: {body}")
         
         # Extract message data
         entry = body.get("entry", [{}])[0]
@@ -46,7 +46,10 @@ async def receive_message(request: Request, whatsapp: WhatsAppService = Depends(
         value = changes.get("value", {})
         messages = value.get("messages", [])
         
+        logger.info(f"Extracted messages: {messages}")
+        
         if not messages:
+            logger.info("No messages found in webhook")
             return {"status": "no_messages"}
             
         # Process each message
@@ -54,20 +57,26 @@ async def receive_message(request: Request, whatsapp: WhatsAppService = Depends(
             from_number = message.get("from")
             message_type = message.get("type")
             
+            logger.info(f"Processing message - From: {from_number}, Type: {message_type}")
+            
             if not from_number or not message_type:
+                logger.warning(f"Invalid message format - from: {from_number}, type: {message_type}")
                 continue
                 
             if message_type == "text":
                 text = message.get("text", {}).get("body", "")
+                logger.info(f"Processing text message: {text}")
                 # Procesar el mensaje usando conversation_flow
                 response = await conversation_flow.handle_message(from_number, text)
+                logger.info(f"Generated response: {response}")
                 # Enviar respuesta al usuario
                 await whatsapp.send_message(from_number, response)
+                logger.info(f"Response sent to {from_number}")
             
         return {"status": "processed"}
         
     except Exception as e:
-        logger.error(f"Error processing webhook: {str(e)}")
+        logger.error(f"Error processing webhook: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/health")
