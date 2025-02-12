@@ -152,6 +152,10 @@ class FinancialAnalyzer:
                         'brutos': ingresos_brutos,
                         'ajustados': ingresos_ajustados,
                         'factor_riesgo': riesgo_total
+                    },
+                    'precios': {
+                        'precio_actual': proyecto.precio_actual,
+                        'precio_por_unidad': proyecto.precio_actual  # Para compatibilidad con el reporte
                     }
                 }
             }
