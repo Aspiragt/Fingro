@@ -14,10 +14,16 @@ class WhatsAppService:
     def __init__(self):
         """Inicializa el servicio de WhatsApp"""
         self.api_version = "v21.0"
-        self.api_url = "https://graph.facebook.com"
+        self.api_url = settings.WHATSAPP_API_URL
         self.token = settings.WHATSAPP_TOKEN
         self.phone_number_id = settings.WHATSAPP_PHONE_ID.strip()  # Asegurar que no hay espacios
         self.client = httpx.AsyncClient(timeout=30.0)
+        
+        # Validar configuración
+        if not self.token or not self.phone_number_id:
+            raise ValueError("WHATSAPP_TOKEN y WHATSAPP_PHONE_ID son requeridos")
+        
+        logger.info(f"WhatsApp Service inicializado con phone_id: {self.phone_number_id}")
     
     async def send_message(self, to: str, message: str) -> bool:
         """
@@ -61,6 +67,8 @@ class WhatsAppService:
             
         except Exception as e:
             logger.error(f"Error enviando mensaje a {to}: {str(e)}")
+            if hasattr(e, 'response'):
+                logger.error(f"Response content: {e.response.text}")
             return False
     
     async def send_template(self, to: str, template_name: str, language: str = "es", components: Optional[List[Dict[str, Any]]] = None) -> bool:
@@ -109,6 +117,8 @@ class WhatsAppService:
             
         except Exception as e:
             logger.error(f"Error enviando plantilla {template_name} a {to}: {str(e)}")
+            if hasattr(e, 'response'):
+                logger.error(f"Response content: {e.response.text}")
             return False
     
     async def close(self):

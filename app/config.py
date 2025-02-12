@@ -43,7 +43,7 @@ class Settings(BaseModel):
     
     # WhatsApp API
     WHATSAPP_API_URL: str = Field(
-        default="https://graph.facebook.com/v17.0",
+        default="https://graph.facebook.com",
         description="URL base de la API de WhatsApp"
     )
     WHATSAPP_TOKEN: str = Field(
@@ -52,15 +52,15 @@ class Settings(BaseModel):
     )
     WHATSAPP_PHONE_ID: str = Field(
         default=os.getenv("WHATSAPP_PHONE_ID", ""),
-        description="ID del número de WhatsApp"
+        description="ID del número de teléfono de WhatsApp"
     )
     WHATSAPP_WEBHOOK_VERIFY_TOKEN: str = Field(
         default=os.getenv("WHATSAPP_WEBHOOK_VERIFY_TOKEN", ""),
-        description="Token para verificar webhooks de WhatsApp"
+        description="Token para verificar webhook de WhatsApp"
     )
     WHATSAPP_WEBHOOK_SECRET: str = Field(
         default=os.getenv("WHATSAPP_WEBHOOK_SECRET", ""),
-        description="Secreto para verificar firmas de webhooks"
+        description="Secret para verificar webhook de WhatsApp"
     )
     
     # Firebase
