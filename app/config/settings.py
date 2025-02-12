@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     DISABLE_WEBHOOK_SIGNATURE: bool = os.getenv("DISABLE_WEBHOOK_SIGNATURE", "false").lower() == "true"
     
     # Firebase
-    FIREBASE_CREDENTIALS: Optional[str] = os.getenv("FIREBASE_CREDENTIALS")
+    FIREBASE_CREDENTIALS: Optional[str] = os.getenv("FIREBASE_CREDENTIALS_JSON")
     
     class Config:
         env_file = ".env"
