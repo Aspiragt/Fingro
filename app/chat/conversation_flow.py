@@ -56,6 +56,51 @@ class ConversationFlow:
             'gravedad', 'aspersion', 'goteo', 'ninguno'
         ]
     
+    def _normalize_text(self, text: str) -> str:
+        """
+        Normaliza el texto para comparación
+        - Remueve tildes
+        - Convierte a minúsculas
+        - Remueve espacios extra
+        """
+        import unicodedata
+        # Normalizar NFD y eliminar diacríticos
+        text = unicodedata.normalize('NFD', text).encode('ascii', 'ignore').decode('utf-8')
+        # A minúsculas y remover espacios extra
+        return text.lower().strip()
+
+    def _is_similar_crop(self, input_crop: str, valid_crop: str) -> bool:
+        """
+        Compara si dos nombres de cultivos son similares
+        - Ignora tildes
+        - Ignora mayúsculas/minúsculas
+        - Permite algunas variaciones comunes
+        """
+        input_norm = self._normalize_text(input_crop)
+        valid_norm = self._normalize_text(valid_crop)
+        
+        # Mapa de variaciones comunes
+        variations = {
+            'maiz': ['mais', 'maíz', 'maices'],
+            'frijol': ['frijoles', 'frijoles', 'frijol negro', 'frijol rojo'],
+            'papa': ['papas', 'patata', 'patatas'],
+            'tomate': ['tomates', 'jitomate'],
+            'cafe': ['café', 'cafeto', 'cafetal'],
+            'platano': ['plátano', 'platanos', 'plátanos', 'banano', 'bananos'],
+            'limon': ['limón', 'limones', 'limonero'],
+            'brocoli': ['brócoli', 'brocolis', 'brócolis']
+        }
+        
+        # Revisar coincidencia directa
+        if input_norm == valid_norm:
+            return True
+            
+        # Revisar variaciones
+        if valid_norm in variations and input_norm in variations[valid_norm]:
+            return True
+            
+        return False
+
     def get_welcome_message(self) -> str:
         """Retorna mensaje de bienvenida"""
         return (
@@ -125,8 +170,10 @@ class ConversationFlow:
         user_input = user_input.lower().strip()
         
         if current_state == self.STATES['GET_CROP']:
-            if user_input in self.valid_crops:
-                return True, user_input
+            # Buscar coincidencia con cualquier cultivo válido
+            for crop in self.valid_crops:
+                if self._is_similar_crop(user_input, crop):
+                    return True, crop
             return False, None
             
         elif current_state == self.STATES['GET_AREA']:
