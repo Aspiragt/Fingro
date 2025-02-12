@@ -459,11 +459,6 @@ class ConversationFlow:
             is_valid, processed_input = await self.validate_input(current_state['state'], text)
             
             if not is_valid:
-                if current_state['state'] == self.STATES['GET_CROP']:
-                    return (
-                        "❌ No encontré ese cultivo en nuestra base de datos.\n"
-                        "Por favor, intenta con otro nombre o verifica la ortografía."
-                    )
                 return "❌ Entrada no válida. Por favor intenta de nuevo."
             
             # Obtener siguiente estado
