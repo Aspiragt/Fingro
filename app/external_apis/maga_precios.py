@@ -14,52 +14,78 @@ class MagaAPI:
         """Inicializa el cliente de MAGA"""
         # Datos predefinidos de cultivos
         self.crops = {
+            # Granos básicos
             'maiz': {
                 'nombre': 'Maíz',
                 'precio': 150.00,
                 'unidad': 'quintal',
                 'fecha': '2025-02-12',
-                'mercado': 'Nacional',
+                'mercado': 'La Terminal',
                 'fuente': 'MAGA'
             },
             'frijol': {
-                'nombre': 'Frijol',
+                'nombre': 'Frijol negro',
                 'precio': 500.00,
                 'unidad': 'quintal',
                 'fecha': '2025-02-12',
-                'mercado': 'Nacional',
+                'mercado': 'La Terminal',
                 'fuente': 'MAGA'
             },
+            'arroz': {
+                'nombre': 'Arroz oro, blanco de primera',
+                'precio': 400.00,
+                'unidad': 'quintal',
+                'fecha': '2025-02-12',
+                'mercado': 'La Terminal',
+                'fuente': 'MAGA'
+            },
+            # Hortalizas
             'papa': {
                 'nombre': 'Papa',
                 'precio': 200.00,
                 'unidad': 'quintal',
                 'fecha': '2025-02-12',
-                'mercado': 'Nacional',
+                'mercado': 'La Terminal',
                 'fuente': 'MAGA'
             },
             'tomate': {
-                'nombre': 'Tomate',
+                'nombre': 'Tomate de cocina',
                 'precio': 250.00,
                 'unidad': 'caja',
                 'fecha': '2025-02-12',
-                'mercado': 'Nacional',
+                'mercado': 'La Terminal',
                 'fuente': 'MAGA'
             },
             'cebolla': {
-                'nombre': 'Cebolla',
+                'nombre': 'Cebolla seca, blanca, mediana',
                 'precio': 300.00,
                 'unidad': 'quintal',
                 'fecha': '2025-02-12',
-                'mercado': 'Nacional',
+                'mercado': 'La Terminal',
                 'fuente': 'MAGA'
             },
             'chile': {
-                'nombre': 'Chile Pimiento',
+                'nombre': 'Chile pimiento',
                 'precio': 350.00,
                 'unidad': 'caja',
                 'fecha': '2025-02-12',
-                'mercado': 'Nacional',
+                'mercado': 'La Terminal',
+                'fuente': 'MAGA'
+            },
+            'brocoli': {
+                'nombre': 'Brócoli mediano',
+                'precio': 200.00,
+                'unidad': 'caja',
+                'fecha': '2025-02-12',
+                'mercado': 'La Terminal',
+                'fuente': 'MAGA'
+            },
+            'zanahoria': {
+                'nombre': 'Zanahoria mediana',
+                'precio': 180.00,
+                'unidad': 'quintal',
+                'fecha': '2025-02-12',
+                'mercado': 'La Terminal',
                 'fuente': 'MAGA'
             },
             'repollo': {
@@ -67,54 +93,126 @@ class MagaAPI:
                 'precio': 100.00,
                 'unidad': 'red',
                 'fecha': '2025-02-12',
-                'mercado': 'Nacional',
+                'mercado': 'La Terminal',
                 'fuente': 'MAGA'
             },
-            'zanahoria': {
-                'nombre': 'Zanahoria',
-                'precio': 180.00,
+            'apio': {
+                'nombre': 'Apio mediano',
+                'precio': 150.00,
+                'unidad': 'caja',
+                'fecha': '2025-02-12',
+                'mercado': 'La Terminal',
+                'fuente': 'MAGA'
+            },
+            # Frutas
+            'aguacate': {
+                'nombre': 'Aguacate Hass',
+                'precio': 400.00,
+                'unidad': 'caja',
+                'fecha': '2025-02-12',
+                'mercado': 'La Terminal',
+                'fuente': 'MAGA'
+            },
+            'banano': {
+                'nombre': 'Banano criollo',
+                'precio': 100.00,
                 'unidad': 'quintal',
                 'fecha': '2025-02-12',
-                'mercado': 'Nacional',
+                'mercado': 'La Terminal',
+                'fuente': 'MAGA'
+            },
+            # Especias
+            'ajo': {
+                'nombre': 'Ajo blanco',
+                'precio': 800.00,
+                'unidad': 'quintal',
+                'fecha': '2025-02-12',
+                'mercado': 'La Terminal',
+                'fuente': 'MAGA'
+            },
+            'achiote': {
+                'nombre': 'Achiote seco',
+                'precio': 1000.00,
+                'unidad': 'quintal',
+                'fecha': '2025-02-12',
+                'mercado': 'La Terminal',
                 'fuente': 'MAGA'
             }
         }
         
         # Mapeo de variaciones de nombres
         self.name_mapping = {
-            # Maíz
+            # Granos básicos
             'maiz': 'maiz',
             'maíz': 'maiz',
             'mais': 'maiz',
             'maís': 'maiz',
-            # Frijol
+            'elote': 'maiz',
+            
             'frijol': 'frijol',
             'frijoles': 'frijol',
             'frijol negro': 'frijol',
             'frijoles negros': 'frijol',
-            # Papa
+            
+            'arroz': 'arroz',
+            'arroz blanco': 'arroz',
+            'arroz de primera': 'arroz',
+            
+            # Hortalizas
             'papa': 'papa',
             'papas': 'papa',
             'patata': 'papa',
             'patatas': 'papa',
-            # Tomate
+            
             'tomate': 'tomate',
             'tomates': 'tomate',
             'jitomate': 'tomate',
-            # Cebolla
+            'tomate de cocina': 'tomate',
+            
             'cebolla': 'cebolla',
             'cebollas': 'cebolla',
-            # Chile
+            'cebolla blanca': 'cebolla',
+            'cebolla seca': 'cebolla',
+            
             'chile': 'chile',
             'chiles': 'chile',
             'chile pimiento': 'chile',
             'pimiento': 'chile',
-            # Repollo
+            'morron': 'chile',
+            'morrón': 'chile',
+            
+            'brocoli': 'brocoli',
+            'brócoli': 'brocoli',
+            'brecol': 'brocoli',
+            
+            'zanahoria': 'zanahoria',
+            'zanahorias': 'zanahoria',
+            
             'repollo': 'repollo',
             'col': 'repollo',
-            # Zanahoria
-            'zanahoria': 'zanahoria',
-            'zanahorias': 'zanahoria'
+            
+            'apio': 'apio',
+            'apios': 'apio',
+            
+            # Frutas
+            'aguacate': 'aguacate',
+            'aguacates': 'aguacate',
+            'palta': 'aguacate',
+            'aguacate hass': 'aguacate',
+            
+            'banano': 'banano',
+            'banana': 'banano',
+            'platano': 'banano',
+            'plátano': 'banano',
+            
+            # Especias
+            'ajo': 'ajo',
+            'ajos': 'ajo',
+            'ajo blanco': 'ajo',
+            
+            'achiote': 'achiote',
+            'achote': 'achiote',
+            'bija': 'achiote'
         }
         
         logger.info("MagaAPI inicializado con datos predefinidos")
