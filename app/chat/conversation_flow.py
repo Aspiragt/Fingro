@@ -175,50 +175,18 @@ class ConversationFlow:
         user_input = user_input.lower().strip()
         
         if current_state == self.STATES['GET_CROP']:
-            # Buscar el cultivo en MAGA
-            try:
-                # Normalizar y limpiar la entrada
-                user_input = user_input.strip().lower()
-                logger.info(f"Validando cultivo (entrada original): {user_input}")
-                
-                # Intentar búsqueda
-                crop_info = await maga_api.search_crop(user_input)
-                logger.info(f"Resultado búsqueda: {crop_info}")
-                
-                if crop_info:
-                    logger.info(f"Cultivo encontrado: {crop_info['nombre']}")
-                    return True, {
-                        'nombre': crop_info['nombre'],
-                        'precio': crop_info['precio'],
-                        'unidad': crop_info['unidad']
-                    }
-                else:
-                    # Si no se encuentra, intentar con variaciones comunes
-                    variations = [
-                        user_input.replace('maiz', 'maíz'),
-                        user_input.replace('frijol', 'frijol_negro'),
-                        user_input.replace('platano', 'plátano'),
-                    ]
-                    
-                    for variation in variations:
-                        if variation != user_input:
-                            logger.info(f"Intentando con variación: {variation}")
-                            crop_info = await maga_api.search_crop(variation)
-                            if crop_info:
-                                logger.info(f"Cultivo encontrado con variación: {crop_info['nombre']}")
-                                return True, {
-                                    'nombre': crop_info['nombre'],
-                                    'precio': crop_info['precio'],
-                                    'unidad': crop_info['unidad']
-                                }
-                    
-                    logger.warning(f"Cultivo no encontrado: {user_input}")
-                    return False, None
-                    
-            except Exception as e:
-                logger.error(f"Error buscando cultivo en MAGA: {str(e)}")
+            # Aceptar cualquier texto no vacío como cultivo
+            user_input = user_input.strip()
+            if user_input:
+                logger.info(f"Cultivo ingresado: {user_input}")
+                return True, {
+                    'nombre': user_input,
+                    'input_original': user_input  # Guardamos el texto original para búsqueda posterior
+                }
+            else:
+                logger.warning("Entrada de cultivo vacía")
                 return False, None
-                
+            
         elif current_state == self.STATES['GET_AREA']:
             # Primero intentar convertir directamente
             try:
@@ -390,27 +358,38 @@ class ConversationFlow:
             str: Reporte formateado
         """
         try:
-            # Analizar proyecto
-            score_data = await financial_model.analyze_project(user_data)
+            # Buscar precio del cultivo en MAGA
+            crop_name = user_data.get('crop', {}).get('input_original', '')
+            logger.info(f"Buscando precio para cultivo: {crop_name}")
             
-            if not score_data:
+            crop_info = await maga_api.search_crop(crop_name)
+            if not crop_info:
+                logger.warning(f"No se encontró precio para: {crop_name}")
                 return (
-                    "❌ Error generando análisis financiero\n\n"
-                    "Por favor intenta de nuevo más tarde."
+                    f"❌ Lo siento, no pude encontrar información de precios para *{crop_name}*.\n\n"
+                    "¿Podrías intentar de nuevo con otro cultivo? Usa el comando 'reiniciar'"
                 )
             
-            # Guardar datos del análisis para usarlos después
-            user_data['score_data'] = score_data
+            # Actualizar datos con información de MAGA
+            user_data['crop']['precio'] = crop_info['precio']
+            user_data['crop']['unidad'] = crop_info['unidad']
             
-            # Generar reporte simple
-            return report_generator.generate_report(user_data, score_data)
+            # Generar reporte financiero
+            report = report_generator.generate_report(
+                crop_name=crop_name,
+                area=user_data.get('area', 0),
+                precio=crop_info['precio'],
+                unidad=crop_info['unidad'],
+                canal=user_data.get('channel', ''),
+                riego=user_data.get('irrigation', ''),
+                ubicacion=user_data.get('location', '')
+            )
+            
+            return report
             
         except Exception as e:
-            logger.error(f"Error procesando reporte: {str(e)}")
-            return (
-                "❌ Error generando reporte\n\n"
-                "Por favor intenta de nuevo más tarde."
-            )
+            logger.error(f"Error generando reporte: {str(e)}")
+            return "❌ Ocurrió un error generando el reporte. Por favor intenta de nuevo."
     
     def process_show_loan(self, user_data: Dict[str, Any]) -> str:
         """
