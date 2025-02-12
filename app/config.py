@@ -76,6 +76,12 @@ class Settings(BaseModel):
         description="Tamaño máximo del caché"
     )
     
+    # MAGA API
+    MAGA_BASE_URL: str = Field(
+        default="https://maga.gt/api/v1",
+        description="URL base de la API de MAGA"
+    )
+    
     # Seguridad
     CORS_ORIGINS: list = Field(
         default=json.loads(os.getenv("CORS_ORIGINS", '["*"]')),
