@@ -20,10 +20,19 @@ class WhatsAppService:
         self.client = httpx.AsyncClient(timeout=30.0)
         
         # Validar configuración
-        if not self.token or not self.phone_number_id:
-            raise ValueError("WHATSAPP_TOKEN y WHATSAPP_PHONE_ID son requeridos")
+        if not self.token:
+            logger.error("WHATSAPP_ACCESS_TOKEN no está configurado")
+            raise ValueError("WHATSAPP_ACCESS_TOKEN es requerido")
+            
+        if not self.phone_number_id:
+            logger.error("WHATSAPP_PHONE_ID no está configurado")
+            raise ValueError("WHATSAPP_PHONE_ID es requerido")
         
-        logger.info(f"WhatsApp Service inicializado con phone_id: {self.phone_number_id}")
+        logger.info(f"WhatsApp Service inicializado con:")
+        logger.info(f"- API URL: {self.api_url}")
+        logger.info(f"- API Version: {self.api_version}")
+        logger.info(f"- Phone ID: {self.phone_number_id}")
+        logger.info(f"- Token length: {len(self.token)} caracteres")
     
     async def send_message(self, to: str, message: str) -> bool:
         """
@@ -37,16 +46,16 @@ class WhatsAppService:
             bool: True si el mensaje se envió correctamente
         """
         try:
+            # Asegurar que el número no tenga el símbolo + y esté limpio
+            to = to.lstrip("+").strip()
+            
             url = f"{self.api_url}/{self.api_version}/{self.phone_number_id}/messages"
-            logger.debug(f"Sending message to URL: {url}")
+            logger.info(f"Enviando mensaje a URL: {url}")
             
             headers = {
                 "Authorization": f"Bearer {self.token}",
                 "Content-Type": "application/json"
             }
-            
-            # Asegurar que el número no tenga el símbolo + y esté limpio
-            to = to.lstrip("+").strip()
             
             data = {
                 "messaging_product": "whatsapp",
@@ -59,10 +68,16 @@ class WhatsAppService:
                 }
             }
             
-            logger.debug(f"Request data: {data}")
+            logger.info(f"Request data: {data}")
             response = await self.client.post(url, headers=headers, json=data)
-            response.raise_for_status()
-            logger.info(f"Mensaje enviado a {to}")
+            
+            if response.status_code != 200:
+                logger.error(f"Error HTTP {response.status_code}")
+                logger.error(f"Response content: {response.text}")
+                return False
+                
+            response_data = response.json()
+            logger.info(f"Respuesta de WhatsApp: {response_data}")
             return True
             
         except Exception as e:
@@ -86,7 +101,7 @@ class WhatsAppService:
         """
         try:
             url = f"{self.api_url}/{self.api_version}/{self.phone_number_id}/messages"
-            logger.debug(f"Sending template to URL: {url}")
+            logger.info(f"Enviando plantilla a URL: {url}")
             
             headers = {
                 "Authorization": f"Bearer {self.token}",
@@ -109,10 +124,16 @@ class WhatsAppService:
             if components:
                 data["template"]["components"] = components
             
-            logger.debug(f"Request data: {data}")
+            logger.info(f"Request data: {data}")
             response = await self.client.post(url, headers=headers, json=data)
-            response.raise_for_status()
-            logger.info(f"Plantilla {template_name} enviada a {to}")
+            
+            if response.status_code != 200:
+                logger.error(f"Error HTTP {response.status_code}")
+                logger.error(f"Response content: {response.text}")
+                return False
+                
+            response_data = response.json()
+            logger.info(f"Respuesta de WhatsApp: {response_data}")
             return True
             
         except Exception as e:

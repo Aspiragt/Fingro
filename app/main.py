@@ -230,6 +230,43 @@ async def process_user_message(from_number: str, message: str) -> None:
         logger.error(f"Error procesando mensaje: {str(e)}")
         await whatsapp.send_message(from_number, MESSAGES['error'])
 
+@app.post("/webhook/whatsapp")
+async def webhook(request: Request) -> Dict[str, str]:
+    """
+    Endpoint para recibir webhooks de WhatsApp
+    """
+    try:
+        # Verificar firma en producción
+        if settings.ENV == "production" and not await verify_webhook_signature(request):
+            logger.error("Firma de webhook inválida")
+            raise HTTPException(status_code=401, detail="Firma inválida")
+
+        # Obtener datos del webhook
+        body = await request.json()
+        logger.info(f"Webhook recibido: {json.dumps(body, indent=2)}")
+
+        # Procesar solo si es un mensaje
+        if "entry" in body and body["entry"]:
+            for entry in body["entry"]:
+                if "changes" in entry and entry["changes"]:
+                    for change in entry["changes"]:
+                        if "value" in change and "messages" in change["value"]:
+                            for message in change["value"]["messages"]:
+                                # Extraer información del mensaje
+                                from_number = message["from"]
+                                message_text = message.get("text", {}).get("body", "")
+                                
+                                logger.info(f"Mensaje recibido de {from_number}: {message_text}")
+                                
+                                # Procesar mensaje
+                                await process_user_message(from_number, message_text)
+
+        return {"status": "ok"}
+
+    except Exception as e:
+        logger.error(f"Error procesando webhook: {str(e)}")
+        return {"status": "error", "message": str(e)}
+
 @app.get("/")
 async def root():
     """
@@ -241,44 +278,6 @@ async def root():
         "status": "running",
         "env": settings.ENV
     }
-
-@app.post("/webhook/whatsapp")
-async def webhook(request: Request):
-    """
-    Endpoint para recibir webhooks de WhatsApp
-    """
-    try:
-        # Verificar firma
-        if not await verify_webhook_signature(request):
-            logger.warning("Firma inválida en webhook")
-            raise HTTPException(status_code=401, detail="Invalid signature")
-            
-        # Obtener datos
-        data = await request.json()
-        logger.debug(f"Webhook recibido: {json.dumps(data, indent=2)}")
-        
-        # Verificar tipo de evento
-        if data.get('object') != 'whatsapp_business_account':
-            logger.warning(f"Objeto no soportado: {data.get('object')}")
-            return Response(status_code=202)
-            
-        # Procesar cada entrada
-        for entry in data.get('entry', []):
-            for change in entry.get('changes', []):
-                if change.get('value', {}).get('messages'):
-                    for message in change['value']['messages']:
-                        # Obtener número y mensaje
-                        from_number = message['from']
-                        message_text = message.get('text', {}).get('body', '')
-                        
-                        # Procesar mensaje
-                        await process_user_message(from_number, message_text)
-        
-        return Response(status_code=200)
-        
-    except Exception as e:
-        logger.error(f"Error en webhook: {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/webhook/whatsapp")
 async def verify_webhook(request: Request):
