@@ -28,24 +28,12 @@ class Settings(BaseModel):
     """Configuración de la aplicación"""
     
     # Entorno
-    ENV: str = Field(
-        default=os.getenv("ENV", "development"),
-        description="Entorno de ejecución"
-    )
-    DEBUG: bool = Field(
-        default=os.getenv("DEBUG", "false").lower() == "true",
-        description="Modo debug"
-    )
-    LOG_LEVEL: str = Field(
-        default=os.getenv("LOG_LEVEL", "INFO").upper(),
-        description="Nivel de logging"
+    PORT: int = Field(
+        default=int(os.getenv("PORT", "8000")),
+        description="Puerto para el servidor"
     )
     
     # WhatsApp API
-    WHATSAPP_API_URL: str = Field(
-        default="https://graph.facebook.com",
-        description="URL base de la API de WhatsApp"
-    )
     WHATSAPP_TOKEN: str = Field(
         default=os.getenv("WHATSAPP_TOKEN", ""),
         description="Token de acceso para la API de WhatsApp"
@@ -54,43 +42,15 @@ class Settings(BaseModel):
         default=os.getenv("WHATSAPP_PHONE_ID", ""),
         description="ID del número de teléfono de WhatsApp"
     )
-    WHATSAPP_WEBHOOK_VERIFY_TOKEN: str = Field(
-        default=os.getenv("WHATSAPP_WEBHOOK_VERIFY_TOKEN", ""),
+    WHATSAPP_WEBHOOK_SECRET: str = Field(
+        default=os.getenv("WHATSAPP_WEBHOOK_SECRET", ""),
         description="Token para verificar webhook de WhatsApp"
-    )
-    DISABLE_WEBHOOK_SIGNATURE: bool = Field(
-        default=True,
-        description="Deshabilitar la verificación de firma del webhook"
     )
     
     # Firebase
-    FIREBASE_CREDENTIALS: str = Field(
+    FIREBASE_CREDENTIALS_JSON: str = Field(
         default=os.getenv("FIREBASE_CREDENTIALS_JSON", ""),
         description="Credenciales de Firebase en formato JSON"
-    )
-    FIREBASE_CACHE_TTL: int = Field(
-        default=int(os.getenv("FIREBASE_CACHE_TTL", "300")),
-        description="Tiempo de vida del caché en segundos"
-    )
-    FIREBASE_CACHE_MAXSIZE: int = Field(
-        default=int(os.getenv("FIREBASE_CACHE_MAXSIZE", "1000")),
-        description="Tamaño máximo del caché"
-    )
-    
-    # MAGA API
-    MAGA_BASE_URL: str = Field(
-        default="https://maga.gt/api/v1",
-        description="URL base de la API de MAGA"
-    )
-    
-    # Seguridad
-    CORS_ORIGINS: list = Field(
-        default=json.loads(os.getenv("CORS_ORIGINS", '["*"]')),
-        description="Orígenes permitidos para CORS"
-    )
-    RATE_LIMIT_PER_MINUTE: int = Field(
-        default=int(os.getenv("RATE_LIMIT_PER_MINUTE", "60")),
-        description="Límite de requests por minuto"
     )
     
     # Validaciones
@@ -106,15 +66,17 @@ class Settings(BaseModel):
         """Valida que el phone_id de WhatsApp esté presente"""
         if not v:
             raise ValueError("WHATSAPP_PHONE_ID es requerido")
-        if not re.match(r'^\d{4,}$', v):
-            raise ValueError("WHATSAPP_PHONE_ID debe ser un número entero de al menos 4 dígitos")
         return v
     
-    @validator("FIREBASE_CREDENTIALS")
+    @validator("FIREBASE_CREDENTIALS_JSON")
     def validate_firebase_credentials(cls, v: str) -> str:
         """Valida que las credenciales de Firebase existan"""
         if not v:
-            raise ValueError("FIREBASE_CREDENTIALS es requerido")
+            raise ValueError("FIREBASE_CREDENTIALS_JSON es requerido")
+        try:
+            json.loads(v)
+        except json.JSONDecodeError:
+            raise ValueError("FIREBASE_CREDENTIALS_JSON debe ser un JSON válido")
         return v
     
     class Config:
@@ -126,7 +88,7 @@ class Settings(BaseModel):
 # Instancia global de configuración
 try:
     settings = Settings()
-    logger.info(f"Configuración cargada para entorno: {settings.ENV}")
+    logger.info(f"Configuración cargada en puerto: {settings.PORT}")
 except Exception as e:
     logger.error(f"Error cargando configuración: {str(e)}")
     raise
