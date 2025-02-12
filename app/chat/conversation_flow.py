@@ -204,8 +204,11 @@ class ConversationFlow:
             return False, None
             
         elif current_state in [self.STATES['ASK_LOAN'], self.STATES['CONFIRM_LOAN']]:
-            if user_input in ['si', 'no']:
-                return True, user_input == 'si'
+            user_input = user_input.lower()
+            if user_input in ['si', 'sí', 'yes']:
+                return True, True
+            elif user_input in ['no', 'not']:
+                return True, False
             return False, None
             
         return False, None
@@ -279,7 +282,7 @@ class ConversationFlow:
             return self.STATES['ASK_LOAN']
             
         elif current_state == self.STATES['ASK_LOAN']:
-            if user_input and user_input.lower() == 'si':
+            if processed_value:  # Si respondió que sí
                 return self.STATES['SHOW_LOAN']
             return self.STATES['DONE']
             
