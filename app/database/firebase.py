@@ -25,7 +25,7 @@ class FirebaseDB:
                 cred = credentials.Certificate(settings.FIREBASE_CREDENTIALS)
                 self.app = firebase_admin.initialize_app(cred)
             
-            self.db = firestore.client(self.app)
+            self.db = firestore.client()
             # Caché con tiempo de vida configurable
             self.cache = TTLCache(
                 maxsize=settings.FIREBASE_CACHE_MAXSIZE,
