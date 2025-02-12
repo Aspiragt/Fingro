@@ -319,8 +319,17 @@ class ConversationFlow:
             
             # Si llegamos a SHOW_REPORT, generar reporte
             if next_state == self.STATES['SHOW_REPORT']:
+                # Preparar datos para el modelo financiero
+                analysis_data = {
+                    'crop': user_data['data']['get_crop'],
+                    'area': user_data['data']['get_area'],
+                    'commercialization': user_data['data']['get_channel'],
+                    'irrigation': user_data['data']['get_irrigation'],
+                    'location': user_data['data']['get_location']
+                }
+                
                 # Analizar proyecto
-                score_data = await financial_model.analyze_project(user_data['data'])
+                score_data = await financial_model.analyze_project(analysis_data)
                 if not score_data:
                     error_message = (
                         "❌ Error generando análisis financiero\n\n"
