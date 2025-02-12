@@ -659,56 +659,6 @@ class MagaAPI:
         
         return text
 
-    def get_crop_info(self, crop_name):
-        """Obtiene la información de un cultivo
-        
-        Args:
-            crop_name (str): Nombre del cultivo a buscar
-            
-        Returns:
-            dict: Información del cultivo o None si no se encuentra
-        """
-        if not crop_name:
-            return None
-            
-        # Normalizar el nombre del cultivo
-        normalized_name = self._normalize_text(crop_name)
-        
-        # Buscar coincidencias exactas primero
-        if normalized_name in self.variations:
-            crop_key = self.variations[normalized_name]
-            return self.crops[crop_key]
-            
-        # Si no hay coincidencia exacta, buscar coincidencias parciales
-        for variation, key in self.variations.items():
-            # Normalizar la variación
-            normalized_variation = self._normalize_text(variation)
-            
-            # Verificar si el nombre del cultivo está contenido en la variación
-            # o si la variación está contenida en el nombre del cultivo
-            if (normalized_name in normalized_variation or 
-                normalized_variation in normalized_name):
-                return self.crops[key]
-                
-        # Si aún no hay coincidencia, buscar palabras individuales
-        crop_words = set(normalized_name.split())
-        
-        best_match = None
-        max_word_matches = 0
-        
-        for variation, key in self.variations.items():
-            variation_words = set(self._normalize_text(variation).split())
-            word_matches = len(crop_words.intersection(variation_words))
-            
-            if word_matches > max_word_matches:
-                max_word_matches = word_matches
-                best_match = key
-        
-        if best_match and max_word_matches > 0:
-            return self.crops[best_match]
-            
-        return None
-
     async def search_crop(self, query: str) -> Optional[Dict[str, Any]]:
         """
         Busca un cultivo en los datos predefinidos
@@ -721,14 +671,30 @@ class MagaAPI:
         """
         try:
             # Normalizar búsqueda
-            query = query.lower().strip()
-            logger.info(f"Buscando cultivo: {query}")
+            query = self._normalize_text(query)
+            logger.info(f"Buscando cultivo normalizado: {query}")
             
             # Buscar en el mapeo de nombres
             crop_key = self.name_mapping.get(query)
             if not crop_key:
-                logger.warning(f"Cultivo no encontrado en mapeo: {query}")
-                return None
+                # Si no se encuentra exactamente, buscar por palabras
+                query_words = set(query.split())
+                max_word_matches = 0
+                best_match = None
+                
+                for name, key in self.name_mapping.items():
+                    name_words = set(name.split())
+                    word_matches = len(query_words.intersection(name_words))
+                    
+                    if word_matches > max_word_matches:
+                        max_word_matches = word_matches
+                        best_match = key
+                
+                if best_match:
+                    crop_key = best_match
+                else:
+                    logger.warning(f"Cultivo no encontrado en mapeo: {query}")
+                    return None
             
             # Obtener datos del cultivo
             crop_data = self.crops.get(crop_key)
@@ -742,7 +708,7 @@ class MagaAPI:
         except Exception as e:
             logger.error(f"Error buscando cultivo: {str(e)}")
             return None
-    
+
     async def get_historical_prices(self, query: str, days: int = 30) -> List[Dict[str, Any]]:
         """
         Obtiene historial de precios para un cultivo
