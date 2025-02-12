@@ -401,29 +401,39 @@ class ConversationFlow:
                 
             # Obtener siguiente estado
             next_state = self.get_next_state(current_state, message, processed_value)
-            user_data['state'] = next_state
-            
-            # Guardar estado actualizado
-            await firebase_manager.update_user_state(phone_number, user_data)
             
             # Procesar estado especial
             if next_state == self.STATES['SHOW_REPORT']:
-                # Mostrar reporte y preguntar por préstamo
-                report = self.process_show_report(user_data['data'])
-                await self.whatsapp.send_message(phone_number, report)
-                
-                # Actualizar estado a ASK_LOAN
-                user_data['state'] = self.STATES['ASK_LOAN']
-                await firebase_manager.update_user_state(phone_number, user_data)
-                
-                loan_message = (
-                    "Don(ña), ¿le gustaría que le ayude a solicitar un préstamo para este proyecto? 🤝\n\n"
-                    "Responda SI o NO 👇"
-                )
-                await self.whatsapp.send_message(phone_number, loan_message)
-                return
-                
-            elif next_state == self.STATES['SHOW_LOAN']:
+                try:
+                    # Mostrar reporte y preguntar por préstamo
+                    report = await self.process_show_report(user_data['data'])
+                    await self.whatsapp.send_message(phone_number, report)
+                    
+                    # Actualizar estado a ASK_LOAN
+                    user_data['state'] = self.STATES['ASK_LOAN']
+                    await firebase_manager.update_user_state(phone_number, user_data)
+                    
+                    loan_message = (
+                        "Don(ña), ¿le gustaría que le ayude a solicitar un préstamo para este proyecto? 🤝\n\n"
+                        "Responda SI o NO 👇"
+                    )
+                    await self.whatsapp.send_message(phone_number, loan_message)
+                    return
+                except Exception as e:
+                    logger.error(f"Error procesando reporte: {str(e)}")
+                    # Mantener el estado actual si hay error
+                    error_message = (
+                        "Lo siento, ha ocurrido un error generando su reporte. "
+                        "Por favor intente nuevamente."
+                    )
+                    await self.whatsapp.send_message(phone_number, error_message)
+                    return
+                    
+            # Actualizar estado
+            user_data['state'] = next_state
+            await firebase_manager.update_user_state(phone_number, user_data)
+            
+            if next_state == self.STATES['SHOW_LOAN']:
                 loan_offer = self.process_show_loan(user_data['data'])
                 await self.whatsapp.send_message(phone_number, loan_offer)
                 
@@ -462,27 +472,27 @@ class ConversationFlow:
             str: Reporte formateado
         """
         try:
+            # Preparar datos para el modelo financiero
+            analysis_data = {
+                'crop': user_data['crop'],
+                'area': float(user_data['area']),
+                'commercialization': user_data['channel'],
+                'irrigation': user_data['irrigation'],
+                'location': user_data['location']
+            }
+            
             # Analizar proyecto
-            score_data = await financial_model.analyze_project(user_data)
-            
+            score_data = await financial_model.analyze_project(analysis_data)
             if not score_data:
-                return (
-                    "❌ Error generando análisis financiero\n\n"
-                    "Por favor intenta de nuevo más tarde."
-                )
-            
-            # Guardar datos del análisis para usarlos después
-            user_data['score_data'] = score_data
-            
-            # Generar reporte simple
-            return report_generator.generate_report(user_data, score_data)
+                raise ValueError("Error generando análisis financiero")
+
+            # Generar reporte
+            report = report_generator.generate_report(analysis_data, score_data)
+            return report
             
         except Exception as e:
-            logger.error(f"Error procesando reporte: {str(e)}")
-            return (
-                "❌ Error generando reporte\n\n"
-                "Por favor intenta de nuevo más tarde."
-            )
+            logger.error(f"Error generando reporte financiero: {str(e)}")
+            raise
     
     def process_show_loan(self, user_data: Dict[str, Any]) -> str:
         """
