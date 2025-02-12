@@ -30,11 +30,11 @@ class FirebaseDB:
         except ValueError:
             # Si no existe, inicializar con las credenciales
             try:
-                if not settings.FIREBASE_CREDENTIALS_JSON:
+                if not settings.FIREBASE_CREDENTIALS:
                     raise ValueError("Firebase credentials not found in environment")
                 
                 # Convertir el string JSON a diccionario
-                cred_dict = json.loads(settings.FIREBASE_CREDENTIALS_JSON)
+                cred_dict = json.loads(settings.FIREBASE_CREDENTIALS)
                 if 'project_id' not in cred_dict:
                     raise ValueError("project_id not found in Firebase credentials")
                 
@@ -49,7 +49,7 @@ class FirebaseDB:
                 })
                 logger.info(f"Firebase app initialized successfully for project: {cred_dict['project_id']}")
             except json.JSONDecodeError:
-                logger.error("Invalid JSON in FIREBASE_CREDENTIALS_JSON")
+                logger.error("Invalid JSON in FIREBASE_CREDENTIALS")
                 raise FirebaseError("Invalid Firebase credentials format")
             except Exception as e:
                 logger.error(f"Error initializing Firebase: {str(e)}")
