@@ -6,6 +6,7 @@ import logging
 from app.models.financial_model import financial_model
 from app.views.financial_report import report_generator
 from app.external_apis.maga import CanalComercializacion
+from app.services.whatsapp_service import whatsapp
 
 logger = logging.getLogger(__name__)
 
@@ -202,7 +203,7 @@ class ConversationFlow:
         
         Args:
             current_state: Estado actual
-            user_input: Entrada del usuario opcional
+            user_input: Entrada opcional del usuario
             
         Returns:
             str: Siguiente estado
@@ -211,8 +212,6 @@ class ConversationFlow:
             return self.STATES['GET_CROP']
             
         elif current_state == self.STATES['GET_CROP']:
-            if user_input and user_input.lower() == 'otra':
-                return self.STATES['GET_CROP']
             return self.STATES['GET_AREA']
             
         elif current_state == self.STATES['GET_AREA']:
@@ -242,7 +241,109 @@ class ConversationFlow:
             return self.STATES['DONE']
             
         return self.STATES['START']
-    
+
+    async def handle_message(self, phone_number: str, message: str):
+        """
+        Procesa un mensaje entrante de WhatsApp
+        
+        Args:
+            phone_number: Número de teléfono del remitente
+            message: Contenido del mensaje
+        """
+        try:
+            # Obtener o crear datos del usuario
+            user_data = await firebase_manager.get_user_data(phone_number)
+            if not user_data:
+                user_data = {
+                    'state': self.STATES['START'],
+                    'data': {}
+                }
+                
+            current_state = user_data['state']
+            
+            # Si es nuevo usuario o conversación terminada, reiniciar
+            if current_state == self.STATES['START'] or current_state == self.STATES['DONE']:
+                # Enviar mensaje de bienvenida
+                welcome_message = self.get_welcome_message()
+                await whatsapp.send_message(phone_number, welcome_message)
+                
+                # Actualizar estado
+                user_data['state'] = self.STATES['GET_CROP']
+                await firebase_manager.update_user_data(phone_number, user_data)
+                return
+                
+            # Validar entrada del usuario
+            is_valid, processed_value = self.validate_input(current_state, message)
+            
+            if not is_valid:
+                # Enviar mensaje de error
+                error_message = self.get_error_message(current_state)
+                await whatsapp.send_message(phone_number, error_message)
+                return
+                
+            # Guardar dato procesado
+            user_data['data'][current_state] = processed_value
+            
+            # Obtener siguiente estado
+            next_state = self.get_next_state(current_state, message)
+            user_data['state'] = next_state
+            
+            # Si llegamos a SHOW_REPORT, generar reporte
+            if next_state == self.STATES['SHOW_REPORT']:
+                report = report_generator.generate_report(user_data['data'])
+                await whatsapp.send_message(phone_number, report)
+                
+                # Preguntar si quiere préstamo
+                loan_message = "¿Te gustaría solicitar un préstamo para este proyecto? (SI/NO)"
+                await whatsapp.send_message(phone_number, loan_message)
+                
+            # Si llegamos a SHOW_LOAN, mostrar oferta
+            elif next_state == self.STATES['SHOW_LOAN']:
+                loan_offer = report_generator.generate_loan_offer(user_data['data'])
+                await whatsapp.send_message(phone_number, loan_offer)
+                
+                # Preguntar si confirma
+                confirm_message = "¿Deseas proceder con la solicitud del préstamo? (SI/NO)"
+                await whatsapp.send_message(phone_number, confirm_message)
+                
+            # Si llegamos a DONE después de confirmar préstamo
+            elif next_state == self.STATES['DONE'] and current_state == self.STATES['CONFIRM_LOAN']:
+                if processed_value:  # Si confirmó el préstamo
+                    final_message = (
+                        "¡Excelente! 🎉 Tu solicitud de préstamo ha sido registrada.\n\n"
+                        "Pronto un asesor se pondrá en contacto contigo para continuar el proceso. 👨‍💼"
+                    )
+                else:
+                    final_message = (
+                        "Entiendo. Si cambias de opinión o necesitas más información, "
+                        "no dudes en contactarnos nuevamente. ¡Que tengas un excelente día! 👋"
+                    )
+                await whatsapp.send_message(phone_number, final_message)
+                
+            # Si llegamos a DONE sin confirmar préstamo
+            elif next_state == self.STATES['DONE']:
+                final_message = (
+                    "Gracias por usar FinGro. Si necesitas analizar otro proyecto "
+                    "o tienes más preguntas, ¡no dudes en escribirnos! 👋"
+                )
+                await whatsapp.send_message(phone_number, final_message)
+                
+            # Para cualquier otro estado, enviar siguiente pregunta
+            else:
+                next_message = self.get_next_message(next_state, user_data['data'])
+                await whatsapp.send_message(phone_number, next_message)
+            
+            # Guardar datos actualizados
+            await firebase_manager.update_user_data(phone_number, user_data)
+            
+        except Exception as e:
+            logger.error(f"Error procesando mensaje: {str(e)}")
+            error_message = (
+                "Lo siento, ha ocurrido un error. Por favor intenta nuevamente "
+                "o contacta a soporte si el problema persiste."
+            )
+            await whatsapp.send_message(phone_number, error_message)
+
     async def process_show_report(self, user_data: Dict[str, Any]) -> str:
         """
         Procesa y muestra el reporte financiero
