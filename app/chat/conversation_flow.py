@@ -39,11 +39,7 @@ class ConversationFlow:
         }
         
         # Opciones válidas
-        self.valid_crops = [
-            'maiz', 'frijol', 'papa', 'tomate', 'cafe', 'chile',
-            'cebolla', 'repollo', 'arveja', 'aguacate', 'platano',
-            'limon', 'zanahoria', 'brocoli'
-        ]
+        self.valid_crops = []  # Aceptar cualquier cultivo
         
         self.valid_channels = [
             CanalComercializacion.MAYORISTA,
@@ -170,10 +166,9 @@ class ConversationFlow:
         user_input = user_input.lower().strip()
         
         if current_state == self.STATES['GET_CROP']:
-            # Buscar coincidencia con cualquier cultivo válido
-            for crop in self.valid_crops:
-                if self._is_similar_crop(user_input, crop):
-                    return True, crop
+            # Aceptar cualquier cultivo que no esté vacío
+            if len(user_input) > 0:
+                return True, user_input
             return False, None
             
         elif current_state == self.STATES['GET_AREA']:
