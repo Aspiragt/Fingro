@@ -58,10 +58,6 @@ class Settings(BaseModel):
         default=os.getenv("WHATSAPP_WEBHOOK_VERIFY_TOKEN", ""),
         description="Token para verificar webhook de WhatsApp"
     )
-    WHATSAPP_WEBHOOK_SECRET: str = Field(
-        default=os.getenv("WHATSAPP_WEBHOOK_SECRET", ""),
-        description="Secret para verificar webhook de WhatsApp"
-    )
     
     # Firebase
     FIREBASE_CREDENTIALS: Dict[str, Any] = Field(
@@ -115,13 +111,6 @@ class Settings(BaseModel):
         """Valida que las credenciales de Firebase existan"""
         if not v:
             raise ValueError("FIREBASE_CREDENTIALS es requerido")
-        return v
-    
-    @validator("WHATSAPP_WEBHOOK_SECRET")
-    def validate_webhook_secret(cls, v: str, values: Dict[str, Any]) -> str:
-        """Valida que el secreto del webhook esté presente en producción"""
-        if values.get("ENV") == "production" and not v:
-            raise ValueError("WHATSAPP_WEBHOOK_SECRET es requerido en producción")
         return v
     
     class Config:

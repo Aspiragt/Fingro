@@ -236,11 +236,6 @@ async def webhook(request: Request) -> Dict[str, str]:
     Endpoint para recibir webhooks de WhatsApp
     """
     try:
-        # Verificar firma en producción
-        if settings.ENV == "production" and not await verify_webhook_signature(request):
-            logger.error("Firma de webhook inválida")
-            raise HTTPException(status_code=401, detail="Firma inválida")
-
         # Obtener datos del webhook
         body = await request.json()
         logger.info(f"Webhook recibido: {json.dumps(body, indent=2)}")
