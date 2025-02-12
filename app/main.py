@@ -37,7 +37,7 @@ app = FastAPI(
 # Instanciar servicios
 whatsapp = WhatsAppService()
 
-def verify_webhook_signature(request: Request) -> bool:
+async def verify_webhook_signature(request: Request) -> bool:
     """
     Verifica la firma del webhook de WhatsApp
     
@@ -50,6 +50,7 @@ def verify_webhook_signature(request: Request) -> bool:
     try:
         signature = request.headers.get('X-Hub-Signature-256', '')
         if not signature or not signature.startswith('sha256='):
+            logger.warning("Firma no encontrada o inválida")
             return False
             
         # Obtener firma
@@ -65,7 +66,10 @@ def verify_webhook_signature(request: Request) -> bool:
         ).hexdigest()
         
         # Comparar firmas
-        return hmac.compare_digest(calculated_signature, expected_signature)
+        is_valid = hmac.compare_digest(calculated_signature, expected_signature)
+        if not is_valid:
+            logger.warning("Firma inválida")
+        return is_valid
         
     except Exception as e:
         logger.error(f"Error verificando firma: {str(e)}")
@@ -99,62 +103,121 @@ async def process_user_message(from_number: str, message: str) -> None:
             user_data['crop'] = message
             
             try:
-                precio_info = await maga_api.get_precio_cultivo(message)
-                if precio_info:
-                    user_data['precio_info'] = precio_info
-                    logger.info(f"Precio encontrado para {message}")
+                precio = await maga_api.get_precio_cultivo(message)
+                user_data['precio'] = precio
+                logger.info(f"Precio obtenido para {message}: Q{precio}")
             except Exception as e:
-                logger.error(f"Error obteniendo precios: {str(e)}")
-            
+                logger.error(f"Error obteniendo precio: {str(e)}")
+                await whatsapp.send_message(from_number, MESSAGES['error'])
+                return
+                
             new_state = ConversationState.ASKING_AREA.value
             await whatsapp.send_message(from_number, MESSAGES['ask_area'])
             
         elif current_state == ConversationState.ASKING_AREA.value:
-            # Guardar área
+            # Validar y guardar área
             try:
-                area = float(message.replace('ha', '').strip())
+                area = float(message)
+                if area <= 0:
+                    raise ValueError("Área debe ser mayor a 0")
                 user_data['area'] = area
-                new_state = ConversationState.ASKING_COMMERCIALIZATION.value
-                await whatsapp.send_message(from_number, MESSAGES['ask_commercialization'])
+                new_state = ConversationState.ASKING_IRRIGATION.value
+                await whatsapp.send_message(from_number, MESSAGES['ask_irrigation'])
             except ValueError:
                 await whatsapp.send_message(from_number, MESSAGES['invalid_area'])
                 return
                 
+        elif current_state == ConversationState.ASKING_IRRIGATION.value:
+            # Guardar método de riego
+            message = message.lower().strip()
+            if message not in ['goteo', 'aspersion', 'gravedad', 'temporal']:
+                await whatsapp.send_message(
+                    from_number, 
+                    "❌ Método de riego inválido. Opciones: goteo, aspersion, gravedad, temporal"
+                )
+                return
+                
+            user_data['irrigation'] = message
+            new_state = ConversationState.ASKING_COMMERCIALIZATION.value
+            await whatsapp.send_message(from_number, MESSAGES['ask_commercialization'])
+            
         elif current_state == ConversationState.ASKING_COMMERCIALIZATION.value:
             # Guardar método de comercialización
+            message = message.lower().strip()
+            if message not in ['mercado local', 'exportacion', 'intermediario', 'directo']:
+                await whatsapp.send_message(
+                    from_number,
+                    "❌ Método inválido. Opciones: mercado local, exportacion, intermediario, directo"
+                )
+                return
+                
             user_data['commercialization'] = message
-            new_state = ConversationState.ASKING_IRRIGATION.value
-            await whatsapp.send_message(from_number, MESSAGES['ask_irrigation'])
-            
-        elif current_state == ConversationState.ASKING_IRRIGATION.value:
-            # Guardar sistema de riego
-            user_data['irrigation'] = message
             new_state = ConversationState.ASKING_LOCATION.value
             await whatsapp.send_message(from_number, MESSAGES['ask_location'])
             
         elif current_state == ConversationState.ASKING_LOCATION.value:
-            # Guardar ubicación y generar análisis
+            # Guardar ubicación y realizar análisis
             user_data['location'] = message
-            new_state = ConversationState.ANALYSIS.value
             
-            # Generar y guardar análisis
-            analysis = await scoring_service.generate_analysis(user_data)
-            await firebase_manager.store_analysis(from_number, analysis)
-            
-            # Enviar resultados
-            await whatsapp.send_message(from_number, MESSAGES['analysis_ready'])
-            
+            try:
+                # Obtener datos históricos
+                datos_historicos = await maga_api.get_datos_historicos(user_data['crop'])
+                if not datos_historicos:
+                    raise ValueError(f"No hay datos para el cultivo: {user_data['crop']}")
+                    
+                # Calcular score y análisis
+                score = scoring_service.calculate_score(
+                    crop=user_data['crop'],
+                    area=user_data['area'],
+                    irrigation=user_data['irrigation'],
+                    commercialization=user_data['commercialization'],
+                    historical_data=datos_historicos
+                )
+                
+                user_data['score'] = score
+                new_state = ConversationState.ASKING_LOAN_INTEREST.value
+                
+                # Enviar resultado
+                await whatsapp.send_message(
+                    from_number,
+                    MESSAGES['analysis_ready'].format(
+                        score=score['total'],
+                        monto=score['suggested_loan']
+                    )
+                )
+                
+            except Exception as e:
+                logger.error(f"Error en análisis: {str(e)}")
+                await whatsapp.send_message(from_number, MESSAGES['error'])
+                return
+                
+        elif current_state == ConversationState.ASKING_LOAN_INTEREST.value:
+            # Procesar interés en préstamo
+            message = message.lower().strip()
+            if message == 'si':
+                await whatsapp.send_message(from_number, MESSAGES['loan_yes'])
+                new_state = ConversationState.COMPLETED.value
+            elif message == 'no':
+                await whatsapp.send_message(from_number, MESSAGES['loan_no'])
+                new_state = ConversationState.COMPLETED.value
+            else:
+                await whatsapp.send_message(
+                    from_number,
+                    "❌ Por favor responde 'si' o 'no'"
+                )
+                return
+                
         else:
-            # Estado no reconocido, reiniciar
-            await firebase_manager.reset_user_state(from_number)
-            await whatsapp.send_message(from_number, MESSAGES['error_restart'])
+            logger.error(f"Estado no manejado: {current_state}")
+            await whatsapp.send_message(from_number, MESSAGES['error'])
             return
             
-        # Actualizar estado en Firebase
-        await firebase_manager.update_user_state(from_number, {
-            'state': new_state,
-            'data': user_data
-        })
+        # Actualizar estado
+        await firebase_manager.update_conversation_state(
+            from_number,
+            new_state,
+            user_data
+        )
         
     except Exception as e:
         logger.error(f"Error procesando mensaje: {str(e)}")
@@ -169,98 +232,94 @@ async def root():
         "name": "FinGro API",
         "version": "1.0.0",
         "status": "running",
-        "environment": settings.ENV,
-        "docs_url": "/docs"
+        "env": settings.ENV
     }
 
-@app.post("/webhook/whatsapp")
+@app.post("/webhook")
 async def webhook(request: Request):
     """
     Endpoint para recibir webhooks de WhatsApp
     """
     try:
         # Verificar firma
-        if not settings.DEBUG and not await verify_webhook_signature(request):
-            raise HTTPException(status_code=403, detail="Invalid signature")
+        if not await verify_webhook_signature(request):
+            logger.warning("Firma inválida en webhook")
+            raise HTTPException(status_code=401, detail="Invalid signature")
+            
+        # Obtener datos
+        data = await request.json()
+        logger.debug(f"Webhook recibido: {json.dumps(data, indent=2)}")
         
-        # Obtener y parsear body
-        body = await request.body()
-        try:
-            data = json.loads(body)
-        except json.JSONDecodeError:
-            raise HTTPException(status_code=400, detail="Invalid JSON")
+        # Verificar tipo de evento
+        if data.get('object') != 'whatsapp_business_account':
+            logger.warning(f"Objeto no soportado: {data.get('object')}")
+            return Response(status_code=202)
+            
+        # Procesar cada entrada
+        for entry in data.get('entry', []):
+            for change in entry.get('changes', []):
+                if change.get('value', {}).get('messages'):
+                    for message in change['value']['messages']:
+                        # Obtener número y mensaje
+                        from_number = message['from']
+                        message_text = message.get('text', {}).get('body', '')
+                        
+                        # Procesar mensaje
+                        await process_user_message(from_number, message_text)
         
-        # Procesar mensajes
-        messages_processed = 0
+        return Response(status_code=200)
         
-        if "entry" in data and len(data["entry"]) > 0:
-            for entry in data["entry"]:
-                if "changes" in entry and len(entry["changes"]) > 0:
-                    for change in entry["changes"]:
-                        if "value" in change and "messages" in change["value"]:
-                            for message in change["value"]["messages"]:
-                                if message["type"] == "text":
-                                    from_number = message["from"]
-                                    message_text = message["text"]["body"]
-                                    logger.info(f"Mensaje recibido de: {from_number}")
-                                    await process_user_message(from_number, message_text)
-                                    messages_processed += 1
-        
-        logger.info(f"Procesados {messages_processed} mensajes exitosamente")
-        return JSONResponse(content={"status": "success"})
-        
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Error en webhook: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={"status": "error", "message": "Internal server error"}
-        )
+        raise HTTPException(status_code=500, detail="Internal server error")
 
-@app.get("/webhook/whatsapp")
+@app.get("/webhook")
 async def verify_webhook(request: Request):
     """
     Endpoint para verificar webhook de WhatsApp
     """
     try:
-        verify_token = request.query_params.get("hub.verify_token")
-        challenge = request.query_params.get("hub.challenge")
+        # Obtener parámetros
+        mode = request.query_params.get('hub.mode')
+        token = request.query_params.get('hub.verify_token')
+        challenge = request.query_params.get('hub.challenge')
         
-        if not verify_token or not challenge:
-            raise HTTPException(status_code=400, detail="Missing parameters")
-        
-        if verify_token == settings.WHATSAPP_WEBHOOK_VERIFY_TOKEN:
-            return int(challenge)
-        else:
-            raise HTTPException(status_code=403, detail="Invalid verify token")
+        # Verificar modo y token
+        if mode == 'subscribe' and token == settings.WHATSAPP_WEBHOOK_VERIFY_TOKEN:
+            if not challenge:
+                raise HTTPException(
+                    status_code=400,
+                    detail="No challenge received"
+                )
+                
+            logger.info("Webhook verificado exitosamente")
+            return Response(content=challenge)
             
-    except HTTPException:
-        raise
+        raise HTTPException(status_code=403, detail="Invalid verification token")
+        
     except Exception as e:
-        logger.error(f"Error en verificación: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={"status": "error", "message": "Internal server error"}
-        )
+        logger.error(f"Error en verificación de webhook: {str(e)}")
+        raise
 
 @app.get("/health")
 async def health_check():
     """
     Endpoint para verificar el estado del servicio
     """
-    return {"status": "healthy"}
+    return {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat()
+    }
 
 if __name__ == "__main__":
     import uvicorn
     
     # Obtener puerto de Render o usar 8000 por defecto
-    port = int(os.getenv("PORT", "8000"))
+    port = int(os.environ.get("PORT", 8000))
     
-    # Iniciar servidor
     uvicorn.run(
-        "main:app",
+        "app.main:app",
         host="0.0.0.0",
         port=port,
-        reload=settings.DEBUG
+        reload=settings.ENV == "development"
     )
