@@ -12,6 +12,10 @@ from app.utils.constants import ConversationState
 
 logger = logging.getLogger(__name__)
 
+class FirebaseError(Exception):
+    """Excepción personalizada para errores de Firebase"""
+    pass
+
 class FirebaseDB:
     """Maneja la interacción con Firebase y el caché local"""
     
@@ -22,7 +26,8 @@ class FirebaseDB:
             try:
                 self.app = firebase_admin.get_app()
             except ValueError:
-                self.app = firebase_admin.initialize_app(settings.FIREBASE_CREDENTIALS)
+                cred = credentials.Certificate(settings.FIREBASE_CREDENTIALS)
+                self.app = firebase_admin.initialize_app(cred)
             
             self.db = firestore.client()
             # Caché con tiempo de vida configurable
@@ -33,7 +38,7 @@ class FirebaseDB:
             
         except Exception as e:
             logger.error(f"Error inicializando Firebase: {str(e)}")
-            raise
+            raise FirebaseError(f"Failed to initialize Firebase: {str(e)}")
     
     async def get_conversation_state(self, phone: str) -> Dict[str, Any]:
         """
