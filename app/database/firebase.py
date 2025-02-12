@@ -55,9 +55,9 @@ class FirebaseDB:
             
             # Si no está en caché, obtener de Firebase
             user_ref = self.db.collection('users').document(phone)
-            doc = await user_ref.get(_raise_on_missing=False)
+            doc = user_ref.get()  # No es necesario await aquí
             
-            if doc is not None and doc.exists:
+            if doc.exists:
                 data = doc.to_dict()
             else:
                 # Si no existe, crear estado inicial
@@ -67,7 +67,7 @@ class FirebaseDB:
                     'created_at': datetime.utcnow().isoformat(),
                     'updated_at': datetime.utcnow().isoformat()
                 }
-                await user_ref.set(data)
+                user_ref.set(data)  # No es necesario await aquí
             
             # Guardar en caché
             self.cache[cache_key] = data
@@ -96,14 +96,11 @@ class FirebaseDB:
             # Actualizar en Firebase
             user_ref = self.db.collection('users').document(phone)
             state['updated_at'] = firestore.SERVER_TIMESTAMP
-            await user_ref.set(state, merge=True)
+            user_ref.set(state, merge=True)  # No es necesario await aquí
             
             # Actualizar caché de forma segura
             cache_key = f"state_{phone}"
-            cached_data = self.cache.get(cache_key, {})
-            if cached_data:
-                cached_data.update(state)
-                self.cache[cache_key] = cached_data
+            self.cache[cache_key] = state
             
             return True
             

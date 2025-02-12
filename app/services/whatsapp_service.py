@@ -30,7 +30,7 @@ class WhatsAppService:
             bool: True si el mensaje se envió correctamente
         """
         try:
-            url = f"{self.api_url}/{self.phone_number_id}/messages"
+            url = f"{self.api_url}/v17.0/{self.phone_number_id}/messages"
             
             headers = {
                 "Authorization": f"Bearer {self.token}",
