@@ -316,5 +316,57 @@ class MagaAPI:
         except Exception:
             return None
 
+    async def _get_client(self):
+        """
+        Obtiene un cliente httpx, creándolo si no existe
+        """
+        if not hasattr(self, 'client') or self.client is None:
+            self.client = httpx.AsyncClient()
+        return self.client
+
+    async def _fetch_datos_web(self, cultivo: str) -> Optional[float]:
+        """
+        Obtiene el precio actual del cultivo desde la web del MAGA
+        """
+        try:
+            client = await self._get_client()
+            response = await client.get(f"{self.base_url}{cultivo}")
+            response.raise_for_status()
+            
+            # TODO: Parsear respuesta HTML
+            return 10.0  # Precio por defecto mientras implementamos el scraping
+            
+        except Exception as e:
+            logger.error(f"Error en _fetch_datos_web para {cultivo}: {str(e)}")
+            return None
+            
+    async def get_precio_cultivo(self, cultivo: str) -> float:
+        """
+        Obtiene el precio actual del cultivo
+        """
+        try:
+            precio = await self._fetch_datos_web(cultivo)
+            if precio is None:
+                logger.info(f"Usando datos históricos por defecto para {cultivo}")
+                return self._get_precio_default(cultivo)
+            return precio
+            
+        except Exception as e:
+            logger.error(f"Error obteniendo precio para {cultivo}: {str(e)}")
+            return self._get_precio_default(cultivo)
+            
+    def _get_precio_default(self, cultivo: str) -> float:
+        """
+        Retorna un precio por defecto basado en datos históricos
+        """
+        precios_default = {
+            'maiz': 150.0,
+            'frijol': 450.0,
+            'cafe': 200.0,
+            'tomate': 300.0,
+            'chile': 250.0
+        }
+        return precios_default.get(cultivo, 200.0)  # 200 como precio por defecto
+
 # Instancia global
 maga_api = MagaAPI()
