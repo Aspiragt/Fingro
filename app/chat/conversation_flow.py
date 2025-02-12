@@ -294,7 +294,8 @@ class ConversationFlow:
             
             # Si es nuevo usuario o conversación terminada, reiniciar
             if current_state == self.STATES['START'] or current_state == self.STATES['DONE']:
-                # Actualizar datos del usuario
+                # Actualizar estado a GET_CROP
+                user_data['state'] = self.STATES['GET_CROP']
                 await firebase_manager.update_user_state(phone_number, user_data)
                 welcome_message = self.get_welcome_message()
                 await self.whatsapp.send_message(phone_number, welcome_message)
