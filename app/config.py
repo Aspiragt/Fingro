@@ -95,6 +95,7 @@ class Settings(BaseModel):
         case_sensitive = True
         env_file = ".env"
         env_file_encoding = "utf-8"
+        extra = "allow"  # Permitir variables extra en el modelo
 
 # Instancia global de configuración
 try:
