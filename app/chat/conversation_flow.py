@@ -1,219 +1,308 @@
 """
-Módulo para manejar el flujo de conversación
+Módulo para manejar el flujo de conversación con usuarios
 """
+from typing import Dict, Any, Optional
 import logging
-from typing import Dict, Any, Tuple, List, Optional
-from datetime import datetime
-
-from app.database.firebase import firebase_manager
-from app.external_apis.maga import maga_api
-from app.analysis.scoring import scoring_service
-from app.services.whatsapp_service import WhatsAppService
-from app.models.conversation import Conversation, ConversationContext, Message
-from app.utils.constants import ConversationState, MESSAGES
-from app.utils.text import (
-    normalize_text,
-    normalize_crop,
-    normalize_irrigation,
-    normalize_commercialization,
-    normalize_yes_no
-)
+from app.models.financial_model import financial_model
 from app.views.financial_report import report_generator
+from app.external_apis.maga import CanalComercializacion
 
 logger = logging.getLogger(__name__)
 
-class ConversationManager:
-    """Maneja el flujo de conversación con el usuario"""
+class ConversationFlow:
+    """Maneja el flujo de conversación con usuarios"""
     
     def __init__(self):
         """Inicializa el manejador de conversación"""
-        self.whatsapp = WhatsAppService()
+        
+        # Estados de la conversación
+        self.STATES = {
+            'START': 'start',
+            'GET_CROP': 'get_crop',
+            'GET_AREA': 'get_area',
+            'GET_CHANNEL': 'get_channel',
+            'GET_IRRIGATION': 'get_irrigation',
+            'GET_LOCATION': 'get_location',
+            'SHOW_REPORT': 'show_report',
+            'ASK_LOAN': 'ask_loan',
+            'SHOW_LOAN': 'show_loan',
+            'CONFIRM_LOAN': 'confirm_loan',
+            'DONE': 'done'
+        }
+        
+        # Opciones válidas
+        self.valid_crops = [
+            'maiz', 'frijol', 'papa', 'tomate', 'cafe', 'chile',
+            'cebolla', 'repollo', 'arveja', 'aguacate', 'platano',
+            'limon', 'zanahoria', 'brocoli'
+        ]
+        
+        self.valid_channels = [
+            CanalComercializacion.MAYORISTA,
+            CanalComercializacion.COOPERATIVA,
+            CanalComercializacion.EXPORTACION,
+            CanalComercializacion.MERCADO_LOCAL
+        ]
+        
+        self.valid_irrigation = [
+            'gravedad', 'aspersion', 'goteo', 'ninguno'
+        ]
     
-    async def handle_message(self, phone: str, message: str) -> None:
+    def get_welcome_message(self) -> str:
+        """Retorna mensaje de bienvenida"""
+        return (
+            "👋 ¡Hola! Soy FinGro, tu asistente financiero agrícola.\n\n"
+            "Te ayudaré a analizar la rentabilidad de tu proyecto y "
+            "obtener financiamiento. 🌱💰\n\n"
+            "Para empezar, *¿qué cultivo planeas sembrar?* 🌾"
+        )
+    
+    def get_next_message(self, current_state: str, user_data: Dict[str, Any]) -> str:
         """
-        Maneja un mensaje entrante y retorna la respuesta
+        Obtiene el siguiente mensaje según el estado actual
         
         Args:
-            phone: Número de teléfono del usuario
-            message: Mensaje recibido
+            current_state: Estado actual de la conversación
+            user_data: Datos del usuario
+            
+        Returns:
+            str: Mensaje para el usuario
         """
-        try:
-            # Normalizar mensaje
-            message = message.strip()
+        if current_state == self.STATES['GET_AREA']:
+            return "¿Cuántas hectáreas planeas sembrar? 🌱"
             
-            # Manejar comando de reinicio
-            if message.lower() == "reiniciar":
-                await self._handle_reset(phone)
-                return
-            
-            # Obtener estado actual
-            conversation_data = await firebase_manager.get_conversation_state(phone)
-            current_state = conversation_data.get('state', ConversationState.INITIAL.value)
-            user_data = conversation_data.get('data', {})
-            
-            # Procesar mensaje según estado
-            handler = self._get_state_handler(current_state)
-            if not handler:
-                logger.error(f"Estado no manejado: {current_state}")
-                await self._send_error(phone)
-                return
-            
-            # Manejar el estado actual
-            try:
-                new_state, updated_data = await handler(phone, message, user_data)
-                
-                # Actualizar estado y datos
-                if new_state:
-                    conversation_data['state'] = new_state
-                    conversation_data['data'] = updated_data
-                    await firebase_manager.update_user_state(phone, conversation_data)
-                    
-            except ValueError as e:
-                logger.error(f"Error de validación: {str(e)}")
-                await self._send_validation_error(phone, str(e))
-                
-            except Exception as e:
-                logger.error(f"Error procesando mensaje: {str(e)}")
-                await self._send_error(phone)
-            
-        except Exception as e:
-            logger.error(f"Error general: {str(e)}")
-            await self._send_error(phone)
-    
-    def _get_state_handler(self, state: str):
-        """Obtiene el manejador para un estado específico"""
-        handlers = {
-            ConversationState.INITIAL.value: self._handle_initial_state,
-            ConversationState.ASKING_AREA.value: self._handle_area,
-            ConversationState.ASKING_IRRIGATION.value: self._handle_irrigation,
-            ConversationState.ASKING_COMMERCIALIZATION.value: self._handle_commercialization,
-            ConversationState.ASKING_LOCATION.value: self._handle_location,
-            ConversationState.ASKING_LOAN_INTEREST.value: self._handle_loan_interest
-        }
-        return handlers.get(state)
-    
-    async def _handle_reset(self, phone: str) -> None:
-        """Maneja el comando de reinicio"""
-        await firebase_manager.reset_user_state(phone)
-        await self.whatsapp.send_message(phone, MESSAGES['welcome'])
-    
-    async def _handle_initial_state(self, phone: str, message: str, user_data: Dict) -> Tuple[str, Dict]:
-        """Maneja el estado inicial (cultivo)"""
-        message = normalize_crop(message)
-        if not message:
-            raise ValueError("Cultivo no reconocido")
-        
-        # Obtener precio
-        try:
-            precio = await maga_api.get_precio_cultivo(message)
-            user_data['crop'] = message
-            user_data['precio'] = precio
-            logger.info(f"Precio obtenido para {message}: Q{precio}")
-            
-            await self.whatsapp.send_message(phone, MESSAGES['ask_area'])
-            return ConversationState.ASKING_AREA.value, user_data
-            
-        except Exception as e:
-            logger.error(f"Error obteniendo precio: {str(e)}")
-            raise
-    
-    async def _handle_area(self, phone: str, message: str, user_data: Dict) -> Tuple[str, Dict]:
-        """Maneja el ingreso del área"""
-        try:
-            # Extraer número del mensaje
-            import re
-            clean_message = message.lower().strip()
-            number_match = re.search(r'\d+\.?\d*', clean_message)
-            
-            if not number_match:
-                raise ValueError("Área no válida")
-            
-            area = float(number_match.group())
-            if area <= 0 or area > 1000:
-                raise ValueError("Área debe estar entre 0 y 1000 hectáreas")
-            
-            user_data['area'] = area
-            await self.whatsapp.send_message(phone, MESSAGES['ask_irrigation'])
-            return ConversationState.ASKING_IRRIGATION.value, user_data
-            
-        except ValueError as e:
-            logger.error(f"Error procesando área: {str(e)} - Input: {message}")
-            raise
-    
-    async def _handle_irrigation(self, phone: str, message: str, user_data: Dict) -> Tuple[str, Dict]:
-        """Maneja la selección del sistema de riego"""
-        message = normalize_irrigation(message)
-        if not message:
-            raise ValueError("Sistema de riego no válido")
-        
-        user_data['irrigation'] = message
-        await self.whatsapp.send_message(phone, MESSAGES['ask_commercialization'])
-        return ConversationState.ASKING_COMMERCIALIZATION.value, user_data
-    
-    async def _handle_commercialization(self, phone: str, message: str, user_data: Dict) -> Tuple[str, Dict]:
-        """Maneja la selección del método de comercialización"""
-        message = normalize_commercialization(message)
-        valid_options = {
-            'mercado local', 'intermediario', 'exportacion', 'directo'
-        }
-        
-        if message not in valid_options:
-            raise ValueError("Método de comercialización no válido")
-        
-        user_data['commercialization'] = message
-        await self.whatsapp.send_message(phone, MESSAGES['ask_location'])
-        return ConversationState.ASKING_LOCATION.value, user_data
-    
-    async def _handle_location(self, phone: str, message: str, user_data: Dict) -> Tuple[str, Dict]:
-        """Maneja el ingreso de la ubicación"""
-        try:
-            user_data['location'] = message
-            
-            # Calcular análisis financiero
-            score = await scoring_service.calculate_score(
-                data={
-                    'crop': user_data['crop'],
-                    'area': float(user_data['area']),
-                    'irrigation': user_data['irrigation'],
-                    'commercialization': user_data['commercialization']
-                },
-                precio_actual=user_data['precio']
+        elif current_state == self.STATES['GET_CHANNEL']:
+            channels = [
+                "1. Mayorista",
+                "2. Cooperativa",
+                "3. Exportación",
+                "4. Mercado Local"
+            ]
+            return (
+                "¿Cómo planeas comercializar tu producto? 🏪\n\n" +
+                "\n".join(channels) +
+                "\n\nResponde con el número de tu elección"
             )
             
-            user_data['score'] = score
+        elif current_state == self.STATES['GET_IRRIGATION']:
+            irrigation = [
+                "1. Gravedad",
+                "2. Aspersión",
+                "3. Goteo",
+                "4. Ninguno"
+            ]
+            return (
+                "¿Qué sistema de riego utilizarás? 💧\n\n" +
+                "\n".join(irrigation) +
+                "\n\nResponde con el número de tu elección"
+            )
             
-            # Generar y enviar reporte
-            report = report_generator.generate_detailed_report(user_data, score)
-            await self.whatsapp.send_message(phone, report)
+        elif current_state == self.STATES['GET_LOCATION']:
+            return "¿En qué departamento está ubicado el terreno? 📍"
             
-            # Preguntar por préstamo
-            await self.whatsapp.send_message(phone, MESSAGES['ask_loan_interest'])
-            return ConversationState.ASKING_LOAN_INTEREST.value, user_data
+        return "❌ Estado no válido"
+    
+    def validate_input(self, current_state: str, user_input: str) -> tuple:
+        """
+        Valida la entrada del usuario
+        
+        Args:
+            current_state: Estado actual
+            user_input: Entrada del usuario
+            
+        Returns:
+            tuple: (es_valido, valor_procesado)
+        """
+        # Normalizar entrada
+        user_input = user_input.lower().strip()
+        
+        if current_state == self.STATES['GET_CROP']:
+            if user_input in self.valid_crops:
+                return True, user_input
+            return False, None
+            
+        elif current_state == self.STATES['GET_AREA']:
+            try:
+                area = float(user_input.replace(',', '.'))
+                if 0.1 <= area <= 100:
+                    return True, area
+            except:
+                pass
+            return False, None
+            
+        elif current_state == self.STATES['GET_CHANNEL']:
+            try:
+                option = int(user_input)
+                if 1 <= option <= len(self.valid_channels):
+                    return True, self.valid_channels[option - 1]
+            except:
+                pass
+            return False, None
+            
+        elif current_state == self.STATES['GET_IRRIGATION']:
+            try:
+                option = int(user_input)
+                if 1 <= option <= len(self.valid_irrigation):
+                    return True, self.valid_irrigation[option - 1]
+            except:
+                pass
+            return False, None
+            
+        elif current_state == self.STATES['GET_LOCATION']:
+            if len(user_input) > 0:
+                return True, user_input
+            return False, None
+            
+        elif current_state in [self.STATES['ASK_LOAN'], self.STATES['CONFIRM_LOAN']]:
+            if user_input in ['si', 'no']:
+                return True, user_input == 'si'
+            return False, None
+            
+        return False, None
+    
+    def get_error_message(self, current_state: str) -> str:
+        """
+        Obtiene mensaje de error según el estado
+        
+        Args:
+            current_state: Estado actual
+            
+        Returns:
+            str: Mensaje de error
+        """
+        if current_state == self.STATES['GET_CROP']:
+            return (
+                "❌ Por favor ingresa un cultivo válido\n\n"
+                "Algunos ejemplos: maíz, frijol, papa, tomate"
+            )
+            
+        elif current_state == self.STATES['GET_AREA']:
+            return (
+                "❌ Por favor ingresa un área válida entre 0.1 y 100 hectáreas\n\n"
+                "Ejemplo: 2.5"
+            )
+            
+        elif current_state == self.STATES['GET_CHANNEL']:
+            return "❌ Por favor selecciona una opción válida (1-4)"
+            
+        elif current_state == self.STATES['GET_IRRIGATION']:
+            return "❌ Por favor selecciona una opción válida (1-4)"
+            
+        elif current_state == self.STATES['GET_LOCATION']:
+            return "❌ Por favor ingresa una ubicación válida"
+            
+        elif current_state in [self.STATES['ASK_LOAN'], self.STATES['CONFIRM_LOAN']]:
+            return "❌ Por favor responde SI o NO"
+            
+        return "❌ Error desconocido"
+    
+    def get_next_state(self, current_state: str, user_input: str = None) -> str:
+        """
+        Obtiene el siguiente estado de la conversación
+        
+        Args:
+            current_state: Estado actual
+            user_input: Entrada del usuario opcional
+            
+        Returns:
+            str: Siguiente estado
+        """
+        if current_state == self.STATES['START']:
+            return self.STATES['GET_CROP']
+            
+        elif current_state == self.STATES['GET_CROP']:
+            if user_input and user_input.lower() == 'otra':
+                return self.STATES['GET_CROP']
+            return self.STATES['GET_AREA']
+            
+        elif current_state == self.STATES['GET_AREA']:
+            return self.STATES['GET_CHANNEL']
+            
+        elif current_state == self.STATES['GET_CHANNEL']:
+            return self.STATES['GET_IRRIGATION']
+            
+        elif current_state == self.STATES['GET_IRRIGATION']:
+            return self.STATES['GET_LOCATION']
+            
+        elif current_state == self.STATES['GET_LOCATION']:
+            return self.STATES['SHOW_REPORT']
+            
+        elif current_state == self.STATES['SHOW_REPORT']:
+            return self.STATES['ASK_LOAN']
+            
+        elif current_state == self.STATES['ASK_LOAN']:
+            if user_input and user_input.lower() == 'si':
+                return self.STATES['SHOW_LOAN']
+            return self.STATES['DONE']
+            
+        elif current_state == self.STATES['SHOW_LOAN']:
+            return self.STATES['CONFIRM_LOAN']
+            
+        elif current_state == self.STATES['CONFIRM_LOAN']:
+            return self.STATES['DONE']
+            
+        return self.STATES['START']
+    
+    async def process_show_report(self, user_data: Dict[str, Any]) -> str:
+        """
+        Procesa y muestra el reporte financiero
+        
+        Args:
+            user_data: Datos del usuario
+            
+        Returns:
+            str: Reporte formateado
+        """
+        try:
+            # Analizar proyecto
+            score_data = await financial_model.analyze_project(user_data)
+            
+            if not score_data:
+                return (
+                    "❌ Error generando análisis financiero\n\n"
+                    "Por favor intenta de nuevo más tarde."
+                )
+            
+            # Guardar datos del análisis para usarlos después
+            user_data['score_data'] = score_data
+            
+            # Generar reporte simple
+            return report_generator.generate_report(user_data, score_data)
             
         except Exception as e:
-            logger.error(f"Error en análisis: {str(e)}")
-            raise
+            logger.error(f"Error procesando reporte: {str(e)}")
+            return (
+                "❌ Error generando reporte\n\n"
+                "Por favor intenta de nuevo más tarde."
+            )
     
-    async def _handle_loan_interest(self, phone: str, message: str, user_data: Dict) -> Tuple[str, Dict]:
-        """Maneja la respuesta sobre interés en el préstamo"""
-        message = normalize_yes_no(message)
+    def process_show_loan(self, user_data: Dict[str, Any]) -> str:
+        """
+        Muestra la oferta de préstamo
         
-        if message == 'si':
-            await self.whatsapp.send_message(phone, MESSAGES['loan_yes'])
-            return ConversationState.COMPLETED.value, user_data
-        elif message == 'no':
-            await self.whatsapp.send_message(phone, MESSAGES['loan_no'])
-            return ConversationState.COMPLETED.value, user_data
-        else:
-            raise ValueError("Respuesta debe ser sí o no")
+        Args:
+            user_data: Datos del usuario
+            
+        Returns:
+            str: Oferta formateada
+        """
+        try:
+            score_data = user_data.get('score_data')
+            if not score_data:
+                return "❌ Error: No hay datos de análisis"
+            
+            return report_generator.generate_loan_offer(score_data)
+            
+        except Exception as e:
+            logger.error(f"Error mostrando préstamo: {str(e)}")
+            return (
+                "❌ Error generando oferta\n\n"
+                "Por favor intenta de nuevo más tarde."
+            )
     
-    async def _send_error(self, phone: str) -> None:
-        """Envía mensaje de error genérico"""
-        await self.whatsapp.send_message(phone, MESSAGES['error'])
-    
-    async def _send_validation_error(self, phone: str, error: str) -> None:
-        """Envía mensaje de error de validación"""
-        await self.whatsapp.send_message(phone, MESSAGES['unknown'])
+    def process_confirm_loan(self) -> str:
+        """Genera mensaje de confirmación de solicitud"""
+        return report_generator.generate_success_message()
 
 # Instancia global
-conversation_manager = ConversationManager()
+conversation_flow = ConversationFlow()
