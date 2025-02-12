@@ -42,14 +42,14 @@ class Settings(BaseModel):
         default=os.getenv("WHATSAPP_PHONE_ID", ""),
         description="ID del número de teléfono de WhatsApp"
     )
-    WHATSAPP_WEBHOOK_SECRET: str = Field(
-        default=os.getenv("WHATSAPP_WEBHOOK_SECRET", ""),
+    WHATSAPP_VERIFY_TOKEN: str = Field(
+        default=os.getenv("WHATSAPP_VERIFY_TOKEN", ""),
         description="Token para verificar webhook de WhatsApp"
     )
     
     # Firebase
-    FIREBASE_CREDENTIALS_JSON: str = Field(
-        default=os.getenv("FIREBASE_CREDENTIALS_JSON", ""),
+    FIREBASE_CREDENTIALS: str = Field(
+        default=os.getenv("FIREBASE_CREDENTIALS", ""),
         description="Credenciales de Firebase en formato JSON"
     )
     
@@ -68,15 +68,15 @@ class Settings(BaseModel):
             raise ValueError("WHATSAPP_PHONE_ID es requerido")
         return v
     
-    @validator("FIREBASE_CREDENTIALS_JSON")
+    @validator("FIREBASE_CREDENTIALS")
     def validate_firebase_credentials(cls, v: str) -> str:
         """Valida que las credenciales de Firebase existan"""
         if not v:
-            raise ValueError("FIREBASE_CREDENTIALS_JSON es requerido")
+            raise ValueError("FIREBASE_CREDENTIALS es requerido")
         try:
             json.loads(v)
         except json.JSONDecodeError:
-            raise ValueError("FIREBASE_CREDENTIALS_JSON debe ser un JSON válido")
+            raise ValueError("FIREBASE_CREDENTIALS debe ser un JSON válido")
         return v
     
     class Config:

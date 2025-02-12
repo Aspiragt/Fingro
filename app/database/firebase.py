@@ -39,14 +39,7 @@ class FirebaseDB:
                     raise ValueError("project_id not found in Firebase credentials")
                 
                 cred = credentials.Certificate(cred_dict)
-                
-                # Inicializar app con configuración de retry
-                self.app = firebase_admin.initialize_app(cred, {
-                    'projectId': cred_dict['project_id'],
-                    'httpTimeout': 30,
-                    'retryTimeoutSeconds': 600,
-                    'maxRetries': 3
-                })
+                self.app = firebase_admin.initialize_app(cred)
                 logger.info(f"Firebase app initialized successfully for project: {cred_dict['project_id']}")
             except json.JSONDecodeError:
                 logger.error("Invalid JSON in FIREBASE_CREDENTIALS")
@@ -56,14 +49,9 @@ class FirebaseDB:
                 raise
         
         try:
-            # Obtener project_id de la app existente o de las credenciales
-            project_id = firebase_admin.get_app().project_id
-            if not project_id:
-                raise ValueError("Could not determine project_id")
-            
             # Inicializar Firestore de manera asíncrona
-            self.db = AsyncClient(project=project_id)
-            logger.info(f"Firestore client initialized for project: {project_id}")
+            self.db = AsyncClient(self.app)
+            logger.info("Firestore client initialized successfully")
             
             # Cache para estados de conversación
             self._conversation_cache = {}
