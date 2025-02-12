@@ -309,7 +309,7 @@ class ConversationFlow:
             # Comando de reinicio
             if message in ['reiniciar', 'reset', 'comenzar', 'inicio']:
                 user_data = {
-                    'state': self.STATES['START'],
+                    'state': self.STATES['GET_CROP'],  # Cambiado de START a GET_CROP
                     'data': {}
                 }
                 await firebase_manager.update_user_state(phone_number, user_data)
