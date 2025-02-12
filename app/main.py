@@ -17,10 +17,16 @@ from app.config import settings
 from app.services.whatsapp_service import WhatsAppService
 from app.external_apis.maga import maga_api
 from app.analysis.scoring import ScoringService
-from app.utils.constants import ConversationState, MESSAGES
-from app.utils.currency import format_currency
-from app.utils.text import normalize_crop, normalize_irrigation, normalize_commercialization, normalize_yes_no
 from app.database.firebase import firebase_manager
+from app.utils import (
+    ConversationState, 
+    MESSAGES,
+    format_currency,
+    normalize_crop,
+    normalize_irrigation,
+    normalize_commercialization,
+    normalize_yes_no
+)
 
 # Configurar logging
 logging.basicConfig(
