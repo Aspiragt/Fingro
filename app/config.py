@@ -47,7 +47,7 @@ class Settings(BaseModel):
         description="URL base de la API de WhatsApp"
     )
     WHATSAPP_TOKEN: str = Field(
-        default=os.getenv("WHATSAPP_ACCESS_TOKEN", ""),
+        default=os.getenv("WHATSAPP_TOKEN", ""),
         description="Token de acceso para la API de WhatsApp"
     )
     WHATSAPP_PHONE_ID: str = Field(
