@@ -1,13 +1,51 @@
 """
 Módulo para análisis financiero de proyectos agrícolas
+
+Este módulo proporciona herramientas para analizar la viabilidad financiera
+de proyectos agrícolas, considerando factores como:
+- Rendimiento histórico del cultivo
+- Método de riego
+- Costos fijos y variables
+- Precios actuales del mercado
+- Riesgos asociados
 """
-from typing import Optional, List
+from typing import Dict, Any, Optional
 from datetime import datetime
 import logging
-from ..external_apis.fao import fao_client
-from ..external_apis.maga import maga_client
+from pydantic import BaseModel, Field, validator
+from ..external_apis.maga import maga_api
 
 logger = logging.getLogger(__name__)
+
+class ProyectoAgricola(BaseModel):
+    """Modelo de datos para un proyecto agrícola"""
+    cultivo: str = Field(..., description="Tipo de cultivo a sembrar")
+    hectareas: float = Field(..., gt=0, description="Número de hectáreas")
+    precio_actual: float = Field(..., gt=0, description="Precio actual por quintal")
+    metodo_riego: str = Field(..., description="Método de riego a utilizar")
+    
+    @validator('metodo_riego')
+    def validate_riego(cls, v: str) -> str:
+        """Valida que el método de riego sea válido"""
+        valid_methods = ['goteo', 'aspersion', 'gravedad', 'temporal']
+        v = v.lower().strip()
+        if v not in valid_methods:
+            raise ValueError(f"Método de riego inválido. Debe ser uno de: {valid_methods}")
+        return v
+    
+    @validator('hectareas')
+    def validate_hectareas(cls, v: float) -> float:
+        """Valida que el número de hectáreas sea razonable"""
+        if v > 1000:
+            raise ValueError("El número de hectáreas parece muy alto")
+        return v
+    
+    @validator('precio_actual')
+    def validate_precio(cls, v: float) -> float:
+        """Valida que el precio sea razonable"""
+        if v > 10000:
+            raise ValueError("El precio parece muy alto")
+        return v
 
 class FinancialAnalyzer:
     """Analizador financiero para proyectos agrícolas"""
@@ -16,117 +54,147 @@ class FinancialAnalyzer:
     FACTOR_RIEGO = {
         'goteo': 1.2,      # 20% más eficiente
         'aspersion': 1.1,  # 10% más eficiente
-        'tradicional': 1.0 # base
+        'gravedad': 1.0,   # base
+        'temporal': 0.8    # 20% menos eficiente
+    }
+    
+    # Factores de riesgo base por método de riego
+    RIESGO_RIEGO = {
+        'goteo': 0.1,      # 10% de riesgo
+        'aspersion': 0.15, # 15% de riesgo
+        'gravedad': 0.2,   # 20% de riesgo
+        'temporal': 0.3    # 30% de riesgo
     }
     
     def __init__(self):
         """Inicializa el analizador"""
         pass
     
-    async def analizar_proyecto(self, cultivo: str, hectareas: float, 
-                              precio_actual: float, metodo_riego: str) -> dict:
+    async def analizar_proyecto(self, proyecto: ProyectoAgricola) -> Optional[Dict[str, Any]]:
         """
         Realiza un análisis financiero completo del proyecto
         
         Args:
-            cultivo: Tipo de cultivo
-            hectareas: Número de hectáreas
-            precio_actual: Precio actual del cultivo por quintal
-            metodo_riego: Método de riego a utilizar
+            proyecto: Datos del proyecto agrícola
             
         Returns:
-            dict con el análisis financiero completo
+            Optional[Dict[str, Any]]: Análisis financiero o None si hay error
+            
+        Raises:
+            ValueError: Si los datos del proyecto son inválidos
         """
         try:
-            logger.info(f"Iniciando análisis para cultivo='{cultivo}', hectareas={hectareas}, "
-                       f"precio={precio_actual}, riego='{metodo_riego}'")
+            logger.info(f"Iniciando análisis para proyecto: {proyecto.dict()}")
             
-            # Obtener datos del cultivo de FAO
-            logger.info("Obteniendo datos de FAO...")
-            datos_cultivo = await fao_client.get_crop_data(cultivo)
-            if not datos_cultivo:
-                logger.error(f"No se encontraron datos para el cultivo: {cultivo}")
+            # Obtener datos históricos del cultivo
+            datos_historicos = await maga_api.get_datos_historicos(proyecto.cultivo)
+            if not datos_historicos:
+                logger.error(f"No hay datos históricos para: {proyecto.cultivo}")
                 return None
             
-            logger.info(f"Datos obtenidos de FAO: {datos_cultivo}")
+            # Obtener factor de riego y riesgo
+            factor_riego = self.FACTOR_RIEGO[proyecto.metodo_riego]
+            factor_riesgo = self.RIESGO_RIEGO[proyecto.metodo_riego]
             
-            # Normalizar método de riego y obtener factor
-            metodo_riego = metodo_riego.lower().strip()
-            factor_riego = self.FACTOR_RIEGO.get(metodo_riego, 1.0)
-            logger.info(f"Factor de riego para {metodo_riego}: {factor_riego}")
+            # Calcular rendimientos
+            rendimiento_base = datos_historicos['rendimiento_promedio']
+            rendimiento_ajustado = rendimiento_base * factor_riego
             
-            # Calcular rendimiento ajustado por riego
-            rendimiento_min = datos_cultivo['rendimiento_min'] * factor_riego
-            rendimiento_max = datos_cultivo['rendimiento_max'] * factor_riego
-            rendimiento_promedio = (rendimiento_min + rendimiento_max) / 2
+            # Calcular costos
+            costos_fijos = datos_historicos['costos_fijos'] * proyecto.hectareas
+            costos_variables = datos_historicos['costos_variables'] * proyecto.hectareas
+            costos_totales = costos_fijos + costos_variables
             
-            logger.info(f"Rendimientos calculados: min={rendimiento_min}, max={rendimiento_max}, "
-                       f"promedio={rendimiento_promedio}")
+            # Calcular ingresos esperados
+            ingresos_brutos = rendimiento_ajustado * proyecto.hectareas * proyecto.precio_actual
             
-            # Calcular costos totales
-            costos_fijos_ha = sum(datos_cultivo['costos_fijos'].values())
-            costos_variables_ha = sum(datos_cultivo['costos_variables'].values())
-            costos_totales_ha = costos_fijos_ha + costos_variables_ha
+            # Ajustar por riesgos
+            riesgo_total = factor_riesgo + datos_historicos.get('riesgo_mercado', 0.1)
+            ingresos_ajustados = ingresos_brutos * (1 - riesgo_total)
             
-            costos_totales = costos_totales_ha * hectareas
+            # Calcular utilidad y ROI
+            utilidad_bruta = ingresos_brutos - costos_totales
+            utilidad_neta = ingresos_ajustados - costos_totales
+            roi = (utilidad_neta / costos_totales) * 100 if costos_totales > 0 else 0
             
-            logger.info(f"Costos calculados: fijos={costos_fijos_ha}/ha, "
-                       f"variables={costos_variables_ha}/ha, total={costos_totales}")
+            # Calcular punto de equilibrio
+            punto_equilibrio = costos_totales / proyecto.precio_actual if proyecto.precio_actual > 0 else 0
             
-            # Calcular ingresos
-            ingresos_min = rendimiento_min * hectareas * precio_actual
-            ingresos_max = rendimiento_max * hectareas * precio_actual
-            ingresos_promedio = (ingresos_min + ingresos_max) / 2
+            # Calcular score
+            score = self._calcular_score(
+                roi=roi,
+                riesgo=riesgo_total,
+                hectareas=proyecto.hectareas,
+                metodo_riego=proyecto.metodo_riego
+            )
             
-            logger.info(f"Ingresos calculados: min={ingresos_min}, max={ingresos_max}, "
-                       f"promedio={ingresos_promedio}")
-            
-            # Calcular utilidad
-            utilidad_min = ingresos_min - costos_totales
-            utilidad_max = ingresos_max - costos_totales
-            utilidad_promedio = (utilidad_min + utilidad_max) / 2
-            
-            # Calcular ROI y otros indicadores
-            roi_promedio = (utilidad_promedio / costos_totales) * 100
-            punto_equilibrio_qq = costos_totales / precio_actual
-            
-            # Ajustar por factor de riesgo
-            utilidad_ajustada = utilidad_promedio * (1 - datos_cultivo['riesgos'])
-            
-            logger.info(f"Indicadores finales: ROI={roi_promedio}%, "
-                       f"punto_equilibrio={punto_equilibrio_qq}qq, "
-                       f"utilidad_ajustada={utilidad_ajustada}")
+            logger.info(f"Análisis completado para {proyecto.cultivo}. Score: {score}")
             
             return {
-                'analisis_detallado': {
-                    'rendimiento_min_ha': round(rendimiento_min, 2),
-                    'rendimiento_max_ha': round(rendimiento_max, 2),
-                    'rendimiento_total_min': round(rendimiento_min * hectareas, 2),
-                    'rendimiento_total_max': round(rendimiento_max * hectareas, 2),
-                    'costos_fijos': round(costos_fijos_ha * hectareas, 2),
-                    'costos_variables': round(costos_variables_ha * hectareas, 2),
-                    'costos_totales': round(costos_totales, 2),
-                    'ingresos_min': round(ingresos_min, 2),
-                    'ingresos_max': round(ingresos_max, 2),
-                    'utilidad_min': round(utilidad_min, 2),
-                    'utilidad_max': round(utilidad_max, 2),
-                    'roi': round(roi_promedio, 2),
-                    'punto_equilibrio_qq': round(punto_equilibrio_qq, 2),
-                    'ciclo_cultivo': datos_cultivo['ciclo_cultivo'],
-                    'factor_riesgo': datos_cultivo['riesgos'],
-                    'metadata': datos_cultivo.get('metadata', {})
+                'resumen': {
+                    'score': score,
+                    'roi': roi,
+                    'utilidad_neta': utilidad_neta,
+                    'punto_equilibrio': punto_equilibrio
                 },
-                'resumen_financiero': {
-                    'inversion_requerida': round(costos_totales, 2),
-                    'retorno_esperado': round(utilidad_ajustada, 2),
-                    'tiempo_retorno': datos_cultivo['ciclo_cultivo'],
-                    'rentabilidad_mensual': round(roi_promedio / datos_cultivo['ciclo_cultivo'], 2)
+                'detalle': {
+                    'rendimiento': {
+                        'base': rendimiento_base,
+                        'ajustado': rendimiento_ajustado,
+                        'factor_riego': factor_riego
+                    },
+                    'costos': {
+                        'fijos': costos_fijos,
+                        'variables': costos_variables,
+                        'total': costos_totales
+                    },
+                    'ingresos': {
+                        'brutos': ingresos_brutos,
+                        'ajustados': ingresos_ajustados,
+                        'factor_riesgo': riesgo_total
+                    }
                 }
             }
             
         except Exception as e:
-            logger.error(f"Error en análisis financiero: {str(e)}", exc_info=True)
+            logger.error(f"Error en análisis financiero: {str(e)}")
             return None
+    
+    def _calcular_score(self, roi: float, riesgo: float, 
+                       hectareas: float, metodo_riego: str) -> int:
+        """
+        Calcula el FinGro Score (0-100) basado en varios factores
+        
+        Args:
+            roi: Return on Investment en porcentaje
+            riesgo: Factor de riesgo total (0-1)
+            hectareas: Número de hectáreas
+            metodo_riego: Método de riego utilizado
+            
+        Returns:
+            int: Score entre 0 y 100
+        """
+        # Base: ROI (max 40 puntos)
+        score_roi = min(40, roi / 2) if roi > 0 else 0
+        
+        # Riesgo (max 30 puntos)
+        score_riesgo = 30 * (1 - riesgo)
+        
+        # Tecnificación (max 20 puntos)
+        score_riego = {
+            'goteo': 20,
+            'aspersion': 15,
+            'gravedad': 10,
+            'temporal': 5
+        }[metodo_riego]
+        
+        # Escala (max 10 puntos)
+        score_escala = min(10, hectareas / 2)
+        
+        # Score total
+        score_total = int(score_roi + score_riesgo + score_riego + score_escala)
+        
+        return max(0, min(100, score_total))
 
 # Instancia global
 financial_analyzer = FinancialAnalyzer()
