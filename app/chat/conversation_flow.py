@@ -317,7 +317,7 @@ class ConversationFlow:
             str: Respuesta generada para el usuario
         """
         # Obtener estado actual del usuario
-        current_state = firebase_manager.get_user_state(phone)
+        current_state = await firebase_manager.get_conversation_state(phone)
         
         # Validar entrada del usuario
         is_valid, processed_input = self.validate_input(current_state, text)
