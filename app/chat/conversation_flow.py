@@ -6,15 +6,21 @@ import logging
 from app.models.financial_model import financial_model
 from app.views.financial_report import report_generator
 from app.external_apis.maga import CanalComercializacion
-from app.services.whatsapp_service import whatsapp
+from app.services.whatsapp_service import WhatsAppService
 
 logger = logging.getLogger(__name__)
 
 class ConversationFlow:
     """Maneja el flujo de conversación con usuarios"""
     
-    def __init__(self):
-        """Inicializa el manejador de conversación"""
+    def __init__(self, whatsapp_service: WhatsAppService):
+        """
+        Inicializa el manejador de conversación
+        
+        Args:
+            whatsapp_service: Servicio de WhatsApp para enviar mensajes
+        """
+        self.whatsapp = whatsapp_service
         
         # Estados de la conversación
         self.STATES = {
@@ -262,7 +268,7 @@ class ConversationFlow:
                 }
                 await firebase_manager.update_user_data(phone_number, user_data)
                 welcome_message = self.get_welcome_message()
-                await whatsapp.send_message(phone_number, welcome_message)
+                await self.whatsapp.send_message(phone_number, welcome_message)
                 return
             
             # Obtener o crear datos del usuario
@@ -279,7 +285,7 @@ class ConversationFlow:
             if current_state == self.STATES['START'] or current_state == self.STATES['DONE']:
                 # Enviar mensaje de bienvenida
                 welcome_message = self.get_welcome_message()
-                await whatsapp.send_message(phone_number, welcome_message)
+                await self.whatsapp.send_message(phone_number, welcome_message)
                 
                 # Actualizar estado
                 user_data['state'] = self.STATES['GET_CROP']
@@ -292,7 +298,7 @@ class ConversationFlow:
             if not is_valid:
                 # Enviar mensaje de error
                 error_message = self.get_error_message(current_state)
-                await whatsapp.send_message(phone_number, error_message)
+                await self.whatsapp.send_message(phone_number, error_message)
                 return
                 
             # Guardar dato procesado
@@ -305,20 +311,20 @@ class ConversationFlow:
             # Si llegamos a SHOW_REPORT, generar reporte
             if next_state == self.STATES['SHOW_REPORT']:
                 report = report_generator.generate_report(user_data['data'])
-                await whatsapp.send_message(phone_number, report)
+                await self.whatsapp.send_message(phone_number, report)
                 
                 # Preguntar si quiere préstamo
                 loan_message = "¿Te gustaría solicitar un préstamo para este proyecto? (SI/NO)"
-                await whatsapp.send_message(phone_number, loan_message)
+                await self.whatsapp.send_message(phone_number, loan_message)
                 
             # Si llegamos a SHOW_LOAN, mostrar oferta
             elif next_state == self.STATES['SHOW_LOAN']:
                 loan_offer = report_generator.generate_loan_offer(user_data['data'])
-                await whatsapp.send_message(phone_number, loan_offer)
+                await self.whatsapp.send_message(phone_number, loan_offer)
                 
                 # Preguntar si confirma
                 confirm_message = "¿Deseas proceder con la solicitud del préstamo? (SI/NO)"
-                await whatsapp.send_message(phone_number, confirm_message)
+                await self.whatsapp.send_message(phone_number, confirm_message)
                 
             # Si llegamos a DONE después de confirmar préstamo
             elif next_state == self.STATES['DONE'] and current_state == self.STATES['CONFIRM_LOAN']:
@@ -332,7 +338,7 @@ class ConversationFlow:
                         "Entiendo. Si cambias de opinión o necesitas más información, "
                         "no dudes en contactarnos nuevamente. ¡Que tengas un excelente día! 👋"
                     )
-                await whatsapp.send_message(phone_number, final_message)
+                await self.whatsapp.send_message(phone_number, final_message)
                 
             # Si llegamos a DONE sin confirmar préstamo
             elif next_state == self.STATES['DONE']:
@@ -340,12 +346,12 @@ class ConversationFlow:
                     "Gracias por usar FinGro. Si necesitas analizar otro proyecto "
                     "o tienes más preguntas, ¡no dudes en escribirnos! 👋"
                 )
-                await whatsapp.send_message(phone_number, final_message)
+                await self.whatsapp.send_message(phone_number, final_message)
                 
             # Para cualquier otro estado, enviar siguiente pregunta
             else:
                 next_message = self.get_next_message(next_state, user_data['data'])
-                await whatsapp.send_message(phone_number, next_message)
+                await self.whatsapp.send_message(phone_number, next_message)
             
             # Guardar datos actualizados
             await firebase_manager.update_user_data(phone_number, user_data)
@@ -356,7 +362,7 @@ class ConversationFlow:
                 "Lo siento, ha ocurrido un error. Por favor intenta nuevamente "
                 "o contacta a soporte si el problema persiste."
             )
-            await whatsapp.send_message(phone_number, error_message)
+            await self.whatsapp.send_message(phone_number, error_message)
 
     async def process_show_report(self, user_data: Dict[str, Any]) -> str:
         """
@@ -420,4 +426,4 @@ class ConversationFlow:
         return report_generator.generate_success_message()
 
 # Instancia global
-conversation_flow = ConversationFlow()
+conversation_flow = ConversationFlow(WhatsAppService())

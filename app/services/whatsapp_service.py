@@ -7,8 +7,6 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime
 
 from app.config import settings
-from app.chat.conversation_flow import conversation_flow
-from app.database.firebase import firebase_manager
 
 logger = logging.getLogger(__name__)
 
