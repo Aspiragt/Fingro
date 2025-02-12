@@ -13,7 +13,7 @@ from datetime import datetime
 
 from app.config import settings
 from app.services.whatsapp_service import WhatsAppService
-from app.chat.conversation_flow import conversation_manager
+from app.chat.conversation_flow import conversation_flow
 from app.database.firebase import firebase_manager
 
 # Configurar logging
@@ -90,7 +90,7 @@ async def webhook(request: Request):
                         text = message.get('text', {}).get('body', '')
                         
                         # Procesar mensaje
-                        await conversation_manager.handle_message(from_number, text)
+                        await conversation_flow.handle_message(from_number, text)
         
         return {"status": "ok"}
         
