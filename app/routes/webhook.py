@@ -11,7 +11,7 @@ import logging
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(prefix="/webhook")
 
 @router.get("/whatsapp")
 async def verify_webhook(request: Request):
