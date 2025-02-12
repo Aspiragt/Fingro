@@ -1,7 +1,10 @@
+"""
+Rutas para el webhook de WhatsApp
+"""
 from fastapi import APIRouter, Request, Response, HTTPException, Depends
 from typing import Any
 from app.services.whatsapp_service import WhatsAppService
-from app.database.firebase import get_firebase_db
+from app.database.firebase import firebase_manager
 from app.chat.conversation_flow import conversation_flow
 import logging
 from datetime import datetime
@@ -84,7 +87,7 @@ async def health_check():
     """Health check endpoint"""
     try:
         # Check Firebase connection
-        db = get_firebase_db()
+        db = firebase_manager.get_firebase_db()
         if not db:
             raise Exception("Firebase connection failed")
             
