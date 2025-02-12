@@ -58,6 +58,10 @@ class Settings(BaseModel):
         default=os.getenv("WHATSAPP_WEBHOOK_VERIFY_TOKEN", ""),
         description="Token para verificar webhook de WhatsApp"
     )
+    DISABLE_WEBHOOK_SIGNATURE: bool = Field(
+        default=True,
+        description="Deshabilitar la verificación de firma del webhook"
+    )
     
     # Firebase
     FIREBASE_CREDENTIALS: Dict[str, Any] = Field(
