@@ -28,21 +28,31 @@ class FinancialReport:
             str: Reporte formateado
         """
         try:
+            # Validar campos requeridos
+            required_fields = [
+                'area', 'rendimiento_por_hectarea', 'precio_quintal',
+                'ingresos_totales', 'costos_siembra', 'utilidad'
+            ]
+            if not all(field in score_data for field in required_fields):
+                missing = [f for f in required_fields if f not in score_data]
+                logger.error(f"Faltan campos en score_data: {missing}")
+                return "❌ Error generando reporte"
+
             # Redondear números
             area = round(score_data['area'])
             rendimiento = round(score_data['rendimiento_por_hectarea'])
-            precio = round(score_data['precio_actual'], 2)
+            precio = round(score_data['precio_quintal'], 2)
             ingresos = round(score_data['ingresos_totales'])
-            costos = round(score_data['costos_totales'])
-            ganancia = round(score_data['ganancia_total'])
-            ganancia_hectarea = round(score_data['ganancia_por_hectarea'])
+            costos = round(score_data['costos_siembra'])
+            ganancia = round(score_data['utilidad'])
+            ganancia_hectarea = round(score_data['utilidad_por_ha'])
             
             # Generar reporte
             report = [
                 f"✨ Análisis de su siembra de {score_data['cultivo'].capitalize()}\n",
                 f"🌱 Área: {area} hectáreas",
                 f"📊 Rendimiento esperado: {rendimiento} quintales por hectárea",
-                f"💰 Precio de venta: Q{precio:,.2f} por {score_data['medida']}",
+                f"💰 Precio de venta: Q{precio:,.2f} por quintal",
                 "",
                 "💵 Lo que puede ganar:",
                 f"•⁠  ⁠Ingresos totales: Q{ingresos:,.2f}",
