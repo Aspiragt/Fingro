@@ -487,17 +487,25 @@ class ConversationFlow:
             str: Reporte formateado
         """
         try:
-            # Preparar datos para el modelo financiero
-            analysis_data = {
-                'crop': user_data['crop'],
-                'area': float(user_data['area']),
-                'commercialization': user_data['channel'],
-                'irrigation': user_data['irrigation'],
-                'location': user_data['location']
-            }
+            # Validar datos necesarios
+            if 'crop' not in user_data or 'area' not in user_data:
+                raise ValueError("Faltan datos del cultivo")
+                
+            # Generar análisis financiero
+            analysis_data = financial_model.analyze_crop(
+                user_data['crop'],
+                user_data['area'],
+                user_data.get('channel', CanalComercializacion.MAYORISTA),
+                user_data.get('irrigation', 'ninguno'),
+                user_data.get('location', 'Guatemala')
+            )
             
-            # Analizar proyecto
-            score_data = await financial_model.analyze_project(analysis_data)
+            if not analysis_data:
+                raise ValueError("Error generando análisis financiero")
+                
+            # Generar score
+            score_data = financial_model.score_analysis(analysis_data)
+            
             if not score_data:
                 raise ValueError("Error generando análisis financiero")
 
@@ -506,8 +514,39 @@ class ConversationFlow:
             user_data['score_data'] = score_data
 
             # Generar reporte
-            report = report_generator.generate_report(analysis_data, score_data)
-            return report
+            utilidad = analysis_data.get('utilidad', 0)
+            utilidad_por_ha = utilidad / user_data['area']
+            
+            mensaje = (
+                f"✨ Análisis de su siembra de {analysis_data['crop']}\n\n"
+                
+                f"🌱 Área: {analysis_data['area']} hectáreas\n"
+                f"📊 Rendimiento esperado: {analysis_data['rendimiento_por_ha']} quintales por hectárea\n"
+                f"💰 Precio de venta: Q{analysis_data['precio_quintal']:.2f} por quintal\n\n"
+                
+                f"💵 Lo que puede ganar:\n"
+                f"•⁠  ⁠Ingresos totales: Q{analysis_data['ingresos_totales']:.2f}\n"
+                f"•⁠  ⁠Costos de siembra: Q{analysis_data['costos_siembra']:.2f}\n"
+                f"•⁠  ⁠Ganancia esperada: Q{utilidad:.2f}\n\n"
+            )
+
+            # Agregar mensaje según la rentabilidad
+            if utilidad > 0:
+                mensaje += (
+                    f"✅ ¡Su proyecto es rentable!\n"
+                    f"Por cada hectárea podría ganar Q{utilidad_por_ha:.2f}"
+                )
+            else:
+                mensaje += (
+                    f"⚠️ Con los precios actuales, este proyecto podría generar pérdidas.\n"
+                    f"La pérdida por hectárea sería de Q{abs(utilidad_por_ha):.2f}\n\n"
+                    f"💡 Le sugiero:\n"
+                    f"1. Revisar si puede reducir costos de producción\n"
+                    f"2. Considerar otros canales de venta con mejor precio\n"
+                    f"3. Evaluar si puede mejorar el rendimiento por hectárea"
+                )
+            
+            return mensaje
             
         except Exception as e:
             logger.error(f"Error generando reporte financiero: {str(e)}")
@@ -557,7 +596,7 @@ class ConversationFlow:
 
         except Exception as e:
             logger.error(f"Error generando oferta de préstamo: {str(e)}")
-            return "❌ Lo siento, hubo un error al generar la oferta. Por favor intente de nuevo."
+            return "❌ Lo siento, hubo un error al generar la oferta. Por favor intente más tarde."
 
     def _format_loan_offer(self, loan_data: Dict[str, Any], financial_data: Dict[str, Any]) -> str:
         """
