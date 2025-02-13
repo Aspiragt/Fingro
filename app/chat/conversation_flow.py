@@ -1,15 +1,19 @@
 """
 Módulo para manejar el flujo de conversación con usuarios
 """
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import logging
+from datetime import datetime
+
+from app.database.firebase import firebase_manager
+from app.external_apis.maga_precios import MagaPreciosClient
+from app.utils.text import normalize_text, parse_yes_no
+from app.utils.currency import format_currency
 from app.models.financial_model import financial_model
 from app.views.financial_report import report_generator
 from app.external_apis.maga_precios import CanalComercializacion, maga_precios_client
 from app.services.whatsapp_service import WhatsAppService
-from app.database.firebase import firebase_manager
 from app.utils.text import normalize_text, parse_area, format_number, parse_channel, parse_irrigation, parse_department
-from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
