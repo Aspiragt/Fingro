@@ -175,7 +175,7 @@ class MagaAPI:
             canal: Canal de comercialización (opcional)
             
         Returns:
-            dict: Diccionario con precios por canal
+            dict: Diccionario con precio, medida y canal
         """
         try:
             # Normalizar nombre
@@ -183,6 +183,9 @@ class MagaAPI:
             
             # Buscar precio en datos de MAGA
             base_price = None
+            medida = 'Quintal'  # Por defecto usar quintales
+            mercado = 'Nacional'
+            
             for precio in self.maga_prices:
                 producto = self._normalize_text(precio['Producto'])
                 if cultivo in producto:
@@ -194,45 +197,39 @@ class MagaAPI:
             # Si no encontramos precio, usar el default
             if base_price is None:
                 logger.warning(f"Usando precio por defecto para {cultivo}")
-                base_price = self.default_prices.get(cultivo, 150.0)
-                medida = 'Quintal'
-                mercado = 'Nacional'
+                base_price = self.default_prices.get(cultivo)
+                if base_price is None:
+                    logger.error(f"No se encontró precio para {cultivo}")
+                    return None
             
             # Si se especifica un canal, devolver solo ese precio
             if canal:
+                precio_ajustado = self._adjust_price(base_price, cultivo, canal)
                 return {
-                    'precio': self._adjust_price(base_price, cultivo, canal),
-                    'canal': canal,
+                    'precio': precio_ajustado,
                     'medida': medida,
+                    'canal': canal,
                     'mercado': mercado
                 }
             
-            # Obtener canales recomendados
-            channels = self._get_recommended_channels(cultivo)
+            # Si no se especifica canal, devolver todos los precios recomendados
+            precios = {}
+            for canal in self._get_recommended_channels(cultivo):
+                precio_ajustado = self._adjust_price(base_price, cultivo, canal)
+                precios[canal] = {
+                    'precio': precio_ajustado,
+                    'medida': medida,
+                    'canal': canal,
+                    'mercado': mercado
+                }
             
-            # Calcular precios para cada canal
-            prices = {
-                channel: self._adjust_price(base_price, cultivo, channel)
-                for channel in channels
-            }
-            
-            return {
-                'precios': prices,
-                'canales_recomendados': channels,
-                'precio_base': base_price,
-                'medida': medida,
-                'mercado': mercado,
-                'fuente': 'MAGA' if base_price != self.default_prices.get(cultivo, 150.0) else 'default'
-            }
+            # Devolver el precio del mejor canal
+            mejor_canal = list(precios.keys())[0]
+            return precios[mejor_canal]
             
         except Exception as e:
             logger.error(f"Error obteniendo precio para {cultivo}: {str(e)}")
-            return {
-                'precios': {
-                    CanalComercializacion.MAYORISTA: self.default_prices.get(cultivo, 150.0)
-                },
-                'fuente': 'error'
-            }
+            return None
 
 # Instancia global
 maga_api = MagaAPI()
