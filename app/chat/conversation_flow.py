@@ -9,6 +9,7 @@ from app.external_apis.maga_precios import CanalComercializacion, maga_precios_c
 from app.services.whatsapp_service import WhatsAppService
 from app.database.firebase import firebase_manager
 from app.utils.text import normalize_text, parse_area, format_number, parse_channel, parse_irrigation, parse_department
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -640,9 +641,71 @@ class ConversationFlow:
         except Exception as e:
             return self.handle_error(user_data, e, "loan")
 
+    def get_crop_cycle(self, crop: str) -> Dict[str, Any]:
+        """Obtiene información del ciclo del cultivo"""
+        cycles = {
+            'maiz': {
+                'duracion_meses': 4,
+                'cosechas_por_año': 2,
+                'meses_siembra': [5, 11],  # Mayo y Noviembre
+                'tipo': 'anual',
+                'nombre': 'maíz'
+            },
+            'frijol': {
+                'duracion_meses': 3,
+                'cosechas_por_año': 3,
+                'meses_siembra': [3, 6, 9],  # Marzo, Junio, Septiembre
+                'tipo': 'anual',
+                'nombre': 'frijol'
+            },
+            'cafe': {
+                'duracion_meses': 8,
+                'cosechas_por_año': 1,
+                'meses_siembra': [5],  # Mayo
+                'tipo': 'permanente',
+                'nombre': 'café'
+            }
+        }
+        return cycles.get(crop, {
+            'duracion_meses': 4,
+            'cosechas_por_año': 2,
+            'meses_siembra': [5, 11],
+            'tipo': 'anual',
+            'nombre': crop
+        })
+
+    def get_risk_factors(self, irrigation: str, channel: str) -> Dict[str, float]:
+        """Calcula factores de riesgo basados en riego y canal de venta"""
+        # Factores por sistema de riego
+        irrigation_factors = {
+            'goteo': 1.2,     # +20% por sistema de goteo
+            'aspersion': 1.15, # +15% por aspersión
+            'gravedad': 1.1,   # +10% por gravedad
+            'temporal': 1.0    # Sin ajuste para temporal
+        }
+        
+        # Factores por canal de comercialización
+        channel_factors = {
+            'exportacion': 1.3,    # +30% para exportación
+            'mayorista': 1.2,      # +20% para mayorista
+            'cooperativa': 1.15,   # +15% para cooperativa
+            'mercado_local': 1.0   # Sin ajuste para mercado local
+        }
+        
+        return {
+            'riego': irrigation_factors.get(irrigation, 1.0),
+            'canal': channel_factors.get(channel, 1.0)
+        }
+
     def calculate_loan_amount(self, user_data: Dict[str, Any]) -> float:
-        """Calcula el monto del préstamo"""
+        """Calcula el monto y términos del préstamo basado en ciclo agrícola"""
         try:
+            # Obtener datos básicos
+            cultivo = normalize_text(user_data.get('crop', ''))
+            ciclo = self.get_crop_cycle(cultivo)
+            irrigation = user_data.get('irrigation', '')
+            channel = user_data.get('channel', '')
+            
             # Obtener datos financieros
             financial = user_data.get('financial_analysis', {})
             costos = financial.get('costos', 0)
@@ -653,29 +716,66 @@ class ConversationFlow:
             if ganancia <= 0:
                 return 0
                 
-            # El préstamo será el menor entre:
-            # - 80% de los costos
-            # - 60% de los ingresos anuales
-            monto_por_costos = costos * 0.8
-            monto_por_ingresos = ingresos * 0.6
+            # Determinar plazo basado en ciclo
+            if ciclo['tipo'] == 'permanente':
+                # Para cultivos permanentes, préstamo más largo
+                plazo_meses = 24
+                max_costos = 0.7  # 70% de costos
+                max_ingresos = 0.5  # 50% de ingresos
+            else:
+                # Para cultivos anuales, préstamo por ciclo
+                plazo_meses = ciclo['duracion_meses']
+                max_costos = 0.8  # 80% de costos
+                max_ingresos = 0.6  # 60% de ingresos
             
-            monto = min(monto_por_costos, monto_por_ingresos)
+            # Calcular montos base
+            monto_por_costos = costos * max_costos
+            monto_por_ingresos = ingresos * max_ingresos
+            monto_base = min(monto_por_costos, monto_por_ingresos)
             
-            # Tasa del 2% mensual
-            tasa = 0.02
-            plazo = 12
+            # Aplicar factores de riesgo
+            factores = self.get_risk_factors(irrigation, channel)
+            monto = monto_base * factores['riego'] * factores['canal']
             
-            # La cuota no puede ser más del 40% de la ganancia mensual
-            ganancia_mensual = ganancia / 12
-            cuota_maxima = ganancia_mensual * 0.4
+            # Ajustar tasa según plazo
+            if plazo_meses <= 6:
+                tasa_mensual = 0.015  # 1.5% mensual para corto plazo
+            elif plazo_meses <= 12:
+                tasa_mensual = 0.018  # 1.8% mensual para mediano plazo
+            else:
+                tasa_mensual = 0.02  # 2% mensual para largo plazo
             
-            # Calcular cuota: P * (r * (1 + r)^n) / ((1 + r)^n - 1)
-            cuota = monto * (tasa * (1 + tasa)**plazo) / ((1 + tasa)**plazo - 1)
+            # La cuota no puede ser más del 60% del ingreso por cosecha
+            ingreso_por_cosecha = ingresos / ciclo['cosechas_por_año']
+            cuota_maxima = ingreso_por_cosecha * 0.6
+            
+            # Calcular cuota
+            if ciclo['tipo'] == 'permanente':
+                # Para cultivos permanentes, pagos mensuales
+                cuota = monto * (tasa_mensual * (1 + tasa_mensual)**plazo_meses) / ((1 + tasa_mensual)**plazo_meses - 1)
+                cuota_maxima = ganancia / 12 * 0.4  # 40% de la ganancia mensual
+            else:
+                # Para cultivos anuales, pago único al cosechar
+                cuota = monto * (1 + tasa_mensual * plazo_meses)
             
             # Si la cuota es mayor que el máximo, ajustar el monto
             if cuota > cuota_maxima:
-                # Despejar P de la fórmula de cuota
-                monto = cuota_maxima * ((1 + tasa)**plazo - 1) / (tasa * (1 + tasa)**plazo)
+                if ciclo['tipo'] == 'permanente':
+                    # Despejar P de la fórmula de cuota mensual
+                    monto = cuota_maxima * ((1 + tasa_mensual)**plazo_meses - 1) / (tasa_mensual * (1 + tasa_mensual)**plazo_meses)
+                else:
+                    # Despejar P de la fórmula de pago único
+                    monto = cuota_maxima / (1 + tasa_mensual * plazo_meses)
+            
+            # Guardar términos del préstamo
+            user_data['loan_terms'] = {
+                'monto': monto,
+                'plazo_meses': plazo_meses,
+                'tasa_mensual': tasa_mensual,
+                'cuota': cuota,
+                'ciclo': ciclo,
+                'tipo_pago': 'mensual' if ciclo['tipo'] == 'permanente' else 'cosecha'
+            }
             
             # Redondear a miles
             return round(monto / 1000) * 1000
@@ -683,11 +783,11 @@ class ConversationFlow:
         except Exception as e:
             logger.error(f"Error calculando préstamo: {str(e)}")
             return 0
-    
+            
     def process_show_loan(self, user_data: Dict[str, Any]) -> str:
         """Procesa y muestra la oferta de préstamo"""
         try:
-            # Obtener datos
+            # Obtener datos básicos
             cultivo = user_data.get('crop', '').lower()
             area = user_data.get('area', 0)
             channel = user_data.get('channel', '')
@@ -699,15 +799,17 @@ class ConversationFlow:
             if not monto:
                 return self.handle_error(user_data, Exception("No se pudo calcular el préstamo"), "loan")
             
+            # Obtener términos del préstamo
+            terms = user_data.get('loan_terms', {})
+            plazo = terms.get('plazo_meses', 12)
+            cuota = terms.get('cuota', 0)
+            ciclo = terms.get('ciclo', {})
+            tipo_pago = terms.get('tipo_pago', 'mensual')
+            
             # Obtener datos financieros
             financial = user_data.get('financial_analysis', {})
             produccion = financial.get('rendimiento', 0)
             ingresos = financial.get('ingresos', 0)
-            
-            # Calcular cuota
-            tasa = 0.02  # 2% mensual
-            plazo = 12
-            cuota = monto * (tasa * (1 + tasa)**plazo) / ((1 + tasa)**plazo - 1)
             
             # Formatear números
             monto_str = format_number(monto)
@@ -715,25 +817,35 @@ class ConversationFlow:
             produccion_str = format_number(produccion)
             ingreso_str = format_number(ingresos)
             
+            # Determinar próximo mes de siembra
+            hoy = datetime.now()
+            meses_siembra = ciclo.get('meses_siembra', [5])
+            proximo_mes = min((m for m in meses_siembra if m >= hoy.month), default=meses_siembra[0])
+            
             # Actualizar estado
             user_data['state'] = self.STATES['GET_LOAN_RESPONSE']
             user_data['loan_amount'] = monto
+            
+            # Construir mensaje de pago
+            if tipo_pago == 'mensual':
+                pago_str = f"{plazo} cuotas de Q{cuota_str} al mes 📅"
+            else:
+                pago_str = f"Un pago de Q{cuota_str} al cosechar 🌾"
             
             # Construir mensaje
             return (
                 f"¡Buenas noticias! 🎉\n\n"
                 f"Con base en su proyecto:\n"
-                f"•⁠  ⁠{cultivo.capitalize()} en {location} 🌱\n"
+                f"•⁠  ⁠{ciclo['nombre'].capitalize()} en {location} 🌱\n"
                 f"•⁠  ⁠{format_number(area)} hectáreas de terreno\n"
                 f"•⁠  ⁠Riego por {irrigation} 💧\n"
                 f"•⁠  ⁠Venta en {channel} 🚛\n\n"
                 f"Producción esperada:\n"
                 f"•⁠  ⁠{produccion_str} quintales de {cultivo} 📦\n"
-                f"•⁠  ⁠Ingresos de Q{ingreso_str} 💰\n\n"
+                f"•⁠  ⁠Ingresos de Q{ingreso_str} por cosecha 💰\n\n"
                 f"Le podemos ofrecer:\n"
                 f"•⁠  ⁠Préstamo de Q{monto_str} 💸\n"
-                f"•⁠  ⁠Cuota de Q{cuota_str} al mes 📅\n"
-                f"•⁠  ⁠12 meses de plazo 🗓️\n"
+                f"•⁠  ⁠{pago_str}\n"
                 f"•⁠  ⁠Incluye asistencia técnica 🌿\n\n"
                 f"¿Le interesa continuar con la solicitud? 🤝"
             )
