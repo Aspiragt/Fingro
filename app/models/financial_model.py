@@ -349,19 +349,12 @@ class FinancialModel:
             
             # 1. Obtener precios
             price_data = await maga_api.get_precio_cultivo(cultivo, canal)
-            if not price_data or 'precio' not in price_data:
+            if not price_data:
                 logger.error(f"Error obteniendo precio para {cultivo}")
                 return None
                 
-            precio_original = price_data['precio']
-            medida_original = price_data.get('medida', 'Quintal')
-            
-            # Convertir precio a quintales
-            precio_quintal = self._convert_to_quintales(
-                precio_original, 
-                medida_original,
-                cultivo
-            )
+            precio_quintal = price_data['precio']
+            medida = price_data['medida']
             
             # 2. Calcular costos
             costos = self._get_costos_cultivo(cultivo, area)
@@ -388,9 +381,9 @@ class FinancialModel:
                 'rendimiento': rendimiento,
                 'rendimiento_por_hectarea': rendimiento_por_hectarea,  # Campo requerido por el reporte
                 'rendimiento_por_ha': rendimiento_por_hectarea,  # Mantener por compatibilidad
-                'precio_original': precio_original,
-                'medida_original': medida_original,
                 'precio_quintal': precio_quintal,
+                'medida': medida,
+                'canal': canal,
                 'ingresos_totales': ingresos,
                 'costos_siembra': costos_siembra,
                 'costos_por_ha': costos_siembra / area if area > 0 else 0,
