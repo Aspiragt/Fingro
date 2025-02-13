@@ -129,16 +129,16 @@ class MAGAPreciosClient:
             },
             'maiz': {
                 'costos_fijos': {
-                    'preparacion_tierra': 1000,
+                    'preparacion_tierra': 1000,   # Más alto por ser cultivo más pesado
                     'asistencia_tecnica': 500,
                     'administracion': 400,
                     'imprevistos': 300
                 },
                 'costos_por_hectarea': {
                     'semilla': 1500,             # Semilla certificada
-                    'fertilizantes': 2000,
+                    'fertilizantes': 2000,       # Mayor demanda nutricional
                     'pesticidas': 1000,
-                    'mano_obra': 2500,
+                    'mano_obra': 2500,           # Más labor en cosecha
                     'riego': {
                         'temporal': 0,
                         'gravedad': 600,
@@ -148,40 +148,84 @@ class MAGAPreciosClient:
                 },
                 'rendimiento_por_hectarea': 45,
                 'merma': 0.08
+            },
+            'cafe': {
+                'costos_fijos': {
+                    'preparacion_tierra': 2000,   # Incluye terrazas/sombra
+                    'asistencia_tecnica': 800,    # Más especializada
+                    'administracion': 600,
+                    'imprevistos': 500
+                },
+                'costos_por_hectarea': {
+                    'plantas': 8000,              # 3000 plantas/ha a Q2.67
+                    'fertilizantes': 3000,        # 3 aplicaciones/año
+                    'pesticidas': 1500,           # Control roya/broca
+                    'mano_obra': 5000,            # Alta en cosecha
+                    'riego': {
+                        'temporal': 0,
+                        'gravedad': 800,
+                        'aspersion': 1200,
+                        'goteo': 2000
+                    }
+                },
+                'rendimiento_por_hectarea': 30,   # qq pergamino
+                'merma': 0.05
+            },
+            'papa': {
+                'costos_fijos': {
+                    'preparacion_tierra': 1200,
+                    'asistencia_tecnica': 600,
+                    'administracion': 400,
+                    'imprevistos': 400
+                },
+                'costos_por_hectarea': {
+                    'semilla': 6000,              # 2000 kg/ha a Q3/kg
+                    'fertilizantes': 2500,
+                    'pesticidas': 2000,           # Alto control plagas
+                    'mano_obra': 3000,
+                    'riego': {
+                        'temporal': 0,
+                        'gravedad': 700,
+                        'aspersion': 1000,
+                        'goteo': 1600
+                    }
+                },
+                'rendimiento_por_hectarea': 250,  # qq/ha
+                'merma': 0.1
+            },
+            'tomate': {
+                'costos_fijos': {
+                    'preparacion_tierra': 1500,
+                    'asistencia_tecnica': 800,
+                    'administracion': 500,
+                    'imprevistos': 500
+                },
+                'costos_por_hectarea': {
+                    'plantulas': 7000,            # 25000 plantas/ha
+                    'fertilizantes': 3500,        # Fertirrigación
+                    'pesticidas': 2500,           # Control intensivo
+                    'mano_obra': 4000,            # Tutorado + cosecha
+                    'riego': {
+                        'temporal': 0,
+                        'gravedad': 1000,
+                        'aspersion': 1500,
+                        'goteo': 2500             # Ideal para tomate
+                    }
+                },
+                'rendimiento_por_hectarea': 2000, # qq/ha
+                'merma': 0.15                     # Alta perecibilidad
             }
         }
         return costos.get(cultivo, {})
     
-    def calcular_costos_totales(self, cultivo: str, area: float, irrigation: str) -> Dict[str, float]:
-        """Calcula costos totales considerando fijos y variables"""
-        costos = self.get_costos_cultivo(cultivo)
-        if not costos:
-            return {}
-
-        # Costos fijos (no dependen del área)
-        costos_fijos = sum(costos.get('costos_fijos', {}).values())
-
-        # Costos por hectárea
-        costos_ha = costos.get('costos_por_hectarea', {})
-        costo_riego = costos_ha.get('riego', {}).get(irrigation, 0)
-        
-        # Suma de costos por hectárea sin riego
-        costos_ha_sin_riego = sum(v for k, v in costos_ha.items() if k != 'riego')
-        
-        # Costos variables totales (dependen del área)
-        costos_variables = (costos_ha_sin_riego + costo_riego) * area
-
-        return {
-            'costos_fijos': costos_fijos,
-            'costos_variables': costos_variables,
-            'costos_totales': costos_fijos + costos_variables
-        }
-    
     def get_precios_cultivo(self, cultivo: str, channel: str = 'mercado_local') -> Dict[str, float]:
         """Obtiene precios actuales por canal de venta"""
         precios_base = {
-            'frijol': 550,  # Q/quintal
-            'maiz': 450     # Q/quintal
+            'frijol': 550,    # Q/quintal
+            'maiz': 450,      # Q/quintal
+            'cafe': 1200,     # Q/quintal pergamino
+            'papa': 300,      # Q/quintal
+            'tomate': 200     # Q/quintal
         }
         
         # Factores por canal
