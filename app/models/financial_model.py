@@ -99,6 +99,31 @@ class FinancialModel:
             CanalComercializacion.MAYORISTA: 0.6,    # Riesgo moderado
             CanalComercializacion.MERCADO_LOCAL: 0.5 # Riesgo moderado-bajo
         }
+        
+        # Factores de conversión a quintales
+        self.conversion_factors = {
+            'Quintal': 1.0,  # Base unit
+            'Caja (45-50 lb)': 0.5,  # 1 quintal = 2 cajas de tomate
+            'Red (90 - 100 unidades) (64.55 kg)': 1.42,  # 64.55kg ≈ 142lb ≈ 1.42qq
+            'Caja (7 kg)': 0.154,  # 7kg ≈ 15.4lb ≈ 0.154qq
+            'Caja (35 - 40 unidades)': 0.4,  # Aprox 40lb ≈ 0.4qq
+            'Red (90 - 100 unidades) (24 kg)': 0.528,  # 24kg ≈ 52.8lb ≈ 0.528qq
+            'Costal (40 lb)': 0.4,  # 40lb = 0.4qq
+            'Costal (100 lb)': 1.0,  # 100lb = 1qq
+            'Libra': 0.01,  # 1lb = 0.01qq
+            'Kilogramo': 0.022,  # 1kg ≈ 2.2lb ≈ 0.022qq
+            'Docena': None,  # Requiere peso específico del producto
+            'Mazo (20 trenzas)': None  # Requiere peso específico del producto
+        }
+        
+        # Peso por unidad para productos específicos (en libras)
+        self.peso_por_unidad = {
+            'repollo': 5,  # 5 lb por unidad
+            'cebolla': 0.5,  # 0.5 lb por unidad
+            'chile': 0.25,  # 0.25 lb por unidad
+            'tomate': 0.5,  # 0.5 lb por unidad
+            'aguacate': 1,  # 1 lb por unidad
+        }
     
     def _get_costos_cultivo(self, cultivo: str, area: float) -> Dict[str, float]:
         """
@@ -179,6 +204,43 @@ class FinancialModel:
         # Mantener el riesgo entre 0 y 1
         return max(0.0, min(1.0, risk))
     
+    def _convert_to_quintales(self, precio: float, medida: str, cultivo: str = None) -> float:
+        """
+        Convierte el precio por unidad de medida a precio por quintal
+        
+        Args:
+            precio: Precio en la unidad original
+            medida: Unidad de medida original
+            cultivo: Nombre del cultivo (necesario para algunas conversiones)
+            
+        Returns:
+            float: Precio por quintal
+        """
+        try:
+            # Si ya está en quintales, retornar directo
+            if medida == 'Quintal':
+                return precio
+                
+            # Obtener factor de conversión
+            factor = self.conversion_factors.get(medida)
+            
+            # Si no hay factor directo pero es una medida por unidad
+            if factor is None and medida in ['Docena']:
+                if cultivo and cultivo in self.peso_por_unidad:
+                    peso_lb = self.peso_por_unidad[cultivo]
+                    if medida == 'Docena':
+                        factor = (peso_lb * 12) / 100  # 12 unidades / 100 lb por quintal
+                
+            if factor is None:
+                logger.warning(f"No se pudo convertir medida {medida} para {cultivo}")
+                return precio
+                
+            return precio / factor
+            
+        except Exception as e:
+            logger.error(f"Error convirtiendo precio: {str(e)}")
+            return precio
+    
     async def analyze_project(self, user_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Analiza un proyecto agrícola y genera reporte financiero
@@ -202,7 +264,15 @@ class FinancialModel:
                 logger.error(f"Error obteniendo precio para {cultivo}")
                 return None
                 
-            precio_actual = price_data['precio']
+            precio_original = price_data['precio']
+            medida_original = price_data.get('medida', 'Quintal')
+            
+            # Convertir precio a quintales
+            precio_quintal = self._convert_to_quintales(
+                precio_original, 
+                medida_original,
+                cultivo
+            )
             
             # 2. Calcular costos
             costos = self._get_costos_cultivo(cultivo, area)
@@ -212,13 +282,6 @@ class FinancialModel:
             rendimiento = self._get_rendimiento_esperado(cultivo, area, riego)
             
             # 4. Calcular ingresos
-            # Convertir precio por caja/unidad a precio por quintal si es necesario
-            if cultivo == 'tomate':
-                # Precio está por caja de 45-50 lb, convertir a quintales (100 lb)
-                precio_quintal = precio_actual * 2  # 2 cajas = 1 quintal aprox.
-            else:
-                precio_quintal = precio_actual
-                
             ingresos = rendimiento * precio_quintal
             
             # 5. Calcular rentabilidad
@@ -234,8 +297,9 @@ class FinancialModel:
                 'area': area,
                 'rendimiento': rendimiento,
                 'rendimiento_por_ha': rendimiento / area,
-                'precio_venta': precio_actual,
-                'unidad_precio': 'Caja (45-50 lb)' if cultivo == 'tomate' else 'Quintal',
+                'precio_original': precio_original,
+                'medida_original': medida_original,
+                'precio_quintal': precio_quintal,
                 'ingresos_totales': ingresos,
                 'costos_siembra': costos_siembra,
                 'costos_por_ha': costos_siembra / area,
