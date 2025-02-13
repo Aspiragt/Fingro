@@ -513,6 +513,63 @@ class ConversationFlow:
             logger.error(f"Error generando reporte financiero: {str(e)}")
             raise
     
+    def _format_loan_offer(self, loan_data: Dict[str, Any], financial_data: Dict[str, Any]) -> str:
+        """
+        Formatea el mensaje de oferta de préstamo
+        
+        Args:
+            loan_data: Datos del préstamo
+            financial_data: Datos del análisis financiero
+            
+        Returns:
+            str: Mensaje formateado
+        """
+        try:
+            # Extraer datos relevantes
+            monto = loan_data['monto']
+            plazo = loan_data['plazo']
+            tasa = loan_data['tasa']
+            cuota = loan_data['cuota_mensual']
+            
+            cultivo = financial_data['cultivo']
+            area = financial_data['area']
+            rendimiento = financial_data['rendimiento']
+            precio = financial_data['precio_quintal']
+            medida = financial_data['medida']
+            canal = financial_data['canal']
+            utilidad = financial_data['utilidad']
+            
+            # Calcular cuántos quintales necesita vender para pagar la cuota
+            quintales_por_cuota = cuota / precio
+            
+            # Formatear mensaje
+            mensaje = (
+                f"Don {self.user_name}, ¡tengo buenas noticias! 🎉\n\n"
+                
+                f"Basado en su cultivo de {cultivo} en {area:.1f} hectáreas:\n"
+                f"✅ Producción esperada: {rendimiento:.1f} {medida}s\n"
+                f"✅ Precio actual: Q{precio:.2f} por {medida}\n"
+                f"✅ Canal de venta: {canal}\n"
+                f"✅ Ganancia esperada: Q{utilidad:.2f}\n\n"
+                
+                f"Le podemos ofrecer un préstamo de:\n"
+                f"💰 Monto: Q{monto:.2f}\n"
+                f"⏱️ Plazo: {plazo} meses\n"
+                f"📊 Tasa anual: {tasa:.1f}%\n"
+                f"💵 Cuota mensual: Q{cuota:.2f}\n\n"
+                
+                f"Para pagar la cuota mensual necesitaría vender {quintales_por_cuota:.1f} {medida}s "
+                f"de su producción de {rendimiento:.1f} {medida}s.\n\n"
+                
+                f"¿Le interesa este préstamo? Responda 'sí' o 'no' 🤝"
+            )
+            
+            return mensaje
+            
+        except Exception as e:
+            logger.error(f"Error formateando oferta: {str(e)}")
+            return "Lo siento, hubo un error al generar la oferta de préstamo. Por favor intente más tarde."
+
     def process_show_loan(self, user_data: Dict[str, Any]) -> str:
         """
         Procesa y muestra la oferta de préstamo
@@ -544,25 +601,13 @@ class ConversationFlow:
             cuota_mensual = (monto_prestamo + (monto_prestamo * 0.12)) / 12
 
             # Formatear mensaje
-            mensaje = (
-                f"🌱 Le podemos ayudar con el financiamiento de su {analysis_data['crop']}\n\n"
-                f"💰 *Le ofrecemos un préstamo de:*\n"
-                f"   Q{monto_prestamo:,.0f}\n"
-                f"   (Para cubrir el 80% de sus costos de siembra)\n\n"
-                f"📋 *¿Cómo funciona?*\n"
-                f"   • Paga Q{cuota_mensual:,.0f} al mes\n"
-                f"   • Durante 12 meses\n"
-                f"   • Con un cargo del 1% mensual\n\n"
-                f"🎯 *¿Qué puede hacer con este préstamo?*\n"
-                f"   • Comprar semilla e insumos\n"
-                f"   • Pagar la mano de obra\n"
-                f"   • Cubrir costos de siembra\n\n"
-                f"✨ *Beneficios para usted:*\n"
-                f"   • Le entregamos el dinero en 2 días\n"
-                f"   • Sin cobros extra\n"
-                f"   • Con asesoría técnica incluida\n\n"
-                f"¿Le interesa este préstamo? Responda *SÍ* o *NO* 👇"
-            )
+            loan_data = {
+                'monto': monto_prestamo,
+                'plazo': 12,
+                'tasa': 12,
+                'cuota_mensual': cuota_mensual
+            }
+            mensaje = self._format_loan_offer(loan_data, analysis_data)
             return mensaje
 
         except Exception as e:
