@@ -36,6 +36,7 @@ class ConversationFlow:
             'ASK_LOAN': 'ask_loan',
             'SHOW_LOAN': 'show_loan',
             'GET_LOAN_RESPONSE': 'get_loan_response',
+            'CONFIRM_LOAN': 'confirm_loan',
             'DONE': 'done',
             'WITH_ADVISOR': 'with_advisor'
         }
@@ -283,7 +284,12 @@ class ConversationFlow:
             return self.STATES['DONE']  # Si respondió NO
             
         elif current_state == self.STATES['SHOW_LOAN']:
-            return self.STATES['GET_LOAN_RESPONSE']
+            return self.STATES['CONFIRM_LOAN']
+            
+        elif current_state == self.STATES['CONFIRM_LOAN']:
+            if processed_value:  # Si respondió SI
+                return self.STATES['DONE']
+            return self.STATES['ASK_LOAN']  # Si respondió NO
             
         elif current_state == self.STATES['GET_LOAN_RESPONSE']:
             return self.STATES['DONE']
@@ -445,7 +451,21 @@ class ConversationFlow:
                     logger.error(f"Error inesperado en préstamo: {str(e)}")
                     error_message = (
                         "Lo siento, ha ocurrido un error procesando su solicitud. "
-                        "Por favor intente nuevamente."
+                        "Por favor intente de nuevo."
+                    )
+                    await self.whatsapp.send_message(phone_number, error_message)
+                    # Regresar a ASK_LOAN
+                    user_data['state'] = self.STATES['ASK_LOAN']
+                
+            elif next_state == self.STATES['CONFIRM_LOAN']:
+                try:
+                    confirm_message = self.process_confirm_loan()
+                    await self.whatsapp.send_message(phone_number, confirm_message)
+                except Exception as e:
+                    logger.error(f"Error confirmando préstamo: {str(e)}")
+                    error_message = (
+                        "Lo siento, ha ocurrido un error procesando su solicitud. "
+                        "Por favor intente de nuevo."
                     )
                     await self.whatsapp.send_message(phone_number, error_message)
                     # Regresar a ASK_LOAN
@@ -453,7 +473,7 @@ class ConversationFlow:
                 
             elif next_state == self.STATES['DONE']:
                 if current_state == self.STATES['GET_LOAN_RESPONSE']:
-                    confirm_message = self.process_confirm_loan()
+                    confirm_message = self.process_end_conversation(user_data['data'])
                     await self.whatsapp.send_message(phone_number, confirm_message)
                 else:
                     await self.whatsapp.send_message(
@@ -466,7 +486,7 @@ class ConversationFlow:
             await firebase_manager.update_user_state(phone_number, user_data)
             
             # Si no es estado especial, mostrar siguiente mensaje
-            if next_state not in [self.STATES['SHOW_LOAN'], self.STATES['DONE']]:
+            if next_state not in [self.STATES['SHOW_LOAN'], self.STATES['CONFIRM_LOAN'], self.STATES['DONE']]:
                 next_message = self.get_next_message(next_state, user_data)
                 await self.whatsapp.send_message(phone_number, next_message)
             
@@ -714,7 +734,7 @@ class ConversationFlow:
             ingreso_str = format_number(ingreso)
             
             # Actualizar estado
-            user_data['state'] = self.STATES['GET_LOAN_RESPONSE']
+            user_data['state'] = self.STATES['CONFIRM_LOAN']
             user_data['loan_amount'] = monto
             
             # Construir mensaje
