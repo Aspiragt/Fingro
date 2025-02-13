@@ -3,7 +3,7 @@ Cliente para obtener precios del MAGA usando datos del archivo JSON
 """
 import json
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 import os
 from app.utils.text import normalize_text, get_crop_variations
@@ -61,11 +61,15 @@ class MAGAPreciosClient:
         'brócolis': 'Brócoli, mediano, de primera'
     }
     
-    def __init__(self):
-        """Inicializa el cliente de MAGA Precios"""
+    def __init__(self, data_file: str = 'maga_data.json'):
+        """
+        Inicializa el cliente
         
-        # Cargar precios del JSON
-        self.maga_prices = self._load_prices()
+        Args:
+            data_file: Ruta al archivo de datos
+        """
+        self.data_file = data_file
+        self._load_data()
         
         # Cultivos que típicamente se exportan
         self.export_crops = {
@@ -85,15 +89,140 @@ class MAGAPreciosClient:
             CanalComercializacion.MERCADO_LOCAL: 0.8,  # 20% menos
         }
     
-    def _load_prices(self):
+    def _load_data(self):
+        """Carga datos del archivo JSON"""
         try:
-            json_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'maga_data.json')
-            with open(json_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
+            with open(self.data_file, 'r') as f:
+                self.data = json.load(f)
         except Exception as e:
-            logger.error(f"Error cargando precios de MAGA: {str(e)}")
-            return []
-    
+            logger.error(f"Error cargando datos: {str(e)}")
+            self.data = {
+                'cultivos': {},
+                'precios': {},
+                'costos': {}
+            }
+            
+    def get_costos_cultivo(self, cultivo: str) -> Dict[str, Any]:
+        """
+        Obtiene costos de producción para un cultivo
+        
+        Args:
+            cultivo: Nombre del cultivo
+            
+        Returns:
+            dict: Datos de costos o None si no existe
+        """
+        try:
+            cultivo = normalize_text(cultivo)
+            
+            # Datos por cultivo
+            costos_base = {
+                'maiz': {
+                    'costo_por_hectarea': 15000,
+                    'rendimiento_por_hectarea': 80  # quintales
+                },
+                'frijol': {
+                    'costo_por_hectarea': 18000,
+                    'rendimiento_por_hectarea': 35
+                },
+                'cafe': {
+                    'costo_por_hectarea': 25000,
+                    'rendimiento_por_hectarea': 40
+                },
+                'tomate': {
+                    'costo_por_hectarea': 35000,
+                    'rendimiento_por_hectarea': 2000
+                },
+                'papa': {
+                    'costo_por_hectarea': 30000,
+                    'rendimiento_por_hectarea': 250
+                }
+            }
+            
+            return costos_base.get(cultivo, None)
+            
+        except Exception as e:
+            logger.error(f"Error obteniendo costos: {str(e)}")
+            return None
+            
+    def get_precios_cultivo(self, cultivo: str, canal: str = 'mayorista') -> Dict[str, Any]:
+        """
+        Obtiene precios actuales para un cultivo
+        
+        Args:
+            cultivo: Nombre del cultivo
+            canal: Canal de comercialización
+            
+        Returns:
+            dict: Datos de precios o None si no existe
+        """
+        try:
+            cultivo = normalize_text(cultivo)
+            canal = normalize_text(canal)
+            
+            # Precios base por quintal
+            precios_base = {
+                'maiz': 200,
+                'frijol': 500,
+                'cafe': 1000,
+                'tomate': 300,
+                'papa': 250
+            }
+            
+            # Factores por canal
+            factores_canal = {
+                'mercado_local': 0.9,  # 10% menos que mayorista
+                'mayorista': 1.0,  # Precio base
+                'cooperativa': 1.1,  # 10% más que mayorista
+                'exportacion': 1.3  # 30% más que mayorista
+            }
+            
+            # Calcular precio
+            precio_base = precios_base.get(cultivo)
+            if not precio_base:
+                return None
+                
+            factor = factores_canal.get(canal, 1.0)
+            precio_actual = precio_base * factor
+            
+            return {
+                'precio_actual': precio_actual,
+                'precio_base': precio_base,
+                'tendencia': 'estable'
+            }
+            
+        except Exception as e:
+            logger.error(f"Error obteniendo precios: {str(e)}")
+            return None
+            
+    def get_cultivos_region(self, region: str) -> List[str]:
+        """
+        Obtiene cultivos recomendados para una región
+        
+        Args:
+            region: Nombre de la región o departamento
+            
+        Returns:
+            list: Lista de cultivos recomendados
+        """
+        try:
+            region = normalize_text(region)
+            
+            # Cultivos por región
+            cultivos_region = {
+                'guatemala': ['maiz', 'frijol', 'tomate'],
+                'peten': ['maiz', 'frijol'],
+                'alta_verapaz': ['cafe', 'cardamomo'],
+                'escuintla': ['caña', 'platano'],
+                'san_marcos': ['cafe', 'papa']
+            }
+            
+            return cultivos_region.get(region, ['maiz', 'frijol'])  # Cultivos default
+            
+        except Exception as e:
+            logger.error(f"Error obteniendo cultivos: {str(e)}")
+            return ['maiz', 'frijol']  # Cultivos default
+            
     async def get_crop_price(self, crop_name: str) -> Optional[Dict[str, Any]]:
         """
         Obtiene el precio más reciente de un cultivo
@@ -112,7 +241,7 @@ class MAGAPreciosClient:
                 product_norm = normalize_text(product_name)
                 
                 # Buscar precio
-                for precio in self.maga_prices:
+                for precio in self.data['precios']:
                     if normalize_text(precio['Producto']) == product_norm:
                         return {
                             'nombre': precio['Producto'],
@@ -129,7 +258,7 @@ class MAGAPreciosClient:
                     product_name = self.CROP_MAPPING[var_norm]
                     product_norm = normalize_text(product_name)
                     
-                    for precio in self.maga_prices:
+                    for precio in self.data['precios']:
                         if normalize_text(precio['Producto']) == product_norm:
                             return {
                                 'nombre': precio['Producto'],
