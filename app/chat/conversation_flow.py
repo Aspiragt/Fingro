@@ -8,7 +8,7 @@ from app.views.financial_report import report_generator
 from app.external_apis.maga_precios import CanalComercializacion, maga_precios_client
 from app.services.whatsapp_service import WhatsAppService
 from app.database.firebase import firebase_manager
-from app.utils.text import normalize_text, parse_area, format_number, parse_yes_no
+from app.utils.text import normalize_text, parse_area, format_number, parse_yes_no, parse_channel
 
 logger = logging.getLogger(__name__)
 
@@ -767,23 +767,83 @@ class ConversationFlow:
             logger.error(f"Error procesando área: {str(e)}")
             return "Hubo un error. Por favor intente de nuevo con el área que está sembrando 🌱"
 
-    def ask_channel(self, user_data: Dict[str, Any]) -> str:
-        """Pregunta por el canal de comercialización"""
-        cultivo = user_data.get('crop', '').lower()
-        area = user_data.get('area_original', 0)
-        unit = user_data.get('area_unit', 'hectárea')
+    def process_channel(self, user_data: Dict[str, Any], response: str) -> str:
+        """
+        Procesa la respuesta del canal de comercialización
         
+        Args:
+            user_data: Datos del usuario
+            response: Respuesta del usuario
+            
+        Returns:
+            str: Mensaje de respuesta
+        """
+        try:
+            # Validar canal
+            channel = parse_channel(response)
+            if not channel:
+                return (
+                    "Por favor escoja una opción válida:\n\n"
+                    "1. Mercado local 🏪\n"
+                    "2. Mayorista 🚛\n"
+                    "3. Cooperativa 🤝\n"
+                    "4. Exportación ✈️"
+                )
+            
+            # Guardar canal
+            user_data['channel'] = channel
+            
+            # Verificar si el cultivo es típicamente de exportación
+            cultivo = normalize_text(user_data.get('crop', ''))
+            if channel == 'exportacion' and cultivo not in maga_precios_client.export_crops:
+                return (
+                    f"El {cultivo} no es común para exportación 🤔\n"
+                    f"¿Está seguro que quiere exportar? Escoja una opción:\n\n"
+                    f"1. Sí, tengo comprador para exportación\n"
+                    f"2. No, mejor escojo otro canal"
+                )
+            
+            # Siguiente pregunta
+            return self.ask_irrigation(user_data)
+            
+        except Exception as e:
+            logger.error(f"Error procesando canal: {str(e)}")
+            return "Hubo un error. Por favor intente de nuevo 🙏"
+
+    def ask_irrigation(self, user_data: Dict[str, Any]) -> str:
+        """Pregunta por el sistema de riego"""
         # Actualizar estado
-        user_data['state'] = self.STATES['GET_CHANNEL']
+        user_data['state'] = self.STATES['GET_IRRIGATION']
+        
+        cultivo = user_data.get('crop', '').lower()
+        channel = user_data.get('channel', '')
+        
+        # Mapeo de canales a emojis
+        channel_emojis = {
+            'mercado_local': '🏪',
+            'mayorista': '🚛',
+            'cooperativa': '🤝',
+            'exportacion': '✈️'
+        }
+        
+        # Mapeo de canales a nombres amigables
+        channel_names = {
+            'mercado_local': 'mercado local',
+            'mayorista': 'mayorista',
+            'cooperativa': 'cooperativa',
+            'exportacion': 'exportación'
+        }
+        
+        emoji = channel_emojis.get(channel, '')
+        channel_name = channel_names.get(channel, channel)
         
         return (
-            f"Perfecto. Va a sembrar {format_number(area)} {unit}{'s' if area != 1 else ''} "
-            f"de {cultivo} 🌱\n\n"
-            f"¿Cómo piensa vender su cosecha? Escoja una opción:\n\n"
-            f"1. Mercado local\n"
-            f"2. Mayorista\n"
-            f"3. Cooperativa\n"
-            f"4. Exportación"
+            f"Perfecto. Venderá su {cultivo} en {channel_name} {emoji}\n\n"
+            f"¿Qué sistema de riego utiliza? Escoja una opción:\n\n"
+            f"1. Goteo 💧\n"
+            f"2. Aspersión 💦\n"
+            f"3. Gravedad 🌊\n"
+            f"4. Ninguno (depende de lluvia) 🌧️"
         )
 
 # Instancia global

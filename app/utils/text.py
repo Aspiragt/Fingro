@@ -325,3 +325,57 @@ def parse_yes_no(text: str) -> Optional[bool]:
         return False
     else:
         return None
+
+def parse_channel(text: str) -> Optional[str]:
+    """
+    Parsea un canal de comercialización
+    
+    Args:
+        text: Texto a parsear
+        
+    Returns:
+        str: Canal normalizado o None si no es válido
+        
+    Examples:
+        >>> parse_channel("1")
+        'mercado_local'
+        >>> parse_channel("cooperativa")
+        'cooperativa'
+        >>> parse_channel("mayorista")
+        'mayorista'
+    """
+    if not text:
+        return None
+        
+    # Normalizar texto
+    text = normalize_text(text)
+    
+    # Mapeo de respuestas válidas
+    channel_map = {
+        # Por número
+        '1': 'mercado_local',
+        '2': 'mayorista',
+        '3': 'cooperativa',
+        '4': 'exportacion',
+        
+        # Por texto
+        'mercado': 'mercado_local',
+        'mercado local': 'mercado_local',
+        'local': 'mercado_local',
+        'plaza': 'mercado_local',
+        
+        'mayorista': 'mayorista',
+        'mayoreo': 'mayorista',
+        'distribuidor': 'mayorista',
+        
+        'cooperativa': 'cooperativa',
+        'coop': 'cooperativa',
+        'asociacion': 'cooperativa',
+        
+        'exportacion': 'exportacion',
+        'exportación': 'exportacion',
+        'export': 'exportacion',
+        'internacional': 'exportacion'
+    }
+    
+    return channel_map.get(text)
