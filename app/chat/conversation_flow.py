@@ -756,7 +756,9 @@ class ConversationFlow:
                 cuota_maxima = ganancia / 12 * 0.4  # 40% de la ganancia mensual
             else:
                 # Para cultivos anuales, pago único al cosechar
-                cuota = monto * (1 + tasa_mensual * plazo_meses)
+                # Interés simple: monto * (1 + tasa * plazo)
+                tasa_total = tasa_mensual * plazo_meses
+                cuota = monto * (1 + tasa_total)
             
             # Si la cuota es mayor que el máximo, ajustar el monto
             if cuota > cuota_maxima:
@@ -765,7 +767,9 @@ class ConversationFlow:
                     monto = cuota_maxima * ((1 + tasa_mensual)**plazo_meses - 1) / (tasa_mensual * (1 + tasa_mensual)**plazo_meses)
                 else:
                     # Despejar P de la fórmula de pago único
-                    monto = cuota_maxima / (1 + tasa_mensual * plazo_meses)
+                    # Si P * (1 + r*t) = C, entonces P = C / (1 + r*t)
+                    tasa_total = tasa_mensual * plazo_meses
+                    monto = cuota_maxima / (1 + tasa_total)
             
             # Guardar términos del préstamo
             user_data['loan_terms'] = {
