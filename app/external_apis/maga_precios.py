@@ -103,49 +103,105 @@ class MAGAPreciosClient:
             }
             
     def get_costos_cultivo(self, cultivo: str) -> Dict[str, Any]:
-        """
-        Obtiene costos de producción para un cultivo
-        
-        Args:
-            cultivo: Nombre del cultivo
-            
-        Returns:
-            dict: Datos de costos o None si no existe
-        """
-        try:
-            cultivo = normalize_text(cultivo)
-            
-            # Datos por cultivo
-            costos_base = {
-                'maiz': {
-                    'costo_por_hectarea': 15000,
-                    'rendimiento_por_hectarea': 80  # quintales
+        """Obtiene costos de producción para un cultivo"""
+        costos = {
+            'frijol': {
+                'costos_fijos': {
+                    'preparacion_tierra': 800,    # Maquinaria/herramientas
+                    'asistencia_tecnica': 500,    # Por ciclo
+                    'administracion': 400,        # Por ciclo
+                    'imprevistos': 300           # Por ciclo
                 },
-                'frijol': {
-                    'costo_por_hectarea': 18000,
-                    'rendimiento_por_hectarea': 35
+                'costos_por_hectarea': {
+                    'semilla': 1200,             # 60 lb/ha a Q20/lb
+                    'fertilizantes': 1500,       # NPK + foliar
+                    'pesticidas': 800,           # Herbicidas + insecticidas
+                    'mano_obra': 2000,           # Siembra, fumigación, cosecha
+                    'riego': {
+                        'temporal': 0,
+                        'gravedad': 500,
+                        'aspersion': 800,
+                        'goteo': 1200
+                    }
                 },
-                'cafe': {
-                    'costo_por_hectarea': 25000,
-                    'rendimiento_por_hectarea': 40
+                'rendimiento_por_hectarea': 35,  # quintales/ha
+                'merma': 0.05                    # 5% pérdida
+            },
+            'maiz': {
+                'costos_fijos': {
+                    'preparacion_tierra': 1000,
+                    'asistencia_tecnica': 500,
+                    'administracion': 400,
+                    'imprevistos': 300
                 },
-                'tomate': {
-                    'costo_por_hectarea': 35000,
-                    'rendimiento_por_hectarea': 2000
+                'costos_por_hectarea': {
+                    'semilla': 1500,             # Semilla certificada
+                    'fertilizantes': 2000,
+                    'pesticidas': 1000,
+                    'mano_obra': 2500,
+                    'riego': {
+                        'temporal': 0,
+                        'gravedad': 600,
+                        'aspersion': 900,
+                        'goteo': 1400
+                    }
                 },
-                'papa': {
-                    'costo_por_hectarea': 30000,
-                    'rendimiento_por_hectarea': 250
-                }
+                'rendimiento_por_hectarea': 45,
+                'merma': 0.08
             }
-            
-            return costos_base.get(cultivo, None)
-            
-        except Exception as e:
-            logger.error(f"Error obteniendo costos: {str(e)}")
-            return None
-            
-    def get_precios_cultivo(self, cultivo: str, canal: str = 'mayorista') -> Dict[str, Any]:
+        }
+        return costos.get(cultivo, {})
+    
+    def calcular_costos_totales(self, cultivo: str, area: float, irrigation: str) -> Dict[str, float]:
+        """Calcula costos totales considerando fijos y variables"""
+        costos = self.get_costos_cultivo(cultivo)
+        if not costos:
+            return {}
+
+        # Costos fijos (no dependen del área)
+        costos_fijos = sum(costos.get('costos_fijos', {}).values())
+
+        # Costos por hectárea
+        costos_ha = costos.get('costos_por_hectarea', {})
+        costo_riego = costos_ha.get('riego', {}).get(irrigation, 0)
+        
+        # Suma de costos por hectárea sin riego
+        costos_ha_sin_riego = sum(v for k, v in costos_ha.items() if k != 'riego')
+        
+        # Costos variables totales (dependen del área)
+        costos_variables = (costos_ha_sin_riego + costo_riego) * area
+
+        return {
+            'costos_fijos': costos_fijos,
+            'costos_variables': costos_variables,
+            'costos_totales': costos_fijos + costos_variables
+        }
+    
+    def get_precios_cultivo(self, cultivo: str, channel: str = 'mercado_local') -> Dict[str, float]:
+        """Obtiene precios actuales por canal de venta"""
+        precios_base = {
+            'frijol': 550,  # Q/quintal
+            'maiz': 450     # Q/quintal
+        }
+        
+        # Factores por canal
+        factores_canal = {
+            'mercado_local': 1.0,
+            'cooperativa': 1.15,
+            'mayorista': 1.2,
+            'exportacion': 1.3
+        }
+        
+        precio_base = precios_base.get(cultivo, 0)
+        factor = factores_canal.get(channel, 1.0)
+        
+        return {
+            'precio_actual': precio_base * factor,
+            'precio_minimo': precio_base * 0.8,
+            'precio_maximo': precio_base * 1.4
+        }
+    
+    def get_precios_cultivo_original(self, cultivo: str, canal: str = 'mayorista') -> Dict[str, Any]:
         """
         Obtiene precios actuales para un cultivo
         

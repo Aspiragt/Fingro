@@ -703,19 +703,28 @@ class ConversationFlow:
             # Obtener datos básicos
             cultivo = normalize_text(user_data.get('crop', ''))
             ciclo = self.get_crop_cycle(cultivo)
+            area = float(user_data.get('area', 0))
             irrigation = user_data.get('irrigation', '')
             channel = user_data.get('channel', '')
             
-            # Obtener datos financieros
-            financial = user_data.get('financial_analysis', {})
-            costos = financial.get('costos', 0)
-            ingresos = financial.get('ingresos', 0)
-            ganancia = financial.get('ganancia', 0)
-            
-            # Validar que haya ganancia
-            if ganancia <= 0:
+            # Calcular costos reales
+            costos = maga_precios_client.calcular_costos_totales(cultivo, area, irrigation)
+            if not costos:
                 return 0
                 
+            costos_totales = costos['costos_totales']
+            
+            # Obtener precios y calcular ingresos
+            precios = maga_precios_client.get_precios_cultivo(cultivo, channel)
+            if not precios:
+                return 0
+                
+            # Calcular producción e ingresos
+            rendimiento_ha = ciclo.get('rendimiento_por_hectarea', 35)
+            produccion = rendimiento_ha * area
+            precio_venta = precios['precio_actual']
+            ingresos = produccion * precio_venta
+            
             # Determinar plazo basado en ciclo
             if ciclo['tipo'] == 'permanente':
                 # Para cultivos permanentes, préstamo más largo
@@ -729,13 +738,9 @@ class ConversationFlow:
                 max_ingresos = 0.6  # 60% de ingresos
             
             # Calcular montos base
-            monto_por_costos = costos * max_costos
+            monto_por_costos = costos_totales * max_costos
             monto_por_ingresos = ingresos * max_ingresos
-            monto_base = min(monto_por_costos, monto_por_ingresos)
-            
-            # Aplicar factores de riesgo
-            factores = self.get_risk_factors(irrigation, channel)
-            monto = monto_base * factores['riego'] * factores['canal']
+            monto = min(monto_por_costos, monto_por_ingresos)
             
             # Ajustar tasa según plazo
             if plazo_meses <= 6:
@@ -745,20 +750,20 @@ class ConversationFlow:
             else:
                 tasa_mensual = 0.02  # 2% mensual para largo plazo
             
-            # La cuota no puede ser más del 60% del ingreso por cosecha
-            ingreso_por_cosecha = ingresos / ciclo['cosechas_por_año']
-            cuota_maxima = ingreso_por_cosecha * 0.6
-            
             # Calcular cuota
             if ciclo['tipo'] == 'permanente':
                 # Para cultivos permanentes, pagos mensuales
                 cuota = monto * (tasa_mensual * (1 + tasa_mensual)**plazo_meses) / ((1 + tasa_mensual)**plazo_meses - 1)
-                cuota_maxima = ganancia / 12 * 0.4  # 40% de la ganancia mensual
+                # Cuota no puede ser más del 40% de la ganancia mensual
+                ganancia_mensual = (ingresos - costos_totales) / 12
+                cuota_maxima = ganancia_mensual * 0.4
             else:
                 # Para cultivos anuales, pago único al cosechar
-                # Interés simple: monto * (1 + tasa * plazo)
                 tasa_total = tasa_mensual * plazo_meses
                 cuota = monto * (1 + tasa_total)
+                # Cuota no puede ser más del 60% del ingreso por cosecha
+                ingreso_por_cosecha = ingresos / ciclo['cosechas_por_año']
+                cuota_maxima = ingreso_por_cosecha * 0.6
             
             # Si la cuota es mayor que el máximo, ajustar el monto
             if cuota > cuota_maxima:
@@ -767,11 +772,9 @@ class ConversationFlow:
                     monto = cuota_maxima * ((1 + tasa_mensual)**plazo_meses - 1) / (tasa_mensual * (1 + tasa_mensual)**plazo_meses)
                 else:
                     # Despejar P de la fórmula de pago único
-                    # Si P * (1 + r*t) = C, entonces P = C / (1 + r*t)
-                    tasa_total = tasa_mensual * plazo_meses
                     monto = cuota_maxima / (1 + tasa_total)
             
-            # Guardar términos del préstamo
+            # Guardar términos del préstamo y análisis financiero
             user_data['loan_terms'] = {
                 'monto': monto,
                 'plazo_meses': plazo_meses,
@@ -779,6 +782,13 @@ class ConversationFlow:
                 'cuota': cuota,
                 'ciclo': ciclo,
                 'tipo_pago': 'mensual' if ciclo['tipo'] == 'permanente' else 'cosecha'
+            }
+            
+            user_data['financial_analysis'] = {
+                'costos': costos_totales,
+                'ingresos': ingresos,
+                'ganancia': ingresos - costos_totales,
+                'rendimiento': produccion
             }
             
             # Redondear a miles
