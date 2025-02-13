@@ -36,7 +36,8 @@ class ConversationFlow:
             'ASK_LOAN': 'ask_loan',
             'SHOW_LOAN': 'show_loan',
             'CONFIRM_LOAN': 'confirm_loan',
-            'DONE': 'done'
+            'DONE': 'done',
+            'WITH_ADVISOR': 'with_advisor'
         }
         
         # Opciones válidas
@@ -1013,6 +1014,204 @@ class ConversationFlow:
         except Exception as e:
             logger.error(f"Error generando oferta: {str(e)}")
             return "Lo siento, hubo un error al generar su oferta 😔"
+
+    def handle_error(self, user_data: Dict[str, Any], error: Exception, context: str) -> str:
+        """
+        Maneja errores de forma amigable y ofrece alternativas
+        
+        Args:
+            user_data: Datos del usuario
+            error: Error ocurrido
+            context: Contexto del error (cultivo, area, etc)
+            
+        Returns:
+            str: Mensaje de error amigable
+        """
+        # Registrar error para debugging
+        logger.error(f"Error en {context}: {str(error)}")
+        
+        # Mensajes por contexto
+        error_messages = {
+            'cultivo': (
+                "No encontré ese cultivo 🤔\n\n"
+                "Algunos cultivos populares son:\n"
+                "- Maíz 🌽\n"
+                "- Frijol 🫘\n"
+                "- Café ☕\n"
+                "- Tomate 🍅\n\n"
+                "¿Qué está sembrando?"
+            ),
+            'area': (
+                "No pude entender el área 🤔\n\n"
+                "Por favor escriba el número y la unidad, por ejemplo:\n"
+                "- 2 manzanas\n"
+                "- 1.5 hectáreas\n"
+                "- 3 mz\n"
+                "- 2.5 ha"
+            ),
+            'channel': (
+                "Por favor escoja una opción válida:\n\n"
+                "1. Mercado local 🏪\n"
+                "2. Mayorista 🚛\n"
+                "3. Cooperativa 🤝\n"
+                "4. Exportación ✈️"
+            ),
+            'irrigation': (
+                "Por favor escoja una opción válida:\n\n"
+                "1. Goteo 💧\n"
+                "2. Aspersión 💦\n"
+                "3. Gravedad 🌊\n"
+                "4. Ninguno (depende de lluvia) 🌧️"
+            ),
+            'location': (
+                "Por favor ingrese un departamento válido.\n"
+                "Por ejemplo: Guatemala, Escuintla, Petén, etc.\n\n"
+                "¿En qué departamento está su terreno? 📍"
+            ),
+            'loan': (
+                "Lo siento, hubo un problema al calcular su préstamo 😔\n\n"
+                "¿Le gustaría:\n"
+                "1. Intentar con otros datos\n"
+                "2. Hablar con un asesor\n"
+                "3. Terminar la consulta"
+            )
+        }
+        
+        # Mensaje por defecto
+        default_message = (
+            "Lo siento, hubo un error 😔\n\n"
+            "Puede escribir:\n"
+            "- 'inicio' para empezar de nuevo\n"
+            "- 'ayuda' para ver las opciones\n"
+            "- 'asesor' para hablar con alguien"
+        )
+        
+        # Obtener mensaje específico o default
+        message = error_messages.get(context, default_message)
+        
+        # Si es un error crítico, resetear estado
+        if context in ['loan', 'critical']:
+            user_data['state'] = self.STATES['START']
+        
+        return message
+    
+    def process_message(self, user_data: Dict[str, Any], message: str) -> str:
+        """
+        Procesa un mensaje del usuario
+        
+        Args:
+            user_data: Datos del usuario
+            message: Mensaje del usuario
+            
+        Returns:
+            str: Respuesta al usuario
+        """
+        try:
+            # Comandos especiales
+            if message.lower() == 'inicio':
+                user_data.clear()
+                return self.start_conversation()
+                
+            if message.lower() == 'ayuda':
+                return self.show_help(user_data)
+                
+            if message.lower() == 'asesor':
+                return self.connect_to_advisor(user_data)
+            
+            # Procesar según estado
+            current_state = user_data.get('state', self.STATES['START'])
+            
+            if current_state == self.STATES['START']:
+                return self.process_crop(user_data, message)
+                
+            elif current_state == self.STATES['GET_AREA']:
+                return self.process_area(user_data, message)
+                
+            elif current_state == self.STATES['GET_CHANNEL']:
+                return self.process_channel(user_data, message)
+                
+            elif current_state == self.STATES['GET_IRRIGATION']:
+                return self.process_irrigation(user_data, message)
+                
+            elif current_state == self.STATES['GET_LOCATION']:
+                return self.process_location(user_data, message)
+                
+            elif current_state == self.STATES['GET_LOAN_RESPONSE']:
+                return self.process_loan_response(user_data, message)
+                
+            else:
+                return self.handle_error(user_data, Exception("Estado inválido"), "critical")
+                
+        except Exception as e:
+            return self.handle_error(user_data, e, "critical")
+    
+    def show_help(self, user_data: Dict[str, Any]) -> str:
+        """Muestra mensaje de ayuda"""
+        current_state = user_data.get('state', self.STATES['START'])
+        
+        # Mensajes de ayuda por estado
+        help_messages = {
+            self.STATES['START']: (
+                "¡Bienvenido a FinGro! 👋\n\n"
+                "Le ayudo a conseguir financiamiento para su siembra 🌱\n\n"
+                "Para empezar, dígame qué cultivo está sembrando."
+            ),
+            self.STATES['GET_AREA']: (
+                "Necesito saber el tamaño de su terreno.\n\n"
+                "Puede usar:\n"
+                "- Manzanas (2 manzanas)\n"
+                "- Hectáreas (1.5 ha)\n"
+                "- Cuerdas (3 cuerdas)"
+            ),
+            self.STATES['GET_CHANNEL']: (
+                "¿Dónde piensa vender su cosecha?\n\n"
+                "1. Mercado local - En su comunidad\n"
+                "2. Mayorista - A distribuidores\n"
+                "3. Cooperativa - Con otros productores\n"
+                "4. Exportación - A otros países"
+            ),
+            self.STATES['GET_IRRIGATION']: (
+                "¿Cómo riega sus cultivos?\n\n"
+                "1. Goteo - Ahorra agua\n"
+                "2. Aspersión - Como lluvia\n"
+                "3. Gravedad - Por canales\n"
+                "4. Ninguno - Solo lluvia"
+            ),
+            self.STATES['GET_LOCATION']: (
+                "¿En qué departamento está su terreno?\n\n"
+                "Por ejemplo:\n"
+                "- Guatemala\n"
+                "- Escuintla\n"
+                "- Alta Verapaz"
+            ),
+            self.STATES['GET_LOAN_RESPONSE']: (
+                "¿Desea continuar con la solicitud?\n\n"
+                "- SI para continuar\n"
+                "- NO para terminar\n\n"
+                "Puede escribir 'inicio' para empezar de nuevo"
+            )
+        }
+        
+        return help_messages.get(current_state, (
+            "Comandos disponibles:\n"
+            "- 'inicio' para empezar de nuevo\n"
+            "- 'ayuda' para ver opciones\n"
+            "- 'asesor' para hablar con alguien"
+        ))
+    
+    def connect_to_advisor(self, user_data: Dict[str, Any]) -> str:
+        """Conecta con un asesor"""
+        # Guardar estado para retomar después
+        user_data['previous_state'] = user_data.get('state')
+        user_data['state'] = self.STATES['WITH_ADVISOR']
+        
+        return (
+            "¡Con gusto le comunico con un asesor! 👨‍💼\n\n"
+            "En un momento le atenderán. Mientras tanto:\n"
+            "- Puede seguir escribiendo mensajes\n"
+            "- El asesor verá todo el historial\n"
+            "- Escriba 'fin' para volver al bot"
+        )
 
 # Instancia global
 conversation_flow = ConversationFlow(WhatsAppService())
