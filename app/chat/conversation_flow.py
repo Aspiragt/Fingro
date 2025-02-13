@@ -212,11 +212,8 @@ class ConversationFlow:
             
         elif current_state in [self.STATES['ASK_LOAN'], self.STATES['CONFIRM_LOAN']]:
             # Validar respuestas SI/NO
-            user_input = user_input.lower().strip()
-            if user_input.startswith(('si', 'sí', 's')):
-                return True, True
-            elif user_input.startswith(('no', 'n')):
-                return True, False
+            if self.validate_yes_no(user_input):
+                return True, self.get_yes_no(user_input)
             return False, None
             
         return False, None
@@ -527,21 +524,24 @@ class ConversationFlow:
             str: Mensaje con oferta de préstamo
         """
         try:
-            if 'score_data' not in user_data:
-                raise ValueError("No hay datos de análisis")
+            if 'score_data' not in user_data or user_data['score_data'] is None:
+                return "❌ Lo siento, no pudimos analizar su proyecto en este momento. Por favor intente de nuevo."
 
             score_data = user_data['score_data']
             analysis_data = user_data['analysis']
 
+            # Validar que tenemos los datos necesarios
+            required_fields = ['costos_siembra', 'rendimiento_por_ha', 'cultivo']
+            if not all(field in score_data for field in required_fields):
+                logger.error(f"Faltan campos en score_data: {score_data}")
+                return "❌ Lo siento, hubo un error en el análisis. Por favor intente de nuevo."
+
             # Calcular monto del préstamo (80% del costo total)
-            costo_total = score_data.get('costos_siembra', 0)
+            costo_total = score_data['costos_siembra']
             monto_prestamo = costo_total * 0.8
             
             # Calcular cuota mensual (principal + intereses simple)
             cuota_mensual = (monto_prestamo + (monto_prestamo * 0.12)) / 12
-            
-            # Convertir hectáreas a cuerdas (1 hectárea = 22.5 cuerdas aprox.)
-            area_cuerdas = float(analysis_data.get('area', 0)) * 22.5
 
             # Formatear mensaje
             mensaje = (
@@ -567,7 +567,27 @@ class ConversationFlow:
 
         except Exception as e:
             logger.error(f"Error procesando préstamo: {str(e)}")
-            raise ValueError(f"Error: {str(e)}")
+            return "❌ Lo siento, hubo un error procesando su solicitud. Por favor intente de nuevo."
+
+    def validate_yes_no(self, response: str) -> bool:
+        """Valida respuestas sí/no de forma flexible"""
+        valid_yes = ['si', 'sí', 'SI', 'SÍ', 'Si', 'Sí', 's', 'S', 'yes', 'YES']
+        valid_no = ['no', 'NO', 'No', 'n', 'N']
+        
+        # Limpiar respuesta
+        clean_response = response.strip().lower()
+        
+        return clean_response in valid_yes or clean_response in valid_no
+
+    def get_yes_no(self, response: str) -> Optional[bool]:
+        """Obtiene valor booleano de respuesta sí/no"""
+        if not self.validate_yes_no(response):
+            return None
+            
+        valid_yes = ['si', 'sí', 'SI', 'SÍ', 'Si', 'Sí', 's', 'S', 'yes', 'YES']
+        clean_response = response.strip().lower()
+        
+        return clean_response in valid_yes
 
     def process_confirm_loan(self) -> str:
         """
