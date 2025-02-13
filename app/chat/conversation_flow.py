@@ -8,7 +8,7 @@ from app.views.financial_report import report_generator
 from app.external_apis.maga_precios import CanalComercializacion, maga_precios_client
 from app.services.whatsapp_service import WhatsAppService
 from app.database.firebase import firebase_manager
-from app.utils.text import normalize_text, parse_area, format_number, parse_yes_no, parse_channel, parse_irrigation, parse_department
+from app.utils.text import normalize_text, parse_area, format_number, parse_channel, parse_irrigation, parse_department
 
 logger = logging.getLogger(__name__)
 
@@ -772,8 +772,8 @@ class ConversationFlow:
         response = response.lower().strip()
         
         # Lista de respuestas válidas
-        valid_yes = ['si', 'sí', 's', 'yes', 'y']
-        valid_no = ['no', 'n']
+        valid_yes = ['si', 'sí', 's', 'yes', 'y', '1']
+        valid_no = ['no', 'n', '2']
         
         return response in valid_yes or response in valid_no
 
@@ -782,7 +782,7 @@ class ConversationFlow:
         if not self.validate_yes_no(response):
             return None
             
-        valid_yes = ['si', 'sí', 's', 'yes', 'y']
+        valid_yes = ['si', 'sí', 's', 'yes', 'y', '1']
         clean_response = response.strip().lower()
         
         return clean_response in valid_yes
@@ -1330,3 +1330,42 @@ class ConversationFlow:
 
 # Instancia global
 conversation_flow = ConversationFlow(WhatsAppService())
+
+def parse_yes_no(message: str) -> Optional[bool]:
+    """
+    Valida una respuesta si/no
+    
+    Args:
+        message: Mensaje a validar
+        
+    Returns:
+        bool: True si es sí, False si es no, None si es inválido
+    """
+    # Normalizar mensaje
+    message = normalize_text(message)
+    
+    # Validar respuesta
+    if message in ['si', 'sí', 's', 'yes', 'y', '1']:
+        return True
+        
+    if message in ['no', 'n', '2']:
+        return False
+        
+    return None
+
+def process_loan_response(user_data: Dict[str, Any], message: str) -> bool:
+    """Procesa la respuesta a la oferta de préstamo"""
+    try:
+        # Validar respuesta
+        result = parse_yes_no(message)
+        if result is None:
+            raise ValueError("Por favor responda SI o NO")
+            
+        if result:
+            user_data['loan_approved'] = True
+            
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error procesando respuesta de préstamo: {str(e)}")
+        raise
