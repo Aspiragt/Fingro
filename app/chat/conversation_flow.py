@@ -640,60 +640,48 @@ class ConversationFlow:
         except Exception as e:
             return self.handle_error(user_data, e, "loan")
 
-    def calculate_loan_amount(self, user_data: Dict[str, Any]) -> Optional[float]:
-        """
-        Calcula el monto del préstamo basado en el proyecto
-        
-        Args:
-            user_data: Datos del usuario
-            
-        Returns:
-            float: Monto del préstamo o None si no se puede calcular
-        """
+    def calculate_loan_amount(self, user_data: Dict[str, Any]) -> float:
+        """Calcula el monto del préstamo"""
         try:
-            # Obtener datos básicos
-            cultivo = normalize_text(user_data.get('crop', ''))
-            area = user_data.get('area', 0)  # En hectáreas
-            channel = user_data.get('channel', '')
-            irrigation = user_data.get('irrigation', '')
+            # Obtener datos financieros
+            financial = user_data.get('financial_analysis', {})
+            costos = financial.get('costos', 0)
+            ingresos = financial.get('ingresos', 0)
+            ganancia = financial.get('ganancia', 0)
             
-            # Obtener costos de producción
-            costos = maga_precios_client.get_costos_cultivo(cultivo)
-            if not costos:
-                return None
+            # Validar que haya ganancia
+            if ganancia <= 0:
+                return 0
                 
-            # Costo base por hectárea
-            costo_base = costos.get('costo_por_hectarea', 0)
+            # El préstamo será el 80% de los costos o el 50% de los ingresos,
+            # el que sea menor
+            monto_por_costos = costos * 0.8
+            monto_por_ingresos = ingresos * 0.5
             
-            # Ajustes por sistema de riego
-            factores_riego = {
-                'goteo': 1.2,  # 20% más por sistema de goteo
-                'aspersion': 1.15,  # 15% más por aspersión
-                'gravedad': 1.1,  # 10% más por gravedad
-                'temporal': 1.0  # Sin ajuste para temporal
-            }
-            factor_riego = factores_riego.get(irrigation, 1.0)
+            monto = min(monto_por_costos, monto_por_ingresos)
             
-            # Ajustes por canal de comercialización
-            factores_canal = {
-                'exportacion': 1.3,  # 30% más para exportación
-                'mayorista': 1.2,  # 20% más para mayorista
-                'cooperativa': 1.15,  # 15% más para cooperativa
-                'mercado_local': 1.0  # Sin ajuste para mercado local
-            }
-            factor_canal = factores_canal.get(channel, 1.0)
+            # La cuota no puede ser más del 30% de la ganancia mensual
+            ganancia_mensual = ganancia / 12
+            cuota_maxima = ganancia_mensual * 0.3
             
-            # Calcular monto total
-            monto = costo_base * area * factor_riego * factor_canal
+            # Calcular cuota con tasa del 2% mensual
+            tasa = 0.02  # 2% mensual
+            plazo = 12  # meses
+            
+            # Fórmula de cuota: P * (r * (1 + r)^n) / ((1 + r)^n - 1)
+            cuota = monto * (tasa * (1 + tasa)**plazo) / ((1 + tasa)**plazo - 1)
+            
+            # Si la cuota es mayor que el máximo, reducir el monto
+            if cuota > cuota_maxima:
+                # Despejar P de la fórmula de cuota
+                monto = cuota_maxima * ((1 + tasa)**plazo - 1) / (tasa * (1 + tasa)**plazo)
             
             # Redondear a miles
-            monto = round(monto / 1000) * 1000
-            
-            return monto
+            return round(monto / 1000) * 1000
             
         except Exception as e:
-            logger.error(f"Error calculando monto: {str(e)}")
-            return None
+            logger.error(f"Error calculando préstamo: {str(e)}")
+            return 0
     
     def process_show_loan(self, user_data: Dict[str, Any]) -> str:
         """Procesa y muestra la oferta de préstamo"""
