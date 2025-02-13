@@ -213,9 +213,9 @@ class ConversationFlow:
         elif current_state in [self.STATES['ASK_LOAN'], self.STATES['CONFIRM_LOAN']]:
             # Validar respuestas SI/NO
             user_input = user_input.lower().strip()
-            if user_input.startswith(('si', 'sí')):
+            if user_input.startswith(('si', 'sí', 's')):
                 return True, True
-            elif user_input.startswith('no'):
+            elif user_input.startswith(('no', 'n')):
                 return True, False
             return False, None
             
@@ -534,7 +534,7 @@ class ConversationFlow:
             analysis_data = user_data['analysis']
 
             # Calcular monto del préstamo (80% del costo total)
-            costo_total = score_data.get('costo_total', 0)
+            costo_total = score_data.get('costos_siembra', 0)
             monto_prestamo = costo_total * 0.8
 
             # Formatear mensaje
