@@ -536,15 +536,32 @@ class ConversationFlow:
             # Calcular monto del préstamo (80% del costo total)
             costo_total = score_data.get('costos_siembra', 0)
             monto_prestamo = costo_total * 0.8
+            
+            # Calcular cuota mensual (principal + intereses simple)
+            cuota_mensual = (monto_prestamo + (monto_prestamo * 0.12)) / 12
+            
+            # Convertir hectáreas a cuerdas (1 hectárea = 22.5 cuerdas aprox.)
+            area_cuerdas = float(analysis_data.get('area', 0)) * 22.5
 
             # Formatear mensaje
             mensaje = (
-                f"🏦 *Oferta de Préstamo*\n\n"
-                f"Para su cultivo de {analysis_data['crop']} en {analysis_data['location']}:\n\n"
-                f"💰 Monto: Q{monto_prestamo:,.2f}\n"
-                f"📅 Plazo: 12 meses\n"
-                f"💸 Tasa: 12% anual\n\n"
-                f"¿Desea proceder con la solicitud? Responda SI o NO 👇"
+                f"🌱 Le podemos ayudar con el financiamiento de su {analysis_data['crop']}\n\n"
+                f"💰 *Le ofrecemos un préstamo de:*\n"
+                f"   Q{monto_prestamo:,.0f}\n"
+                f"   (Para cubrir el 80% de sus costos de siembra)\n\n"
+                f"📋 *¿Cómo funciona?*\n"
+                f"   • Paga Q{cuota_mensual:,.0f} al mes\n"
+                f"   • Durante 12 meses\n"
+                f"   • Con un cargo del 1% mensual\n\n"
+                f"🎯 *¿Qué puede hacer con este préstamo?*\n"
+                f"   • Comprar semilla e insumos\n"
+                f"   • Pagar la mano de obra\n"
+                f"   • Cubrir costos de siembra\n\n"
+                f"✨ *Beneficios para usted:*\n"
+                f"   • Le entregamos el dinero en 2 días\n"
+                f"   • Sin cobros extra\n"
+                f"   • Con asesoría técnica incluida\n\n"
+                f"¿Le interesa este préstamo? Responda *SÍ* o *NO* 👇"
             )
             return mensaje
 
