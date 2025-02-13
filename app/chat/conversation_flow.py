@@ -717,18 +717,18 @@ class ConversationFlow:
         """Calcula el monto y términos del préstamo basado en ciclo agrícola"""
         try:
             # Obtener datos básicos
-            cultivo = normalize_text(user_data.get('crop', ''))
+            cultivo = user_data.get('crop', '')
             ciclo = self.get_crop_cycle(cultivo)
             area = float(user_data.get('area', 0))
             irrigation = user_data.get('irrigation', '')
             channel = user_data.get('channel', '')
             
             # Calcular costos reales
-            costos = maga_precios_client.calcular_costos_totales(cultivo, area, irrigation)
+            costos = maga_precios_client.get_costos_cultivo(cultivo)
             if not costos:
                 return 0
                 
-            costos_totales = costos['costos_totales']
+            costos_totales = costos['costo_por_hectarea'] * area
             
             # Obtener precios y calcular ingresos
             precios = maga_precios_client.get_precios_cultivo(cultivo, channel)
@@ -1191,7 +1191,7 @@ class ConversationFlow:
             channel = user_data.get('channel', '')
             
             # Obtener costos
-            costos = maga_precios_client.calcular_costos_totales(cultivo, area, irrigation)
+            costos = maga_precios_client.get_costos_cultivo(cultivo)
             if not costos:
                 raise ValueError(f"No se encontraron datos de costos para {cultivo}")
             
@@ -1210,7 +1210,7 @@ class ConversationFlow:
             ingresos = produccion * precio_venta
             
             # Calcular rentabilidad
-            costos_totales = costos['costos_totales']
+            costos_totales = costos['costo_por_hectarea'] * area
             ganancia = ingresos - costos_totales
             rentabilidad = (ganancia / costos_totales) * 100 if costos_totales > 0 else 0
             
@@ -1232,8 +1232,8 @@ class ConversationFlow:
                 f"🏪 Comercialización: {channel}\n\n"
                 
                 f"💰 *Costos*\n"
-                f"- Fijos: Q{costos['costos_fijos']:,.2f}\n"
-                f"- Variables: Q{costos['costos_variables']:,.2f}\n"
+                f"- Fijos: Q{costos['costo_por_hectarea'] * area:,.2f}\n"
+                f"- Variables: Q{costos['costo_por_hectarea'] * area:,.2f}\n"
                 f"- Total: Q{costos_totales:,.2f}\n\n"
                 
                 f"📈 *Producción y Ventas*\n"

@@ -244,6 +244,31 @@ class MAGAPreciosClient:
             'precio_minimo': precio_base * 0.8,
             'precio_maximo': precio_base * 1.4
         }
+
+    def calcular_costos_totales(self, cultivo: str, area: float, irrigation: str) -> Dict[str, float]:
+        """Calcula costos totales considerando fijos y variables"""
+        costos = self.get_costos_cultivo(cultivo)
+        if not costos:
+            return {}
+
+        # Costos fijos (no dependen del área)
+        costos_fijos = sum(costos.get('costos_fijos', {}).values())
+
+        # Costos por hectárea
+        costos_ha = costos.get('costos_por_hectarea', {})
+        costo_riego = costos_ha.get('riego', {}).get(irrigation, 0)
+        
+        # Suma de costos por hectárea sin riego
+        costos_ha_sin_riego = sum(v for k, v in costos_ha.items() if k != 'riego')
+        
+        # Costos variables totales (dependen del área)
+        costos_variables = (costos_ha_sin_riego + costo_riego) * area
+
+        return {
+            'costos_fijos': costos_fijos,
+            'costos_variables': costos_variables,
+            'costos_totales': costos_fijos + costos_variables
+        }
     
     def get_precios_cultivo_original(self, cultivo: str, canal: str = 'mayorista') -> Dict[str, Any]:
         """
