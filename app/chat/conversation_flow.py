@@ -32,10 +32,10 @@ class ConversationFlow:
             'GET_CHANNEL': 'get_channel',
             'GET_IRRIGATION': 'get_irrigation',
             'GET_LOCATION': 'get_location',
-            'SHOW_REPORT': 'show_report',
+            'SHOW_ANALYSIS': 'show_analysis',
             'ASK_LOAN': 'ask_loan',
             'SHOW_LOAN': 'show_loan',
-            'CONFIRM_LOAN': 'confirm_loan',
+            'GET_LOAN_RESPONSE': 'get_loan_response',
             'DONE': 'done',
             'WITH_ADVISOR': 'with_advisor'
         }
@@ -272,9 +272,9 @@ class ConversationFlow:
             return self.STATES['GET_LOCATION']
             
         elif current_state == self.STATES['GET_LOCATION']:
-            return self.STATES['SHOW_REPORT']
+            return self.STATES['SHOW_ANALYSIS']
             
-        elif current_state == self.STATES['SHOW_REPORT']:
+        elif current_state == self.STATES['SHOW_ANALYSIS']:
             return self.STATES['ASK_LOAN']
             
         elif current_state == self.STATES['ASK_LOAN']:
@@ -283,9 +283,9 @@ class ConversationFlow:
             return self.STATES['DONE']  # Si respondió NO
             
         elif current_state == self.STATES['SHOW_LOAN']:
-            return self.STATES['CONFIRM_LOAN']
+            return self.STATES['GET_LOAN_RESPONSE']
             
-        elif current_state == self.STATES['CONFIRM_LOAN']:
+        elif current_state == self.STATES['GET_LOAN_RESPONSE']:
             return self.STATES['DONE']
             
         return self.STATES['GET_CROP']  # Estado por defecto
@@ -402,10 +402,10 @@ class ConversationFlow:
             next_state = self.get_next_state(current_state, message, processed_value)
             
             # Procesar estado especial
-            if next_state == self.STATES['SHOW_REPORT']:
+            if next_state == self.STATES['SHOW_ANALYSIS']:
                 try:
                     # Mostrar reporte y preguntar por préstamo
-                    report = await self.process_show_report(user_data['data'])
+                    report = await self.process_show_analysis(user_data['data'])
                     await self.whatsapp.send_message(phone_number, report)
                     
                     # Actualizar estado a ASK_LOAN
@@ -452,7 +452,7 @@ class ConversationFlow:
                     user_data['state'] = self.STATES['ASK_LOAN']
                 
             elif next_state == self.STATES['DONE']:
-                if current_state == self.STATES['CONFIRM_LOAN']:
+                if current_state == self.STATES['GET_LOAN_RESPONSE']:
                     confirm_message = self.process_confirm_loan()
                     await self.whatsapp.send_message(phone_number, confirm_message)
                 else:
@@ -478,15 +478,15 @@ class ConversationFlow:
             )
             await self.whatsapp.send_message(phone_number, error_message)
 
-    async def process_show_report(self, user_data: Dict[str, Any]) -> str:
+    async def process_show_analysis(self, user_data: Dict[str, Any]) -> str:
         """
-        Procesa y muestra el reporte financiero
+        Procesa y muestra el análisis financiero
         
         Args:
             user_data: Datos del usuario
             
         Returns:
-            str: Reporte formateado
+            str: Análisis financiero formateado
         """
         try:
             # Obtener datos básicos
@@ -543,72 +543,9 @@ class ConversationFlow:
             return mensaje
             
         except Exception as e:
-            logger.error(f"Error generando reporte financiero: {str(e)}")
+            logger.error(f"Error generando análisis financiero: {str(e)}")
             raise
 
-    def process_financial_analysis(self, user_data: Dict[str, Any]) -> str:
-        """Procesa y muestra el análisis financiero"""
-        try:
-            # Obtener datos básicos
-            cultivo = user_data.get('crop', '').lower()
-            area = user_data.get('area', 0)  # En hectáreas
-            
-            # Obtener costos y precios
-            costos = maga_precios_client.get_costos_cultivo(cultivo)
-            if not costos:
-                return self.handle_error(user_data, Exception("No hay datos de costos"), "cultivo")
-                
-            precios = maga_precios_client.get_precios_cultivo(cultivo, user_data.get('channel', ''))
-            if not precios:
-                return self.handle_error(user_data, Exception("No hay datos de precios"), "cultivo")
-            
-            # Calcular métricas
-            costo_total = costos['costo_por_hectarea'] * area
-            rendimiento = costos['rendimiento_por_hectarea'] * area
-            precio_actual = precios['precio_actual']
-            ingresos = rendimiento * precio_actual
-            ganancia = ingresos - costo_total
-            
-            # Guardar datos para préstamo
-            user_data['financial_analysis'] = {
-                'costos': costo_total,
-                'ingresos': ingresos,
-                'ganancia': ganancia,
-                'rendimiento': rendimiento
-            }
-            
-            # Formatear números
-            ingresos_str = format_number(ingresos)
-            costos_str = format_number(costo_total)
-            ganancia_str = format_number(ganancia)
-            
-            # Actualizar estado
-            user_data['state'] = self.STATES['ASK_LOAN']
-            
-            # Construir mensaje
-            mensaje = (
-                f"✨ {cultivo.capitalize()} - {area} hectáreas\n\n"
-                f"💰 Resumen:\n"
-                f"•⁠  ⁠Ingresos: Q{ingresos_str}\n"
-                f"•⁠  ⁠Costos: Q{costos_str}\n"
-                f"•⁠  ⁠Ganancia: Q{ganancia_str}\n\n"
-            )
-            
-            if ganancia > 0:
-                mensaje += "✅ ¡Su proyecto es rentable!\n\n"
-            else:
-                mensaje += "⚠️ Este proyecto podría ser riesgoso.\n\n"
-                
-            mensaje += (
-                "¿Le gustaría que le ayude a solicitar un préstamo? 🤝\n\n"
-                "Responda SI o NO 👇"
-            )
-            
-            return mensaje
-            
-        except Exception as e:
-            return self.handle_error(user_data, e, "financial")
-            
     def process_loan_response(self, user_data: Dict[str, Any], response: str) -> str:
         """Procesa la respuesta a la oferta de préstamo"""
         try:
@@ -1165,10 +1102,10 @@ class ConversationFlow:
             ),
             'channel': (
                 "Por favor escoja una opción válida:\n\n"
-                "1. Mercado local 🏪\n"
-                "2. Mayorista 🚛\n"
-                "3. Cooperativa 🤝\n"
-                "4. Exportación ✈️"
+                "1. Mercado local - En su comunidad\n"
+                "2. Mayorista - A distribuidores\n"
+                "3. Cooperativa - Con otros productores\n"
+                "4. Exportación - A otros países"
             ),
             'irrigation': (
                 "Por favor escoja una opción válida:\n\n"
