@@ -604,8 +604,8 @@ class ConversationFlow:
                 
                 return (
                     f"¡Excelente! 🎉\n\n"
-                    f"Hemos recibido su solicitud de préstamo. En los próximos días "
-                    f"uno de nuestros asesores se pondrá en contacto con usted.\n\n"
+                    f"Su préstamo está en revisión. Le notificaré por este chat "
+                    f"cuando esté aprobado para continuar con el proceso.\n\n"
                     f"¡Gracias por confiar en FinGro! 🌱"
                 )
             else:
