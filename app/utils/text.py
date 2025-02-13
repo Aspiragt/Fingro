@@ -282,3 +282,46 @@ def get_crop_variations(crop: str) -> set:
         variations.update(variation_map[normalized])
     
     return variations
+
+def parse_yes_no(text: str) -> Optional[bool]:
+    """
+    Parsea una respuesta sí/no
+    
+    Args:
+        text: Texto a parsear
+        
+    Returns:
+        bool: True para sí, False para no, None si no es válido
+        
+    Examples:
+        >>> parse_yes_no("si")
+        True
+        >>> parse_yes_no("No")
+        False
+        >>> parse_yes_no("tal vez")
+        None
+    """
+    if not text:
+        return None
+        
+    # Normalizar texto
+    text = normalize_text(text)
+    
+    # Respuestas válidas
+    yes_responses = {
+        'si', 's', 'sí', 'yes', 'y', 
+        'dale', 'va', 'bueno', 'ok',
+        'claro', 'por supuesto'
+    }
+    
+    no_responses = {
+        'no', 'n', 'nop', 'nel', 
+        'mejor no', 'paso', 'negativo'
+    }
+    
+    if text in yes_responses:
+        return True
+    elif text in no_responses:
+        return False
+    else:
+        return None

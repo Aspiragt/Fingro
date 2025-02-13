@@ -8,7 +8,7 @@ from app.views.financial_report import report_generator
 from app.external_apis.maga_precios import CanalComercializacion, maga_precios_client
 from app.services.whatsapp_service import WhatsAppService
 from app.database.firebase import firebase_manager
-from app.utils.text import normalize_text, parse_area, format_number
+from app.utils.text import normalize_text, parse_area, format_number, parse_yes_no
 
 logger = logging.getLogger(__name__)
 
@@ -596,32 +596,43 @@ class ConversationFlow:
             str: Mensaje de respuesta
         """
         try:
-            # Normalizar respuesta
-            response = response.lower().strip()
+            # Validar respuesta
+            result = parse_yes_no(response)
+            if result is None:
+                return (
+                    "Por favor responda SI o NO.\n\n"
+                    "¿Desea continuar con la solicitud? 🤝"
+                )
             
-            # Lista de respuestas válidas
-            valid_yes = ['si', 'sí', 's', 'yes', 'y']
-            valid_no = ['no', 'n']
-            
-            if response not in valid_yes and response not in valid_no:
-                return "Por favor responda SI o NO"
-
-            if response in valid_yes:
+            if result:
                 # Guardar usuario como cliente potencial
                 user_data['status'] = 'prestamo_solicitado'
+                user_data['state'] = self.STATES['DONE']
                 
                 return (
                     f"¡Excelente! 🎉\n\n"
                     f"Su préstamo está en revisión. Le notificaré por este chat "
                     f"cuando esté aprobado para continuar con el proceso.\n\n"
-                    f"¡Gracias por confiar en FinGro! 🌱"
+                    f"¡Gracias por confiar en FinGro! 🌱\n\n"
+                    f"Puede escribir 'inicio' para hacer otra consulta."
                 )
             else:
                 return self.process_end_conversation(user_data)
-
+                
         except Exception as e:
             logger.error(f"Error procesando respuesta de préstamo: {str(e)}")
             return "Lo siento, hubo un error. Por favor intente de nuevo."
+
+    def process_end_conversation(self, user_data: Dict[str, Any]) -> str:
+        """Procesa el fin de la conversación"""
+        user_data['state'] = self.STATES['DONE']
+        
+        return (
+            "Entiendo. No hay problema 👍\n\n"
+            "Si cambia de opinión o quiere hacer otra consulta, "
+            "puede escribir 'inicio' en cualquier momento.\n\n"
+            "¡Que tenga un excelente día! 🌱"
+        )
 
     def process_show_loan(self, user_data: Dict[str, Any]) -> str:
         """
@@ -667,33 +678,6 @@ class ConversationFlow:
         except Exception as e:
             logger.error(f"Error generando oferta de préstamo: {str(e)}")
             return "❌ Lo siento, hubo un error al generar la oferta. Por favor intente de nuevo."
-
-    def process_end_conversation(self, user_data: Dict[str, Any]) -> str:
-        """
-        Procesa el fin de la conversación
-        
-        Args:
-            user_data: Datos del usuario
-            
-        Returns:
-            str: Mensaje de despedida
-        """
-        try:
-            if 'analysis' not in user_data:
-                return "¡Gracias por usar FinGro! 🌱"
-
-            analysis = user_data['analysis']
-            crop = analysis['cultivo'].capitalize()
-            
-            return (
-                f"¡Gracias por usar FinGro! 🌱\n\n"
-                f"Le deseamos éxito con su siembra de {crop}. "
-                f"¡Estamos para servirle! 👋"
-            )
-            
-        except Exception as e:
-            logger.error(f"Error generando mensaje de despedida: {str(e)}")
-            return "¡Gracias por usar FinGro! 🌱"
 
     def validate_yes_no(self, response: str) -> bool:
         """Valida respuestas sí/no de forma flexible"""
