@@ -489,58 +489,55 @@ class ConversationFlow:
             str: Reporte formateado
         """
         try:
-            if 'crop' not in user_data or 'area' not in user_data:
+            # Obtener datos básicos
+            cultivo = user_data.get('crop', '')
+            area = user_data.get('area', 0)  # En hectáreas
+            
+            # Obtener costos y precios
+            costos = maga_precios_client.get_costos_cultivo(cultivo)
+            if not costos:
                 raise ValueError("Faltan datos del cultivo")
                 
-            # Preparar datos para el análisis
-            analysis_data = {
-                'crop': user_data['crop'],
-                'area': float(user_data['area']),
-                'commercialization': user_data.get('channel', CanalComercializacion.MAYORISTA),
-                'irrigation': user_data.get('irrigation', 'ninguno'),
-                'location': user_data.get('location', 'Guatemala')
+            # Calcular métricas
+            costo_total = costos['costo_por_hectarea'] * area
+            rendimiento = costos['rendimiento_por_hectarea'] * area
+            precio_actual = maga_precios_client.get_precios_cultivo(cultivo, user_data.get('channel', '')).get('precio_actual', 0)
+            ingresos = rendimiento * precio_actual
+            ganancia = ingresos - costo_total
+            
+            # Guardar datos para préstamo
+            user_data['financial_analysis'] = {
+                'costos': costo_total,
+                'ingresos': ingresos,
+                'ganancia': ganancia,
+                'rendimiento': rendimiento
             }
             
-            # Generar análisis financiero
-            financial_data = await financial_model.analyze_project(analysis_data)
+            # Formatear números
+            ingresos_str = format_number(ingresos)
+            costos_str = format_number(costo_total)
+            ganancia_str = format_number(ganancia)
             
-            if not financial_data:
-                raise ValueError("Error generando análisis financiero")
-
-            # Guardar datos del análisis
-            user_data['analysis'] = financial_data
-            
-            # Formatear reporte
-            crop = financial_data['cultivo'].capitalize()
-            area = financial_data['area']
-            rendimiento = round(financial_data['rendimiento_por_ha'])
-            ingresos = round(financial_data['ingresos_totales'])
-            costos = round(financial_data['costos_siembra'])
-            utilidad = round(financial_data['utilidad'])
-            
+            # Construir mensaje
             mensaje = (
-                f"✨ {crop} - {area} hectáreas\n\n"
-                
+                f"✨ {cultivo.capitalize()} - {area} hectáreas\n\n"
                 f"💰 Resumen:\n"
-                f"•⁠  ⁠Ingresos: Q{ingresos:,}\n"
-                f"•⁠  ⁠Costos: Q{costos:,}\n"
-                f"•⁠  ⁠Ganancia: Q{utilidad:,}\n\n"
+                f"•⁠  ⁠Ingresos: Q{ingresos_str}\n"
+                f"•⁠  ⁠Costos: Q{costos_str}\n"
+                f"•⁠  ⁠Ganancia: Q{ganancia_str}\n\n"
             )
-
-            # Agregar mensaje según la rentabilidad
-            if utilidad > 0:
+            
+            if ganancia > 0:
                 mensaje += (
-                    f"✅ ¡Su proyecto es rentable!\n\n"
-                    f"¿Le gustaría que le ayude a solicitar un préstamo? 🤝\n\n"
-                    f"Responda SI o NO 👇"
+                    "✅ ¡Su proyecto es rentable!\n\n"
+                    "¿Le gustaría que le ayude a solicitar un préstamo? 🤝\n\n"
+                    "Responda SI o NO 👇"
                 )
             else:
                 mensaje += (
-                    f"⚠️ Con los precios actuales, necesita ajustes.\n\n"
-                    f"💡 Le sugiero:\n"
-                    f"1. Usar riego para mejorar rendimiento\n"
-                    f"2. Buscar mejores precios de venta\n"
-                    f"3. Reducir costos de producción"
+                    "⚠️ Este proyecto podría ser riesgoso.\n\n"
+                    "¿Le gustaría que le ayude a solicitar un préstamo? 🤝\n\n"
+                    "Responda SI o NO 👇"
                 )
             
             return mensaje
@@ -548,6 +545,94 @@ class ConversationFlow:
         except Exception as e:
             logger.error(f"Error generando reporte financiero: {str(e)}")
             raise
+
+    def process_financial_analysis(self, user_data: Dict[str, Any]) -> str:
+        """Procesa y muestra el análisis financiero"""
+        try:
+            # Obtener datos básicos
+            cultivo = user_data.get('crop', '').lower()
+            area = user_data.get('area', 0)  # En hectáreas
+            
+            # Obtener costos y precios
+            costos = maga_precios_client.get_costos_cultivo(cultivo)
+            if not costos:
+                return self.handle_error(user_data, Exception("No hay datos de costos"), "cultivo")
+                
+            precios = maga_precios_client.get_precios_cultivo(cultivo, user_data.get('channel', ''))
+            if not precios:
+                return self.handle_error(user_data, Exception("No hay datos de precios"), "cultivo")
+            
+            # Calcular métricas
+            costo_total = costos['costo_por_hectarea'] * area
+            rendimiento = costos['rendimiento_por_hectarea'] * area
+            precio_actual = precios['precio_actual']
+            ingresos = rendimiento * precio_actual
+            ganancia = ingresos - costo_total
+            
+            # Guardar datos para préstamo
+            user_data['financial_analysis'] = {
+                'costos': costo_total,
+                'ingresos': ingresos,
+                'ganancia': ganancia,
+                'rendimiento': rendimiento
+            }
+            
+            # Formatear números
+            ingresos_str = format_number(ingresos)
+            costos_str = format_number(costo_total)
+            ganancia_str = format_number(ganancia)
+            
+            # Actualizar estado
+            user_data['state'] = self.STATES['ASK_LOAN']
+            
+            # Construir mensaje
+            mensaje = (
+                f"✨ {cultivo.capitalize()} - {area} hectáreas\n\n"
+                f"💰 Resumen:\n"
+                f"•⁠  ⁠Ingresos: Q{ingresos_str}\n"
+                f"•⁠  ⁠Costos: Q{costos_str}\n"
+                f"•⁠  ⁠Ganancia: Q{ganancia_str}\n\n"
+            )
+            
+            if ganancia > 0:
+                mensaje += "✅ ¡Su proyecto es rentable!\n\n"
+            else:
+                mensaje += "⚠️ Este proyecto podría ser riesgoso.\n\n"
+                
+            mensaje += (
+                "¿Le gustaría que le ayude a solicitar un préstamo? 🤝\n\n"
+                "Responda SI o NO 👇"
+            )
+            
+            return mensaje
+            
+        except Exception as e:
+            return self.handle_error(user_data, e, "financial")
+            
+    def process_loan_response(self, user_data: Dict[str, Any], response: str) -> str:
+        """Procesa la respuesta a la oferta de préstamo"""
+        try:
+            # Validar respuesta
+            result = parse_yes_no(response)
+            if result is None:
+                return (
+                    "Por favor responda SI o NO.\n\n"
+                    "¿Desea continuar con la solicitud? 🤝"
+                )
+            
+            if not result:
+                return self.process_end_conversation(user_data)
+                
+            # Si aceptó, mostrar préstamo
+            if 'financial_analysis' not in user_data:
+                return self.handle_error(user_data, Exception("No hay análisis financiero"), "loan")
+                
+            # Actualizar estado y mostrar préstamo
+            user_data['state'] = self.STATES['SHOW_LOAN']
+            return self.process_show_loan(user_data)
+            
+        except Exception as e:
+            return self.handle_error(user_data, e, "loan")
 
     def calculate_loan_amount(self, user_data: Dict[str, Any]) -> Optional[float]:
         """
@@ -609,8 +694,7 @@ class ConversationFlow:
         try:
             # Obtener datos
             cultivo = user_data.get('crop', '').lower()
-            area = user_data.get('area_original', 0)
-            unit = user_data.get('area_unit', '')
+            area = user_data.get('area', 0)  # En hectáreas
             channel = user_data.get('channel', '')
             irrigation = user_data.get('irrigation', '')
             location = user_data.get('location', '')
@@ -652,7 +736,7 @@ class ConversationFlow:
                 f"¡Buenas noticias! 🎉\n\n"
                 f"Con base en su proyecto:\n"
                 f"- {cultivo.capitalize()} en {location} 🌱\n"
-                f"- {format_number(area)} {unit} de terreno\n"
+                f"- {format_number(area)} hectáreas de terreno\n"
                 f"- Riego por {irrigation} 💧\n"
                 f"- Venta en {channel} 🚛\n\n"
                 f"Producción esperada:\n"
@@ -778,10 +862,10 @@ class ConversationFlow:
             if not channel:
                 return (
                     "Por favor escoja una opción válida:\n\n"
-                    "1. Mercado local 🏪\n"
-                    "2. Mayorista 🚛\n"
-                    "3. Cooperativa 🤝\n"
-                    "4. Exportación ✈️"
+                    "1. Mercado local - En su comunidad\n"
+                    "2. Mayorista - A distribuidores\n"
+                    "3. Cooperativa - Con otros productores\n"
+                    "4. Exportación - A otros países"
                 )
             
             # Guardar canal
@@ -951,69 +1035,99 @@ class ConversationFlow:
                 )
             
             # Siguiente paso
-            return self.process_show_loan(user_data)
+            return self.process_financial_analysis(user_data)
             
         except Exception as e:
             logger.error(f"Error procesando ubicación: {str(e)}")
             return "Hubo un error. Por favor intente de nuevo 🙏"
 
-    def process_show_loan(self, user_data: Dict[str, Any]) -> str:
-        """Procesa y muestra la oferta de préstamo"""
+    def process_financial_analysis(self, user_data: Dict[str, Any]) -> str:
+        """Procesa y muestra el análisis financiero"""
         try:
-            # Obtener datos
+            # Obtener datos básicos
             cultivo = user_data.get('crop', '').lower()
-            area = user_data.get('area_original', 0)
-            unit = user_data.get('area_unit', '')
-            channel = user_data.get('channel', '')
-            irrigation = user_data.get('irrigation', '')
-            location = user_data.get('location', '')
+            area = user_data.get('area', 0)  # En hectáreas
             
-            # Calcular préstamo
-            monto = self.calculate_loan_amount(user_data)
-            if not monto:
-                return "Lo siento, no pudimos calcular un préstamo para su proyecto 😔"
+            # Obtener costos y precios
+            costos = maga_precios_client.get_costos_cultivo(cultivo)
+            if not costos:
+                return self.handle_error(user_data, Exception("No hay datos de costos"), "cultivo")
+                
+            precios = maga_precios_client.get_precios_cultivo(cultivo, user_data.get('channel', ''))
+            if not precios:
+                return self.handle_error(user_data, Exception("No hay datos de precios"), "cultivo")
+            
+            # Calcular métricas
+            costo_total = costos['costo_por_hectarea'] * area
+            rendimiento = costos['rendimiento_por_hectarea'] * area
+            precio_actual = precios['precio_actual']
+            ingresos = rendimiento * precio_actual
+            ganancia = ingresos - costo_total
+            
+            # Guardar datos para préstamo
+            user_data['financial_analysis'] = {
+                'costos': costo_total,
+                'ingresos': ingresos,
+                'ganancia': ganancia,
+                'rendimiento': rendimiento
+            }
             
             # Formatear números
-            monto_str = format_number(monto)
-            cuota = format_number(monto * 0.12)  # 12% mensual aproximado
-            
-            # Calcular rendimiento esperado
-            rendimiento = maga_precios_client.get_costos_cultivo(cultivo).get('rendimiento_por_hectarea', 0)
-            area_ha = user_data.get('area', 0)  # En hectáreas
-            produccion = rendimiento * area_ha
-            precio_q = maga_precios_client.get_precios_cultivo(cultivo, channel).get('precio_actual', 0)
-            ingreso = produccion * precio_q
-            
-            # Formatear producción
-            produccion_str = format_number(produccion)
-            ingreso_str = format_number(ingreso)
+            ingresos_str = format_number(ingresos)
+            costos_str = format_number(costo_total)
+            ganancia_str = format_number(ganancia)
             
             # Actualizar estado
-            user_data['state'] = self.STATES['GET_LOAN_RESPONSE']
-            user_data['loan_amount'] = monto
+            user_data['state'] = self.STATES['ASK_LOAN']
             
             # Construir mensaje
-            return (
-                f"¡Buenas noticias! 🎉\n\n"
-                f"Con base en su proyecto:\n"
-                f"- {cultivo.capitalize()} en {location} 🌱\n"
-                f"- {format_number(area)} {unit} de terreno\n"
-                f"- Riego por {irrigation} 💧\n"
-                f"- Venta en {channel} 🚛\n\n"
-                f"Producción esperada:\n"
-                f"- {produccion_str} quintales de {cultivo} 📦\n"
-                f"- Ingresos de Q{ingreso_str} 💰\n\n"
-                f"Le podemos ofrecer:\n"
-                f"- Préstamo de Q{monto_str} 💸\n"
-                f"- Cuota de Q{cuota} al mes 📅\n"
-                f"- 12 meses de plazo 🗓️\n"
-                f"- Incluye asistencia técnica 🌿\n\n"
-                f"¿Le interesa continuar con la solicitud? 🤝"
+            mensaje = (
+                f"✨ {cultivo.capitalize()} - {area} hectáreas\n\n"
+                f"💰 Resumen:\n"
+                f"•⁠  ⁠Ingresos: Q{ingresos_str}\n"
+                f"•⁠  ⁠Costos: Q{costos_str}\n"
+                f"•⁠  ⁠Ganancia: Q{ganancia_str}\n\n"
             )
             
+            if ganancia > 0:
+                mensaje += "✅ ¡Su proyecto es rentable!\n\n"
+            else:
+                mensaje += "⚠️ Este proyecto podría ser riesgoso.\n\n"
+                
+            mensaje += (
+                "¿Le gustaría que le ayude a solicitar un préstamo? 🤝\n\n"
+                "Responda SI o NO 👇"
+            )
+            
+            return mensaje
+            
         except Exception as e:
-            logger.error(f"Error generando oferta: {str(e)}")
-            return "Lo siento, hubo un error al generar su oferta 😔"
+            return self.handle_error(user_data, e, "financial")
+            
+    def process_loan_response(self, user_data: Dict[str, Any], response: str) -> str:
+        """Procesa la respuesta a la oferta de préstamo"""
+        try:
+            # Validar respuesta
+            result = parse_yes_no(response)
+            if result is None:
+                return (
+                    "Por favor responda SI o NO.\n\n"
+                    "¿Desea continuar con la solicitud? 🤝"
+                )
+            
+            if not result:
+                return self.process_end_conversation(user_data)
+                
+            # Si aceptó, mostrar préstamo
+            if 'financial_analysis' not in user_data:
+                return self.handle_error(user_data, Exception("No hay análisis financiero"), "loan")
+                
+            # Actualizar estado y mostrar préstamo
+            user_data['state'] = self.STATES['SHOW_LOAN']
+            return self.process_show_loan(user_data)
+            
+        except Exception as e:
+            return self.handle_error(user_data, e, "loan")
 
     def handle_error(self, user_data: Dict[str, Any], error: Exception, context: str) -> str:
         """
