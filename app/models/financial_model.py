@@ -29,49 +29,49 @@ class FinancialModel:
         # Costos base por hectárea para diferentes cultivos
         self.costos_cultivos = {
             'maiz': CostosCultivo(
-                preparacion_suelo=1200,
-                semilla=800,
-                fertilizantes=2000,
-                pesticidas=1000,
-                mano_obra=3000,
-                cosecha=1500,
-                otros=500
+                preparacion_suelo=2000,
+                semilla=1500,
+                fertilizantes=4000,
+                pesticidas=2000,
+                mano_obra=6000,
+                cosecha=3000,
+                otros=1500
             ),
             'frijol': CostosCultivo(
-                preparacion_suelo=1000,
-                semilla=1200,
-                fertilizantes=1800,
-                pesticidas=800,
-                mano_obra=2500,
-                cosecha=1200,
-                otros=500
-            ),
-            'papa': CostosCultivo(
-                preparacion_suelo=1500,
-                semilla=3000,
-                fertilizantes=2500,
-                pesticidas=1500,
-                mano_obra=4000,
-                cosecha=2000,
-                otros=1000
-            ),
-            'tomate': CostosCultivo(
                 preparacion_suelo=2000,
-                semilla=4000,
-                fertilizantes=3000,
-                pesticidas=2000,
+                semilla=2000,
+                fertilizantes=3500,
+                pesticidas=1500,
                 mano_obra=5000,
                 cosecha=2500,
                 otros=1500
+            ),
+            'papa': CostosCultivo(
+                preparacion_suelo=3000,
+                semilla=6000,
+                fertilizantes=5000,
+                pesticidas=3000,
+                mano_obra=8000,
+                cosecha=4000,
+                otros=2000
+            ),
+            'tomate': CostosCultivo(
+                preparacion_suelo=4000,    # Preparación más intensiva
+                semilla=8000,             # Plántulas de calidad
+                fertilizantes=12000,      # Fertilización intensiva
+                pesticidas=6000,          # Control de plagas
+                mano_obra=15000,          # Mano de obra especializada
+                cosecha=5000,             # Cosecha cuidadosa
+                otros=3000                # Tutoreo, materiales, etc.
             )
         }
         
         # Factor de rendimiento según sistema de riego
         self.irrigation_yield_factor = {
-            'gravedad': 1.0,
-            'aspersion': 1.2,
-            'goteo': 1.4,
-            'ninguno': 0.7
+            'gravedad': 0.9,    # -10% por menor eficiencia
+            'aspersion': 1.1,   # +10% por mejor distribución
+            'goteo': 1.3,       # +30% por eficiencia óptima
+            'ninguno': 0.6      # -40% por depender de lluvia
         }
         
         # Rendimiento base por hectárea (quintales)
@@ -79,7 +79,7 @@ class FinancialModel:
             'maiz': 80,
             'frijol': 35,
             'papa': 450,
-            'tomate': 800,
+            'tomate': 800,      # 800qq/ha es el rendimiento promedio
             'cafe': 40,
             'chile': 350,
             'cebolla': 600,
@@ -94,10 +94,10 @@ class FinancialModel:
         
         # Factores de riesgo por canal
         self.risk_factors = {
-            CanalComercializacion.EXPORTACION: 0.8,  # Mayor riesgo
-            CanalComercializacion.COOPERATIVA: 0.4,
-            CanalComercializacion.MAYORISTA: 0.6,
-            CanalComercializacion.MERCADO_LOCAL: 0.5
+            CanalComercializacion.EXPORTACION: 0.8,  # Mayor riesgo por estándares
+            CanalComercializacion.COOPERATIVA: 0.4,  # Menor riesgo por apoyo
+            CanalComercializacion.MAYORISTA: 0.6,    # Riesgo moderado
+            CanalComercializacion.MERCADO_LOCAL: 0.5 # Riesgo moderado-bajo
         }
     
     def _get_costos_cultivo(self, cultivo: str, area: float) -> Dict[str, float]:
@@ -206,39 +206,48 @@ class FinancialModel:
             
             # 2. Calcular costos
             costos = self._get_costos_cultivo(cultivo, area)
-            costos_totales = sum(costos.values())
+            costos_siembra = sum(costos.values())
             
-            # 3. Calcular rendimiento esperado (en quintales)
-            rendimiento_total = self._get_rendimiento_esperado(cultivo, area, riego)
-            rendimiento_por_hectarea = rendimiento_total / area if area > 0 else 0
+            # 3. Calcular rendimiento
+            rendimiento = self._get_rendimiento_esperado(cultivo, area, riego)
             
             # 4. Calcular ingresos
-            ingresos_totales = rendimiento_total * precio_actual
+            # Convertir precio por caja/unidad a precio por quintal si es necesario
+            if cultivo == 'tomate':
+                # Precio está por caja de 45-50 lb, convertir a quintales (100 lb)
+                precio_quintal = precio_actual * 2  # 2 cajas = 1 quintal aprox.
+            else:
+                precio_quintal = precio_actual
+                
+            ingresos = rendimiento * precio_quintal
             
-            # 5. Calcular ganancias
-            ganancia_total = ingresos_totales - costos_totales
-            ganancia_por_hectarea = ganancia_total / area if area > 0 else 0
+            # 5. Calcular rentabilidad
+            utilidad = ingresos - costos_siembra
+            utilidad_por_ha = utilidad / area
             
             # 6. Calcular riesgo
             risk_score = self._calculate_risk_score(cultivo, canal, riego)
             
+            # 7. Preparar respuesta
             return {
                 'cultivo': cultivo,
                 'area': area,
-                'precio_actual': precio_actual,
-                'rendimiento_total': rendimiento_total,
-                'rendimiento_por_hectarea': rendimiento_por_hectarea,
-                'costos_totales': costos_totales,
-                'ingresos_totales': ingresos_totales,
-                'ganancia_total': ganancia_total,
-                'ganancia_por_hectarea': ganancia_por_hectarea,
-                'risk_score': risk_score,
-                'medida': price_data.get('medida', 'Quintal'),
-                'mercado': price_data.get('mercado', 'Nacional')
+                'rendimiento': rendimiento,
+                'rendimiento_por_ha': rendimiento / area,
+                'precio_venta': precio_actual,
+                'unidad_precio': 'Caja (45-50 lb)' if cultivo == 'tomate' else 'Quintal',
+                'ingresos_totales': ingresos,
+                'costos_siembra': costos_siembra,
+                'costos_por_ha': costos_siembra / area,
+                'utilidad': utilidad,
+                'utilidad_por_ha': utilidad_por_ha,
+                'roi': (utilidad / costos_siembra) * 100,
+                'riesgo': risk_score,
+                'desglose_costos': costos
             }
             
         except Exception as e:
-            logger.error(f"Error en análisis financiero: {str(e)}")
+            logger.error(f"Error analizando proyecto: {str(e)}")
             return None
 
 # Instancia global
