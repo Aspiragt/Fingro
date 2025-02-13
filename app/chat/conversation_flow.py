@@ -541,12 +541,24 @@ class ConversationFlow:
             logger.error(f"Error procesando estado {state}: {str(e)}")
             return None
             
-    def process_loan_question(self, message: str) -> bool:
+    def process_loan_question(self, message: str) -> str:
         """Procesa la respuesta a si quiere un préstamo"""
-        result = parse_yes_no(message)
+        result = self.get_yes_no(message)
+        
         if result is None:
-            raise ValueError("Respuesta inválida")
-        return result
+            return (
+                "Por favor responda SI o NO.\n\n"
+                "¿Le gustaría solicitar un préstamo? 🤝"
+            )
+            
+        if not result:
+            return (
+                "Entiendo. Si cambia de opinión, puede escribir 'préstamo' "
+                "en cualquier momento para revisar las opciones de financiamiento. 💡\n\n"
+                "¿Hay algo más en que pueda ayudarle? 🤝"
+            )
+            
+        return "Excelente, revisemos las opciones de préstamo disponibles... 📊"
 
     async def process_show_analysis(self, user_data: Dict[str, Any]) -> str:
         """
@@ -620,7 +632,7 @@ class ConversationFlow:
         """Procesa la respuesta a la oferta de préstamo"""
         try:
             # Validar respuesta
-            result = parse_yes_no(response)
+            result = self.get_yes_no(response)
             if result is None:
                 return (
                     "Por favor responda SI o NO.\n\n"
@@ -628,7 +640,11 @@ class ConversationFlow:
                 )
             
             if not result:
-                return self.process_end_conversation(user_data)
+                return (
+                    "Entiendo. Si más adelante necesita financiamiento, puede escribir "
+                    "'préstamo' para revisar las opciones disponibles. 💡\n\n"
+                    "¿Hay algo más en que pueda ayudarle? 🤝"
+                )
                 
             # Si aceptó, mostrar préstamo
             if 'financial_analysis' not in user_data:
@@ -873,23 +889,37 @@ class ConversationFlow:
             return False
             
         # Normalizar respuesta
-        response = response.lower().strip()
+        response = self._normalize_text(response)
         
-        # Lista de respuestas válidas
-        valid_yes = ['si', 'sí', 's', 'yes', 'y', '1']
-        valid_no = ['no', 'n', '2']
+        # Variaciones positivas
+        positivas = [
+            'si', 'sí', 's', 'yes', 'ok', 'dale', 'va', 'bueno', 
+            'esta bien', 'está bien', 'claro', 'por supuesto',
+            'adelante', 'hagamoslo', 'hagámoslo', 'me interesa'
+        ]
         
-        return response in valid_yes or response in valid_no
+        # Variaciones negativas
+        negativas = [
+            'no', 'nel', 'nop', 'nope', 'n', 'mejor no',
+            'no gracias', 'paso', 'ahorita no', 'después',
+            'en otro momento', 'todavía no', 'todavia no'
+        ]
+        
+        if any(p in response for p in positivas):
+            return True
+            
+        if any(n in response for n in negativas):
+            return False
+            
+        # Si no coincide con ninguna, pedir aclaración
+        return None
 
     def get_yes_no(self, response: str) -> Optional[bool]:
         """Obtiene valor booleano de respuesta sí/no"""
-        if not self.validate_yes_no(response):
+        result = self.validate_yes_no(response)
+        if result is None:
             return None
-            
-        valid_yes = ['si', 'sí', 's', 'yes', 'y', '1']
-        clean_response = response.strip().lower()
-        
-        return clean_response in valid_yes
+        return result
 
     def process_confirm_loan(self) -> str:
         """
@@ -1155,65 +1185,93 @@ class ConversationFlow:
         """Procesa y muestra el análisis financiero"""
         try:
             # Obtener datos básicos
-            cultivo = user_data.get('crop', '').lower()
-            area = user_data.get('area', 0)  # En hectáreas
+            cultivo = normalize_text(user_data.get('crop', ''))
+            area = float(user_data.get('area', 0))
+            irrigation = user_data.get('irrigation', '')
+            channel = user_data.get('channel', '')
             
-            # Obtener costos y precios
-            costos = maga_precios_client.get_costos_cultivo(cultivo)
-            precios = maga_precios_client.get_precios_cultivo(cultivo, user_data.get('channel', ''))
+            # Obtener costos
+            costos = maga_precios_client.calcular_costos_totales(cultivo, area, irrigation)
+            if not costos:
+                raise ValueError(f"No se encontraron datos de costos para {cultivo}")
             
-            # Calcular métricas
-            costo_total = costos.get('costo_por_hectarea', 0) * area
-            rendimiento = costos.get('rendimiento_por_hectarea', 0) * area
-            precio_actual = precios.get('precio_actual', 0)
-            ingresos = rendimiento * precio_actual
-            ganancia = ingresos - costo_total
+            # Obtener precios y calcular ingresos
+            precios = maga_precios_client.get_precios_cultivo(cultivo, channel)
+            if not precios:
+                raise ValueError(f"No se encontraron precios para {cultivo}")
             
-            # Guardar datos para préstamo
+            # Obtener ciclo del cultivo
+            ciclo = self.get_crop_cycle(cultivo)
+            
+            # Calcular producción e ingresos
+            rendimiento_ha = ciclo.get('rendimiento_por_hectarea', 35)
+            produccion = rendimiento_ha * area
+            precio_venta = precios['precio_actual']
+            ingresos = produccion * precio_venta
+            
+            # Calcular rentabilidad
+            costos_totales = costos['costos_totales']
+            ganancia = ingresos - costos_totales
+            rentabilidad = (ganancia / costos_totales) * 100 if costos_totales > 0 else 0
+            
+            # Guardar análisis financiero
             user_data['financial_analysis'] = {
-                'costos': costo_total,
+                'costos': costos_totales,
                 'ingresos': ingresos,
                 'ganancia': ganancia,
-                'rendimiento': rendimiento
+                'rentabilidad': rentabilidad,
+                'produccion': produccion
             }
             
-            # Formatear números
-            ingresos_str = format_number(ingresos)
-            costos_str = format_number(costo_total)
-            ganancia_str = format_number(ganancia)
-            
-            # Actualizar estado
-            user_data['state'] = self.STATES['ASK_LOAN']
-            
-            # Construir mensaje
+            # Formatear mensaje
             mensaje = (
-                f"✨ {cultivo.capitalize()} - {area} hectáreas\n\n"
-                f"💰 Resumen:\n"
-                f"•⁠  ⁠Ingresos: Q{ingresos_str}\n"
-                f"•⁠  ⁠Costos: Q{costos_str}\n"
-                f"•⁠  ⁠Ganancia: Q{ganancia_str}\n\n"
+                f"📊 *Análisis Financiero*\n\n"
+                f"🌱 Cultivo: {ciclo.get('nombre', cultivo).title()}\n"
+                f"📏 Área: {area:,.1f} hectáreas\n"
+                f"💧 Riego: {irrigation.title()}\n"
+                f"🏪 Comercialización: {channel}\n\n"
+                
+                f"💰 *Costos*\n"
+                f"- Fijos: Q{costos['costos_fijos']:,.2f}\n"
+                f"- Variables: Q{costos['costos_variables']:,.2f}\n"
+                f"- Total: Q{costos_totales:,.2f}\n\n"
+                
+                f"📈 *Producción y Ventas*\n"
+                f"- Rendimiento: {rendimiento_ha:,.1f} qq/ha\n"
+                f"- Producción Total: {produccion:,.1f} qq\n"
+                f"- Precio de Venta: Q{precio_venta:,.2f}/qq\n"
+                f"- Ingresos: Q{ingresos:,.2f}\n\n"
+                
+                f"📊 *Resultados*\n"
+                f"- Ganancia: Q{ganancia:,.2f}\n"
+                f"- Rentabilidad: {rentabilidad:.1f}%\n\n"
             )
             
-            if ganancia > 0:
-                mensaje += "✅ ¡Su proyecto es rentable!\n\n"
+            # Agregar recomendación según rentabilidad
+            if rentabilidad >= 30:
+                mensaje += (
+                    "✅ ¡Su proyecto es rentable!\n\n"
+                    "¿Le gustaría que le ayude a solicitar un préstamo? 🤝\n\n"
+                    "Responda SI o NO 👇"
+                )
             else:
-                mensaje += "⚠️ Este proyecto podría ser riesgoso.\n\n"
-                
-            mensaje += (
-                "¿Le gustaría que le ayude a solicitar un préstamo? 🤝\n\n"
-                "Responda SI o NO 👇"
-            )
+                mensaje += (
+                    "⚠️ Este proyecto podría ser riesgoso.\n\n"
+                    "¿Le gustaría que le ayude a solicitar un préstamo? 🤝\n\n"
+                    "Responda SI o NO 👇"
+                )
             
             return mensaje
             
         except Exception as e:
-            return self.handle_error(user_data, e, "financial")
-            
+            logger.error(f"Error generando análisis financiero: {str(e)}")
+            raise
+
     def process_loan_response(self, user_data: Dict[str, Any], response: str) -> str:
         """Procesa la respuesta a la oferta de préstamo"""
         try:
             # Validar respuesta
-            result = parse_yes_no(response)
+            result = self.get_yes_no(response)
             if result is None:
                 return (
                     "Por favor responda SI o NO.\n\n"
@@ -1221,7 +1279,11 @@ class ConversationFlow:
                 )
             
             if not result:
-                return self.process_end_conversation(user_data)
+                return (
+                    "Entiendo. Si más adelante necesita financiamiento, puede escribir "
+                    "'préstamo' para revisar las opciones disponibles. 💡\n\n"
+                    "¿Hay algo más en que pueda ayudarle? 🤝"
+                )
                 
             # Si aceptó, mostrar préstamo
             if 'financial_analysis' not in user_data:
@@ -1246,74 +1308,53 @@ class ConversationFlow:
         Returns:
             str: Mensaje de error amigable
         """
-        # Registrar error para debugging
         logger.error(f"Error en {context}: {str(error)}")
         
         # Mensajes por contexto
-        error_messages = {
-            'cultivo': (
-                "No encontré ese cultivo 🤔\n\n"
-                "Algunos cultivos populares son:\n"
-                "- Maíz 🌽\n"
-                "- Frijol 🫘\n"
-                "- Café ☕\n"
-                "- Tomate 🍅\n\n"
-                "¿Qué está sembrando?"
+        mensajes = {
+            'crop': (
+                "Lo siento, no pude procesar el cultivo indicado. 😕\n"
+                "Por favor, escriba el nombre del cultivo que planea sembrar. "
+                "Por ejemplo: maíz, frijol, café, etc. 🌱"
             ),
             'area': (
-                "No pude entender el área 🤔\n\n"
-                "Por favor escriba el número y la unidad, por ejemplo:\n"
-                "- 2 manzanas\n"
-                "- 1.5 hectáreas\n"
-                "- 3 mz\n"
-                "- 2.5 ha"
+                "El área indicada no es válida. 😕\n"
+                "Por favor indique el área en hectáreas o cuerdas. "
+                "Por ejemplo: 2.5 o 4 🌾"
             ),
             'channel': (
-                "Por favor escoja una opción válida:\n\n"
-                "1. Mercado local - En su comunidad\n"
-                "2. Mayorista - A distribuidores\n"
-                "3. Cooperativa - Con otros productores\n"
-                "4. Exportación - A otros países"
+                "Por favor seleccione una opción válida:\n\n"
+                "1. Mayorista\n"
+                "2. Cooperativa\n"
+                "3. Exportación\n"
+                "4. Mercado Local\n\n"
+                "Responda con el número de su elección 🏪"
             ),
             'irrigation': (
-                "Por favor escoja una opción válida:\n\n"
-                "1. Goteo 💧\n"
-                "2. Aspersión 💦\n"
-                "3. Gravedad 🌊\n"
-                "4. Ninguno (depende de lluvia) 🌧️"
+                "Por favor seleccione una opción válida:\n\n"
+                "1. Goteo\n"
+                "2. Aspersión\n"
+                "3. Gravedad\n"
+                "4. Ninguno (depende de lluvia)\n\n"
+                "Responda con el número de su elección 💧"
             ),
             'location': (
-                "Por favor ingrese un departamento válido.\n"
-                "Por ejemplo: Guatemala, Escuintla, Petén, etc.\n\n"
-                "¿En qué departamento está su terreno? 📍"
+                "Lo siento, no reconozco ese departamento. 😕\n"
+                "Por favor escriba el nombre del departamento donde está el terreno. "
+                "Por ejemplo: Guatemala, Escuintla, etc. 📍"
+            ),
+            'financial': (
+                "Lo siento, hubo un problema al generar su análisis. 😕\n"
+                "¿Le gustaría intentar nuevamente? Responda SI o NO 🔄"
             ),
             'loan': (
-                "Lo siento, hubo un problema al calcular su préstamo 😔\n\n"
-                "¿Le gustaría:\n"
-                "1. Intentar con otros datos\n"
-                "2. Hablar con un asesor\n"
-                "3. Terminar la consulta"
+                "Lo siento, hubo un problema al procesar su solicitud. 😕\n"
+                "¿Le gustaría intentar nuevamente? Responda SI o NO 🔄"
             )
         }
         
-        # Mensaje por defecto
-        default_message = (
-            "Lo siento, ha ocurrido un error 😔\n\n"
-            "Puede escribir:\n"
-            "- 'inicio' para empezar de nuevo\n"
-            "- 'ayuda' para ver las opciones\n"
-            "- 'asesor' para hablar con alguien"
-        )
-        
-        # Obtener mensaje específico o default
-        message = error_messages.get(context, default_message)
-        
-        # Si es un error crítico, resetear estado
-        if context in ['loan', 'critical']:
-            user_data['state'] = self.STATES['START']
-        
-        return message
-    
+        return mensajes.get(context, "Lo siento, hubo un error. ¿Podría intentar nuevamente? 🔄")
+
     def process_message(self, user_data: Dict[str, Any], message: str) -> str:
         """
         Procesa un mensaje del usuario
