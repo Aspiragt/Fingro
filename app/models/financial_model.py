@@ -5,7 +5,7 @@ from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
 from datetime import datetime
 import logging
-from app.external_apis.maga import maga_api, CanalComercializacion
+from app.external_apis.maga_precios import maga_precios_client, CanalComercializacion
 
 logger = logging.getLogger(__name__)
 
@@ -277,9 +277,9 @@ class FinancialModel:
             risk -= 0.1
         
         # Ajustar por tipo de cultivo
-        if cultivo in maga_api.export_crops:
+        if cultivo in maga_precios_client.export_crops:
             risk += 0.1  # Cultivos de exportación tienen más riesgo
-        if cultivo in maga_api.cooperative_crops:
+        if cultivo in maga_precios_client.cooperative_crops:
             risk -= 0.1  # Cultivos de cooperativa son más estables
             
         # Mantener el riesgo entre 0 y 1
@@ -348,13 +348,13 @@ class FinancialModel:
             canal = user_data.get('commercialization', CanalComercializacion.MAYORISTA)
             
             # 1. Obtener precios
-            price_data = await maga_api.get_precio_cultivo(cultivo, canal)
+            price_data = await maga_precios_client.get_crop_price(cultivo)
             if not price_data:
                 logger.error(f"Error obteniendo precio para {cultivo}")
                 return None
                 
             precio_quintal = price_data['precio']
-            medida = price_data['medida']
+            medida = 'Quintal'  # maga_precios siempre usa quintales
             
             # 2. Calcular costos
             costos = self._get_costos_cultivo(cultivo, area)
