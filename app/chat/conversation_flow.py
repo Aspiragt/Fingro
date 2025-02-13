@@ -635,56 +635,47 @@ class ConversationFlow:
         
         Args:
             loan_data: Datos del préstamo
-            financial_data: Datos del análisis financiero
+            financial_data: Datos financieros del proyecto
             
         Returns:
             str: Mensaje formateado
         """
         try:
-            # Extraer datos relevantes
-            monto = loan_data['monto']
+            # Extraer datos del préstamo
+            monto = round(loan_data['monto'])
             plazo = loan_data['plazo']
             tasa = loan_data['tasa']
-            cuota = loan_data['cuota_mensual']
+            cuota = round(loan_data['cuota_mensual'])
             
-            crop = financial_data['cultivo']
+            crop = financial_data['cultivo'].capitalize()
             area = financial_data['area']
-            rendimiento = financial_data['rendimiento']
-            precio = financial_data['precio_quintal']
-            medida = financial_data.get('medida', 'Quintal')
-            canal = financial_data.get('canal', 'Mayorista')
-            utilidad = financial_data['utilidad']
+            rendimiento = round(financial_data['rendimiento'])
+            costos = round(financial_data['costos_siembra'])
             
-            # Calcular cuántos quintales necesita vender para pagar la cuota
-            quintales_por_cuota = cuota / precio
-            
-            # Formatear mensaje
             mensaje = (
-                f"Don {self.user_name}, ¡tengo buenas noticias! 🎉\n\n"
+                f"✨ Oferta de préstamo para su siembra de {crop}\n\n"
                 
-                f"Basado en su cultivo de {crop} en {area:.1f} hectáreas:\n"
-                f"✅ Producción esperada: {rendimiento:.1f} {medida}s\n"
-                f"✅ Precio actual: Q{precio:.2f} por {medida}\n"
-                f"✅ Canal de venta: {canal}\n"
-                f"✅ Ganancia esperada: Q{utilidad:.2f}\n\n"
+                f"💰 Detalles del préstamo:\n"
+                f"•⁠  ⁠Monto: Q{monto:,}\n"
+                f"•⁠  ⁠Plazo: {plazo} meses\n"
+                f"•⁠  ⁠Tasa anual: {tasa}%\n"
+                f"•⁠  ⁠Cuota mensual: Q{cuota:,}\n\n"
                 
-                f"Le podemos ofrecer un préstamo de:\n"
-                f"💰 Monto: Q{monto:.2f}\n"
-                f"⏱️ Plazo: {plazo} meses\n"
-                f"📊 Tasa anual: {tasa:.1f}%\n"
-                f"💵 Cuota mensual: Q{cuota:.2f}\n\n"
+                f"🌱 Datos de su proyecto:\n"
+                f"•⁠  ⁠Cultivo: {crop}\n"
+                f"•⁠  ⁠Área: {area} hectáreas\n"
+                f"•⁠  ⁠Rendimiento esperado: {rendimiento} quintales por hectárea\n"
+                f"•⁠  ⁠Costo total: Q{costos:,}\n\n"
                 
-                f"Para pagar la cuota mensual necesitaría vender {quintales_por_cuota:.1f} {medida}s "
-                f"de su producción de {rendimiento:.1f} {medida}s.\n\n"
-                
-                f"¿Le interesa este préstamo? Responda 'sí' o 'no' 🤝"
+                f"¿Le gustaría continuar con la solicitud? 🤝\n\n"
+                f"Responda SI o NO 👇"
             )
             
             return mensaje
             
         except Exception as e:
-            logger.error(f"Error formateando oferta: {str(e)}")
-            return "Lo siento, hubo un error al generar la oferta de préstamo. Por favor intente más tarde."
+            logger.error(f"Error formateando oferta de préstamo: {str(e)}")
+            raise
 
     def validate_yes_no(self, response: str) -> bool:
         """Valida respuestas sí/no de forma flexible"""
@@ -719,6 +710,49 @@ class ConversationFlow:
             "Gracias por confiar en FinGro. ¡Que tenga un excelente día! 👋\n\n"
             "Puede escribir 'inicio' para comenzar una nueva consulta."
         )
+
+    def process_end_conversation(self, user_data: Dict[str, Any]) -> str:
+        """
+        Procesa el fin de la conversación
+        
+        Args:
+            user_data: Datos del usuario
+            
+        Returns:
+            str: Mensaje de despedida
+        """
+        try:
+            # Verificar si tenemos análisis financiero
+            if 'analysis' not in user_data or user_data['analysis'] is None:
+                return (
+                    "¡Gracias por usar FinGro! 🌱\n\n"
+                    "Espero poder ayudarle en otra ocasión. ¡Que tenga un excelente día! 👋"
+                )
+
+            # Obtener datos del análisis
+            analysis = user_data['analysis']
+            crop = analysis['cultivo'].capitalize()
+            area = analysis['area']
+            
+            mensaje = (
+                f"¡Gracias por usar FinGro! 🌱\n\n"
+                
+                f"Le deseo mucho éxito con su siembra de {crop} "
+                f"en sus {area} hectáreas. 🌾\n\n"
+                
+                f"Si necesita más información sobre:\n"
+                f"•⁠  ⁠Precios de mercado 💰\n"
+                f"•⁠  ⁠Análisis de costos 📊\n"
+                f"•⁠  ⁠Préstamos agrícolas 🏦\n\n"
+                
+                f"¡No dude en consultarme de nuevo! 👋"
+            )
+            
+            return mensaje
+            
+        except Exception as e:
+            logger.error(f"Error generando mensaje de despedida: {str(e)}")
+            return "¡Gracias por usar FinGro! 🌱 ¡Hasta pronto! 👋"
 
 # Instancia global
 conversation_flow = ConversationFlow(WhatsAppService())
