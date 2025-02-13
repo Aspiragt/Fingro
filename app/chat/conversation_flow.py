@@ -478,6 +478,55 @@ class ConversationFlow:
             )
             await self.whatsapp.send_message(phone_number, error_message)
 
+    async def process_state(self, state: str, message: str, user_data: Dict[str, Any]) -> Any:
+        """Procesa un mensaje según el estado actual"""
+        try:
+            # Comandos especiales
+            if message.lower() == 'inicio':
+                user_data.clear()
+                return None
+                
+            if message.lower() == 'ayuda':
+                return None
+                
+            if message.lower() == 'asesor':
+                return None
+                
+            # Procesar según estado
+            if state == self.STATES['GET_CROP']:
+                return self.process_crop(message)
+                
+            elif state == self.STATES['GET_AREA']:
+                return self.process_area(message)
+                
+            elif state == self.STATES['GET_CHANNEL']:
+                return self.process_channel(message)
+                
+            elif state == self.STATES['GET_IRRIGATION']:
+                return self.process_irrigation(message)
+                
+            elif state == self.STATES['GET_LOCATION']:
+                return self.process_location(message)
+                
+            elif state == self.STATES['ASK_LOAN']:
+                return self.process_loan_question(message)
+                
+            elif state == self.STATES['GET_LOAN_RESPONSE']:
+                return self.process_loan_response(user_data, message)
+                
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error procesando estado {state}: {str(e)}")
+            return None
+            
+    def process_loan_question(self, message: str) -> bool:
+        """Procesa la respuesta a si quiere un préstamo"""
+        result = parse_yes_no(message)
+        if result is None:
+            raise ValueError("Respuesta inválida")
+        return result
+
     async def process_show_analysis(self, user_data: Dict[str, Any]) -> str:
         """
         Procesa y muestra el análisis financiero
@@ -812,7 +861,7 @@ class ConversationFlow:
             cultivo = normalize_text(user_data.get('crop', ''))
             if channel == 'exportacion' and cultivo not in maga_precios_client.export_crops:
                 return (
-                    f"El {cultivo} no es común para exportación 🤔\n"
+                    f"El {cultivo} no es muy común para exportación 🤔\n"
                     f"¿Está seguro que quiere exportar? Escoja una opción:\n\n"
                     f"1. Sí, tengo comprador para exportación\n"
                     f"2. No, mejor escojo otro canal"
@@ -987,17 +1036,12 @@ class ConversationFlow:
             
             # Obtener costos y precios
             costos = maga_precios_client.get_costos_cultivo(cultivo)
-            if not costos:
-                return self.handle_error(user_data, Exception("No hay datos de costos"), "cultivo")
-                
             precios = maga_precios_client.get_precios_cultivo(cultivo, user_data.get('channel', ''))
-            if not precios:
-                return self.handle_error(user_data, Exception("No hay datos de precios"), "cultivo")
             
             # Calcular métricas
-            costo_total = costos['costo_por_hectarea'] * area
-            rendimiento = costos['rendimiento_por_hectarea'] * area
-            precio_actual = precios['precio_actual']
+            costo_total = costos.get('costo_por_hectarea', 0) * area
+            rendimiento = costos.get('rendimiento_por_hectarea', 0) * area
+            precio_actual = precios.get('precio_actual', 0)
             ingresos = rendimiento * precio_actual
             ganancia = ingresos - costo_total
             
