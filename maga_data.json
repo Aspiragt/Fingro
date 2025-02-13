@@ -1,5 +1,13 @@
 [
   {
+    "Producto": "Café oro, de primera",
+    "Fecha": "2024-12-01",
+    "Precio": 1200.0,
+    "Mercado": "La Terminal",
+    "Medida": "Quintal",
+    "Moneda": "GTQ"
+  },
+  {
     "Producto": "Achiote seco, sin capsula, de primera",
     "Fecha": "2024-12-01",
     "Precio": 1000.0,

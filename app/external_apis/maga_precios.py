@@ -71,18 +71,42 @@ class MAGAPreciosClient:
             Dict con datos del precio o None si hay error
         """
         try:
-            # Normalizar nombre
-            crop_name = crop_name.lower().strip()
+            # Normalizar nombre (quitar acentos y convertir a minúsculas)
+            import unicodedata
+            
+            def normalize_text(text: str) -> str:
+                """Quita acentos y convierte a minúsculas"""
+                text = unicodedata.normalize('NFKD', text)
+                text = text.encode('ascii', 'ignore').decode('ascii')
+                return text.lower().strip()
+            
+            crop_name = normalize_text(crop_name)
             
             # Buscar precio en datos de MAGA
             for precio in self.maga_prices:
-                if crop_name in precio['Producto'].lower():
+                producto = normalize_text(precio['Producto'])
+                if crop_name in producto:
                     return {
                         'nombre': precio['Producto'],
                         'precio': precio['Precio'],
                         'fecha': precio['Fecha'],
+                        'medida': precio['Medida'],
                         'fuente': 'MAGA'
                     }
+            
+            # Si no se encuentra, buscar en el mapeo
+            if crop_name in self.CROP_MAPPING:
+                mapped_name = normalize_text(self.CROP_MAPPING[crop_name])
+                for precio in self.maga_prices:
+                    producto = normalize_text(precio['Producto'])
+                    if mapped_name in producto:
+                        return {
+                            'nombre': precio['Producto'],
+                            'precio': precio['Precio'],
+                            'fecha': precio['Fecha'],
+                            'medida': precio['Medida'],
+                            'fuente': 'MAGA'
+                        }
             
             logger.warning(f"No se encontró precio para {crop_name}")
             return None
