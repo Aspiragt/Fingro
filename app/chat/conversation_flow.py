@@ -8,7 +8,7 @@ from app.views.financial_report import report_generator
 from app.external_apis.maga_precios import CanalComercializacion, maga_precios_client
 from app.services.whatsapp_service import WhatsAppService
 from app.database.firebase import firebase_manager
-from app.utils.text import normalize_text, parse_area, format_number, parse_yes_no, parse_channel, parse_irrigation
+from app.utils.text import normalize_text, parse_area, format_number, parse_yes_no, parse_channel, parse_irrigation, parse_department
 
 logger = logging.getLogger(__name__)
 
@@ -548,136 +548,129 @@ class ConversationFlow:
             logger.error(f"Error generando reporte financiero: {str(e)}")
             raise
 
-    def _format_loan_offer(self, loan_data: Dict[str, Any], financial_data: Dict[str, Any]) -> str:
+    def calculate_loan_amount(self, user_data: Dict[str, Any]) -> Optional[float]:
         """
-        Formatea el mensaje de oferta de préstamo
+        Calcula el monto del préstamo basado en el proyecto
         
         Args:
-            loan_data: Datos del préstamo
-            financial_data: Datos financieros del proyecto
+            user_data: Datos del usuario
             
         Returns:
-            str: Mensaje formateado
+            float: Monto del préstamo o None si no se puede calcular
         """
         try:
-            # Extraer datos del préstamo
-            monto = round(loan_data['monto'])
-            cuota = round(loan_data['cuota_mensual'])
+            # Obtener datos básicos
+            cultivo = normalize_text(user_data.get('crop', ''))
+            area = user_data.get('area', 0)  # En hectáreas
+            channel = user_data.get('channel', '')
+            irrigation = user_data.get('irrigation', '')
             
-            crop = financial_data['cultivo'].capitalize()
-            area = financial_data['area']
+            # Obtener costos de producción
+            costos = maga_precios_client.get_costos_cultivo(cultivo)
+            if not costos:
+                return None
+                
+            # Costo base por hectárea
+            costo_base = costos.get('costo_por_hectarea', 0)
             
-            mensaje = (
-                f"✨ Préstamo para {crop}\n\n"
-                
-                f"💰 Le podemos prestar:\n"
-                f"•⁠  ⁠Monto: Q{monto:,}\n"
-                f"•⁠  ⁠Cuota mensual: Q{cuota:,}\n\n"
-                
-                f"¿Desea continuar con la solicitud? 🤝\n\n"
-                f"Responda SI o NO 👇"
+            # Ajustes por sistema de riego
+            factores_riego = {
+                'goteo': 1.2,  # 20% más por sistema de goteo
+                'aspersion': 1.15,  # 15% más por aspersión
+                'gravedad': 1.1,  # 10% más por gravedad
+                'temporal': 1.0  # Sin ajuste para temporal
+            }
+            factor_riego = factores_riego.get(irrigation, 1.0)
+            
+            # Ajustes por canal de comercialización
+            factores_canal = {
+                'exportacion': 1.3,  # 30% más para exportación
+                'mayorista': 1.2,  # 20% más para mayorista
+                'cooperativa': 1.15,  # 15% más para cooperativa
+                'mercado_local': 1.0  # Sin ajuste para mercado local
+            }
+            factor_canal = factores_canal.get(channel, 1.0)
+            
+            # Calcular monto total
+            monto = costo_base * area * factor_riego * factor_canal
+            
+            # Redondear a miles
+            monto = round(monto / 1000) * 1000
+            
+            return monto
+            
+        except Exception as e:
+            logger.error(f"Error calculando monto: {str(e)}")
+            return None
+    
+    def process_show_loan(self, user_data: Dict[str, Any]) -> str:
+        """Procesa y muestra la oferta de préstamo"""
+        try:
+            # Obtener datos
+            cultivo = user_data.get('crop', '').lower()
+            area = user_data.get('area_original', 0)
+            unit = user_data.get('area_unit', '')
+            channel = user_data.get('channel', '')
+            irrigation = user_data.get('irrigation', '')
+            location = user_data.get('location', '')
+            
+            # Calcular préstamo
+            monto = self.calculate_loan_amount(user_data)
+            if not monto:
+                return (
+                    "Lo siento, no pudimos calcular un préstamo para su proyecto 😔\n\n"
+                    "Por favor intente de nuevo con otros datos o escriba 'inicio' "
+                    "para hacer otra consulta."
+                )
+            
+            # Obtener costos y precios
+            costos = maga_precios_client.get_costos_cultivo(cultivo)
+            precios = maga_precios_client.get_precios_cultivo(cultivo, channel)
+            
+            # Formatear números
+            monto_str = format_number(monto)
+            cuota = format_number(monto * 0.12)  # 12% mensual aproximado
+            
+            # Calcular rendimiento esperado
+            rendimiento = costos.get('rendimiento_por_hectarea', 0)
+            area_ha = user_data.get('area', 0)  # En hectáreas
+            produccion = rendimiento * area_ha
+            precio_q = precios.get('precio_actual', 0)
+            ingreso = produccion * precio_q
+            
+            # Formatear producción
+            produccion_str = format_number(produccion)
+            ingreso_str = format_number(ingreso)
+            
+            # Actualizar estado
+            user_data['state'] = self.STATES['GET_LOAN_RESPONSE']
+            user_data['loan_amount'] = monto
+            
+            # Construir mensaje
+            return (
+                f"¡Buenas noticias! 🎉\n\n"
+                f"Con base en su proyecto:\n"
+                f"- {cultivo.capitalize()} en {location} 🌱\n"
+                f"- {format_number(area)} {unit} de terreno\n"
+                f"- Riego por {irrigation} 💧\n"
+                f"- Venta en {channel} 🚛\n\n"
+                f"Producción esperada:\n"
+                f"- {produccion_str} quintales de {cultivo} 📦\n"
+                f"- Ingresos de Q{ingreso_str} 💰\n\n"
+                f"Le podemos ofrecer:\n"
+                f"- Préstamo de Q{monto_str} 💸\n"
+                f"- Cuota de Q{cuota} al mes 📅\n"
+                f"- 12 meses de plazo 🗓️\n"
+                f"- Incluye asistencia técnica 🌿\n\n"
+                f"¿Le interesa continuar con la solicitud? 🤝"
             )
             
-            return mensaje
-            
         except Exception as e:
-            logger.error(f"Error formateando oferta de préstamo: {str(e)}")
-            raise
-
-    def process_loan_response(self, user_data: Dict[str, Any], response: str) -> str:
-        """
-        Procesa la respuesta a la oferta de préstamo
-        
-        Args:
-            user_data: Datos del usuario
-            response: Respuesta del usuario
-            
-        Returns:
-            str: Mensaje de respuesta
-        """
-        try:
-            # Validar respuesta
-            result = parse_yes_no(response)
-            if result is None:
-                return (
-                    "Por favor responda SI o NO.\n\n"
-                    "¿Desea continuar con la solicitud? 🤝"
-                )
-            
-            if result:
-                # Guardar usuario como cliente potencial
-                user_data['status'] = 'prestamo_solicitado'
-                user_data['state'] = self.STATES['DONE']
-                
-                return (
-                    f"¡Excelente! 🎉\n\n"
-                    f"Su préstamo está en revisión. Le notificaré por este chat "
-                    f"cuando esté aprobado para continuar con el proceso.\n\n"
-                    f"¡Gracias por confiar en FinGro! 🌱\n\n"
-                    f"Puede escribir 'inicio' para hacer otra consulta."
-                )
-            else:
-                return self.process_end_conversation(user_data)
-                
-        except Exception as e:
-            logger.error(f"Error procesando respuesta de préstamo: {str(e)}")
-            return "Lo siento, hubo un error. Por favor intente de nuevo."
-
-    def process_end_conversation(self, user_data: Dict[str, Any]) -> str:
-        """Procesa el fin de la conversación"""
-        user_data['state'] = self.STATES['DONE']
-        
-        return (
-            "Entiendo. No hay problema 👍\n\n"
-            "Si cambia de opinión o quiere hacer otra consulta, "
-            "puede escribir 'inicio' en cualquier momento.\n\n"
-            "¡Que tenga un excelente día! 🌱"
-        )
-
-    def process_show_loan(self, user_data: Dict[str, Any]) -> str:
-        """
-        Procesa y muestra la oferta de préstamo
-        
-        Args:
-            user_data: Datos del usuario
-            
-        Returns:
-            str: Mensaje con oferta de préstamo
-        """
-        try:
-            if 'analysis' not in user_data or user_data['analysis'] is None:
-                return "❌ Lo siento, no pudimos analizar su proyecto en este momento. Por favor intente de nuevo."
-
-            analysis_data = user_data['analysis']
-
-            # Validar que tenemos los datos necesarios
-            required_fields = ['costos_siembra', 'rendimiento', 'cultivo']
-            if not all(field in analysis_data for field in required_fields):
-                logger.error(f"Faltan campos en analysis_data: {analysis_data}")
-                return "❌ Lo siento, hubo un error en el análisis. Por favor intente de nuevo."
-
-            # Calcular monto del préstamo (80% del costo total)
-            costo_total = analysis_data['costos_siembra']
-            monto_prestamo = costo_total * 0.8
-            
-            # Calcular cuota mensual (principal + intereses simple)
-            cuota_mensual = (monto_prestamo + (monto_prestamo * 0.12)) / 12
-
-            # Preparar datos del préstamo
-            loan_data = {
-                'monto': monto_prestamo,
-                'plazo': 12,
-                'tasa': 12,
-                'cuota_mensual': cuota_mensual
-            }
-
-            # Formatear mensaje
-            mensaje = self._format_loan_offer(loan_data, analysis_data)
-            return mensaje
-
-        except Exception as e:
-            logger.error(f"Error generando oferta de préstamo: {str(e)}")
-            return "❌ Lo siento, hubo un error al generar la oferta. Por favor intente de nuevo."
+            logger.error(f"Error generando oferta: {str(e)}")
+            return (
+                "Lo siento, hubo un error al generar su oferta 😔\n\n"
+                "Por favor intente de nuevo o escriba 'inicio' para hacer otra consulta."
+            )
 
     def validate_yes_no(self, response: str) -> bool:
         """Valida respuestas sí/no de forma flexible"""
@@ -921,6 +914,105 @@ class ConversationFlow:
             f"3. Gravedad 🌊\n"
             f"4. Ninguno (depende de lluvia) 🌧️"
         )
+
+    def process_location(self, user_data: Dict[str, Any], response: str) -> str:
+        """
+        Procesa la respuesta de la ubicación
+        
+        Args:
+            user_data: Datos del usuario
+            response: Respuesta del usuario
+            
+        Returns:
+            str: Mensaje de respuesta
+        """
+        try:
+            # Validar departamento
+            department = parse_department(response)
+            if not department:
+                return (
+                    "Por favor ingrese un departamento válido.\n"
+                    "Por ejemplo: Guatemala, Escuintla, Petén, etc.\n\n"
+                    "¿En qué departamento está su terreno? 📍"
+                )
+            
+            # Guardar ubicación
+            user_data['location'] = department
+            
+            # Verificar si el cultivo es adecuado para la región
+            cultivo = normalize_text(user_data.get('crop', ''))
+            if not maga_precios_client.is_crop_suitable(cultivo, department):
+                return (
+                    f"El {cultivo} no es muy común en {department} 🤔\n"
+                    f"¿Está seguro que quiere sembrar aquí? Escoja una opción:\n\n"
+                    f"1. Sí, tengo experiencia en la región\n"
+                    f"2. No, mejor consulto otros cultivos"
+                )
+            
+            # Siguiente paso
+            return self.process_show_loan(user_data)
+            
+        except Exception as e:
+            logger.error(f"Error procesando ubicación: {str(e)}")
+            return "Hubo un error. Por favor intente de nuevo 🙏"
+
+    def process_show_loan(self, user_data: Dict[str, Any]) -> str:
+        """Procesa y muestra la oferta de préstamo"""
+        try:
+            # Obtener datos
+            cultivo = user_data.get('crop', '').lower()
+            area = user_data.get('area_original', 0)
+            unit = user_data.get('area_unit', '')
+            channel = user_data.get('channel', '')
+            irrigation = user_data.get('irrigation', '')
+            location = user_data.get('location', '')
+            
+            # Calcular préstamo
+            monto = self.calculate_loan_amount(user_data)
+            if not monto:
+                return "Lo siento, no pudimos calcular un préstamo para su proyecto 😔"
+            
+            # Formatear números
+            monto_str = format_number(monto)
+            cuota = format_number(monto * 0.12)  # 12% mensual aproximado
+            
+            # Calcular rendimiento esperado
+            rendimiento = maga_precios_client.get_costos_cultivo(cultivo).get('rendimiento_por_hectarea', 0)
+            area_ha = user_data.get('area', 0)  # En hectáreas
+            produccion = rendimiento * area_ha
+            precio_q = maga_precios_client.get_precios_cultivo(cultivo, channel).get('precio_actual', 0)
+            ingreso = produccion * precio_q
+            
+            # Formatear producción
+            produccion_str = format_number(produccion)
+            ingreso_str = format_number(ingreso)
+            
+            # Actualizar estado
+            user_data['state'] = self.STATES['GET_LOAN_RESPONSE']
+            user_data['loan_amount'] = monto
+            
+            # Construir mensaje
+            return (
+                f"¡Buenas noticias! 🎉\n\n"
+                f"Con base en su proyecto:\n"
+                f"- {cultivo.capitalize()} en {location} 🌱\n"
+                f"- {format_number(area)} {unit} de terreno\n"
+                f"- Riego por {irrigation} 💧\n"
+                f"- Venta en {channel} 🚛\n\n"
+                f"Producción esperada:\n"
+                f"- {produccion_str} quintales de {cultivo} 📦\n"
+                f"- Ingresos de Q{ingreso_str} 💰\n\n"
+                f"Le podemos ofrecer:\n"
+                f"- Préstamo de Q{monto_str} 💸\n"
+                f"- Cuota de Q{cuota} al mes 📅\n"
+                f"- 12 meses de plazo 🗓️\n"
+                f"- Incluye asistencia técnica 🌿\n\n"
+                f"¿Le interesa continuar con la solicitud? 🤝"
+            )
+            
+        except Exception as e:
+            logger.error(f"Error generando oferta: {str(e)}")
+            return "Lo siento, hubo un error al generar su oferta 😔"
 
 # Instancia global
 conversation_flow = ConversationFlow(WhatsAppService())

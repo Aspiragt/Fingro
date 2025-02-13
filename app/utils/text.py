@@ -441,3 +441,127 @@ def parse_irrigation(text: str) -> Optional[str]:
     }
     
     return irrigation_map.get(text)
+
+def parse_department(text: str) -> Optional[str]:
+    """
+    Parsea un departamento de Guatemala
+    
+    Args:
+        text: Texto a parsear
+        
+    Returns:
+        str: Departamento normalizado o None si no es válido
+        
+    Examples:
+        >>> parse_department("guatemala")
+        'Guatemala'
+        >>> parse_department("el progreso")
+        'El Progreso'
+        >>> parse_department("peten")
+        'Petén'
+    """
+    if not text:
+        return None
+        
+    # Normalizar texto
+    text = normalize_text(text)
+    
+    # Mapeo de departamentos
+    department_map = {
+        # Guatemala
+        'guatemala': 'Guatemala',
+        'guate': 'Guatemala',
+        'ciudad': 'Guatemala',
+        'ciudad de guatemala': 'Guatemala',
+        
+        # Alta Verapaz
+        'alta verapaz': 'Alta Verapaz',
+        'coban': 'Alta Verapaz',
+        'av': 'Alta Verapaz',
+        
+        # Baja Verapaz
+        'baja verapaz': 'Baja Verapaz',
+        'salama': 'Baja Verapaz',
+        'bv': 'Baja Verapaz',
+        
+        # Chimaltenango
+        'chimaltenango': 'Chimaltenango',
+        'chimal': 'Chimaltenango',
+        
+        # Chiquimula
+        'chiquimula': 'Chiquimula',
+        
+        # El Progreso
+        'el progreso': 'El Progreso',
+        'progreso': 'El Progreso',
+        'guastatoya': 'El Progreso',
+        
+        # Escuintla
+        'escuintla': 'Escuintla',
+        
+        # Huehuetenango
+        'huehuetenango': 'Huehuetenango',
+        'huehue': 'Huehuetenango',
+        
+        # Izabal
+        'izabal': 'Izabal',
+        'puerto barrios': 'Izabal',
+        
+        # Jalapa
+        'jalapa': 'Jalapa',
+        
+        # Jutiapa
+        'jutiapa': 'Jutiapa',
+        
+        # Petén
+        'peten': 'Petén',
+        'petén': 'Petén',
+        'flores': 'Petén',
+        
+        # Quetzaltenango
+        'quetzaltenango': 'Quetzaltenango',
+        'xela': 'Quetzaltenango',
+        'xelaju': 'Quetzaltenango',
+        
+        # Quiché
+        'quiche': 'Quiché',
+        'quiché': 'Quiché',
+        'santa cruz': 'Quiché',
+        
+        # Retalhuleu
+        'retalhuleu': 'Retalhuleu',
+        'reu': 'Retalhuleu',
+        
+        # Sacatepéquez
+        'sacatepequez': 'Sacatepéquez',
+        'sacatepéquez': 'Sacatepéquez',
+        'antigua': 'Sacatepéquez',
+        'antigua guatemala': 'Sacatepéquez',
+        
+        # San Marcos
+        'san marcos': 'San Marcos',
+        
+        # Santa Rosa
+        'santa rosa': 'Santa Rosa',
+        'cuilapa': 'Santa Rosa',
+        
+        # Sololá
+        'solola': 'Sololá',
+        'sololá': 'Sololá',
+        'panajachel': 'Sololá',
+        
+        # Suchitepéquez
+        'suchitepequez': 'Suchitepéquez',
+        'suchitepéquez': 'Suchitepéquez',
+        'mazate': 'Suchitepéquez',
+        'mazatenango': 'Suchitepéquez',
+        
+        # Totonicapán
+        'totonicapan': 'Totonicapán',
+        'totonicapán': 'Totonicapán',
+        
+        # Zacapa
+        'zacapa': 'Zacapa'
+    }
+    
+    return department_map.get(text)
