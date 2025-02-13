@@ -29,40 +29,121 @@ class FinancialModel:
         # Costos base por hectárea para diferentes cultivos
         self.costos_cultivos = {
             'maiz': CostosCultivo(
-                preparacion_suelo=2000,
-                semilla=1500,
-                fertilizantes=4000,
-                pesticidas=2000,
-                mano_obra=6000,
-                cosecha=3000,
-                otros=1500
+                preparacion_suelo=2000,    # Arado y rastra
+                semilla=1500,              # Semilla certificada
+                fertilizantes=4000,        # NPK + Urea
+                pesticidas=2000,           # Herbicidas e insecticidas
+                mano_obra=6000,            # Siembra, fertilización, control
+                cosecha=3000,              # Cosecha y desgrane
+                otros=1500                 # Transporte, almacenamiento
             ),
             'frijol': CostosCultivo(
-                preparacion_suelo=2000,
-                semilla=2000,
-                fertilizantes=3500,
-                pesticidas=1500,
-                mano_obra=5000,
-                cosecha=2500,
-                otros=1500
+                preparacion_suelo=2000,    # Arado y rastra
+                semilla=2000,              # Semilla certificada
+                fertilizantes=3500,        # NPK + foliares
+                pesticidas=1500,           # Control de plagas
+                mano_obra=5000,            # Siembra, control, arranque
+                cosecha=2500,              # Aporreo y limpieza
+                otros=1500                 # Transporte, sacos
             ),
             'papa': CostosCultivo(
-                preparacion_suelo=3000,
-                semilla=6000,
-                fertilizantes=5000,
-                pesticidas=3000,
-                mano_obra=8000,
-                cosecha=4000,
-                otros=2000
+                preparacion_suelo=3000,    # Arado profundo
+                semilla=12000,             # Semilla certificada
+                fertilizantes=8000,        # NPK + foliares
+                pesticidas=5000,           # Control tizón y plagas
+                mano_obra=8000,            # Siembra, aporques, control
+                cosecha=4000,              # Cosecha y selección
+                otros=2000                 # Transporte, almacenamiento
             ),
             'tomate': CostosCultivo(
-                preparacion_suelo=4000,    # Preparación más intensiva
-                semilla=8000,             # Plántulas de calidad
-                fertilizantes=12000,      # Fertilización intensiva
-                pesticidas=6000,          # Control de plagas
-                mano_obra=15000,          # Mano de obra especializada
-                cosecha=5000,             # Cosecha cuidadosa
-                otros=3000                # Tutoreo, materiales, etc.
+                preparacion_suelo=4000,    # Preparación intensiva
+                semilla=8000,              # Plántulas injertadas
+                fertilizantes=12000,       # Fertirrigación
+                pesticidas=6000,           # Control preventivo
+                mano_obra=15000,           # Tutorado, podas, control
+                cosecha=5000,              # Cosecha selectiva
+                otros=3000                 # Tutores, transporte
+            ),
+            'chile': CostosCultivo(
+                preparacion_suelo=4000,    # Preparación y camas
+                semilla=7000,              # Plántulas
+                fertilizantes=10000,       # Fertirrigación
+                pesticidas=5000,           # Control preventivo
+                mano_obra=12000,           # Tutorado, podas
+                cosecha=4000,              # Cosecha selectiva
+                otros=3000                 # Tutores, cajas
+            ),
+            'cebolla': CostosCultivo(
+                preparacion_suelo=3000,    # Preparación y camas
+                semilla=8000,              # Plántulas/bulbillos
+                fertilizantes=7000,        # NPK + foliares
+                pesticidas=4000,           # Control hongos
+                mano_obra=10000,           # Trasplante, control
+                cosecha=3500,              # Arranque y limpieza
+                otros=2500                 # Curado, transporte
+            ),
+            'repollo': CostosCultivo(
+                preparacion_suelo=3000,    # Preparación y camas
+                semilla=6000,              # Plántulas híbridas
+                fertilizantes=6000,        # NPK + foliares
+                pesticidas=4000,           # Control plagas
+                mano_obra=8000,            # Trasplante, control
+                cosecha=3000,              # Cosecha y limpieza
+                otros=2000                 # Transporte, cajas
+            ),
+            'arveja': CostosCultivo(
+                preparacion_suelo=2500,    # Preparación y surcos
+                semilla=3000,              # Semilla certificada
+                fertilizantes=5000,        # NPK + foliares
+                pesticidas=3000,           # Control preventivo
+                mano_obra=8000,            # Tutorado, control
+                cosecha=4000,              # Cosecha selectiva
+                otros=2500                 # Tutores, cajas
+            ),
+            'aguacate': CostosCultivo(
+                preparacion_suelo=5000,    # Preparación y hoyado
+                semilla=15000,             # Plantas injertadas
+                fertilizantes=8000,        # NPK + foliares
+                pesticidas=5000,           # Control preventivo
+                mano_obra=10000,           # Podas, control
+                cosecha=4000,              # Cosecha selectiva
+                otros=3000                 # Transporte, cajas
+            ),
+            'platano': CostosCultivo(
+                preparacion_suelo=4000,    # Preparación y hoyado
+                semilla=10000,             # Hijuelos certificados
+                fertilizantes=7000,        # NPK + foliares
+                pesticidas=4000,           # Control sigatoka
+                mano_obra=9000,            # Deshije, deshoje
+                cosecha=4000,              # Cosecha y empaque
+                otros=3000                 # Transporte, cajas
+            ),
+            'limon': CostosCultivo(
+                preparacion_suelo=5000,    # Preparación y hoyado
+                semilla=15000,             # Plantas injertadas
+                fertilizantes=8000,        # NPK + foliares
+                pesticidas=5000,           # Control preventivo
+                mano_obra=10000,           # Podas, control
+                cosecha=4000,              # Cosecha selectiva
+                otros=3000                 # Transporte, cajas
+            ),
+            'zanahoria': CostosCultivo(
+                preparacion_suelo=3000,    # Preparación profunda
+                semilla=4000,              # Semilla híbrida
+                fertilizantes=6000,        # NPK + foliares
+                pesticidas=3000,           # Control preventivo
+                mano_obra=8000,            # Raleo, control
+                cosecha=3500,              # Arranque y lavado
+                otros=2500                 # Transporte, cajas
+            ),
+            'brocoli': CostosCultivo(
+                preparacion_suelo=3000,    # Preparación y camas
+                semilla=6000,              # Plántulas híbridas
+                fertilizantes=6000,        # NPK + foliares
+                pesticidas=4000,           # Control plagas
+                mano_obra=8000,            # Trasplante, control
+                cosecha=3000,              # Cosecha y empaque
+                otros=2000                 # Transporte, cajas
             )
         }
         
