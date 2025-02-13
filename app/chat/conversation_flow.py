@@ -1130,7 +1130,7 @@ class ConversationFlow:
         
         # Mensaje por defecto
         default_message = (
-            "Lo siento, hubo un error 😔\n\n"
+            "Lo siento, ha ocurrido un error 😔\n\n"
             "Puede escribir:\n"
             "- 'inicio' para empezar de nuevo\n"
             "- 'ayuda' para ver las opciones\n"
