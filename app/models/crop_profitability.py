@@ -5,7 +5,7 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 import logging
 from app.models.crop_yields import calculate_expected_yield
-from app.external_apis.maga import maga_client
+from app.external_apis.maga_precios import maga_precios_client
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ async def calculate_crop_profitability(
             return None
             
         # Obtener precio actual
-        price_data = await maga_client.get_crop_price(crop_name)
+        price_data = await maga_precios_client.get_crop_price(crop_name)
         if not price_data:
             logger.error(f"No se encontró precio actual para {crop_name}")
             return None

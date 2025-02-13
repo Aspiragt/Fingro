@@ -5,7 +5,7 @@ from typing import Dict, Any, Optional
 import logging
 from app.models.financial_model import financial_model
 from app.views.financial_report import report_generator
-from app.external_apis.maga import CanalComercializacion, maga_api
+from app.external_apis.maga_precios import CanalComercializacion, maga_precios_client
 from app.services.whatsapp_service import WhatsAppService
 from app.database.firebase import firebase_manager
 
