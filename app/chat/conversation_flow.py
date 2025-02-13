@@ -8,7 +8,7 @@ from app.views.financial_report import report_generator
 from app.external_apis.maga_precios import CanalComercializacion, maga_precios_client
 from app.services.whatsapp_service import WhatsAppService
 from app.database.firebase import firebase_manager
-from app.utils.text import normalize_text, parse_area, format_number, parse_yes_no, parse_channel
+from app.utils.text import normalize_text, parse_area, format_number, parse_yes_no, parse_channel, parse_irrigation
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ class ConversationFlow:
         ]
         
         self.valid_irrigation = [
-            'gravedad', 'aspersion', 'goteo', 'ninguno'
+            'goteo', 'aspersion', 'gravedad', 'temporal'
         ]
     
     def _normalize_text(self, text: str) -> str:
@@ -142,10 +142,10 @@ class ConversationFlow:
             
         elif current_state == self.STATES['GET_IRRIGATION']:
             irrigation = [
-                "1. Gravedad",
+                "1. Goteo",
                 "2. Aspersión",
-                "3. Goteo",
-                "4. Ninguno"
+                "3. Gravedad",
+                "4. Ninguno (depende de lluvia)"
             ]
             return (
                 "¿Qué sistema de riego utilizarás? 💧\n\n" +
@@ -810,6 +810,82 @@ class ConversationFlow:
             logger.error(f"Error procesando canal: {str(e)}")
             return "Hubo un error. Por favor intente de nuevo 🙏"
 
+    def process_irrigation(self, user_data: Dict[str, Any], response: str) -> str:
+        """
+        Procesa la respuesta del sistema de riego
+        
+        Args:
+            user_data: Datos del usuario
+            response: Respuesta del usuario
+            
+        Returns:
+            str: Mensaje de respuesta
+        """
+        try:
+            # Validar sistema
+            system = parse_irrigation(response)
+            if not system:
+                return (
+                    "Por favor escoja una opción válida:\n\n"
+                    "1. Goteo 💧\n"
+                    "2. Aspersión 💦\n"
+                    "3. Gravedad 🌊\n"
+                    "4. Ninguno (depende de lluvia) 🌧️"
+                )
+            
+            # Guardar sistema
+            user_data['irrigation'] = system
+            
+            # Verificar si es temporal para cultivos que necesitan riego
+            cultivo = normalize_text(user_data.get('crop', ''))
+            if system == 'temporal' and cultivo in maga_precios_client.irrigated_crops:
+                return (
+                    f"El {cultivo} generalmente necesita riego para buenos resultados 🤔\n"
+                    f"¿Está seguro que no usará ningún sistema de riego? Escoja una opción:\n\n"
+                    f"1. Sí, solo dependeré de la lluvia\n"
+                    f"2. No, mejor escojo un sistema de riego"
+                )
+            
+            # Siguiente pregunta
+            return self.ask_location(user_data)
+            
+        except Exception as e:
+            logger.error(f"Error procesando sistema de riego: {str(e)}")
+            return "Hubo un error. Por favor intente de nuevo 🙏"
+
+    def ask_location(self, user_data: Dict[str, Any]) -> str:
+        """Pregunta por la ubicación"""
+        # Actualizar estado
+        user_data['state'] = self.STATES['GET_LOCATION']
+        
+        cultivo = user_data.get('crop', '').lower()
+        irrigation = user_data.get('irrigation', '')
+        
+        # Mapeo de sistemas a emojis
+        irrigation_emojis = {
+            'goteo': '💧',
+            'aspersion': '💦',
+            'gravedad': '🌊',
+            'temporal': '🌧️'
+        }
+        
+        # Mapeo de sistemas a nombres amigables
+        irrigation_names = {
+            'goteo': 'goteo',
+            'aspersion': 'aspersión',
+            'gravedad': 'gravedad',
+            'temporal': 'temporal (lluvia)'
+        }
+        
+        emoji = irrigation_emojis.get(irrigation, '')
+        system_name = irrigation_names.get(irrigation, irrigation)
+        
+        return (
+            f"Perfecto. Usará riego por {system_name} {emoji}\n\n"
+            f"¿En qué departamento está su terreno?\n"
+            f"Por ejemplo: Guatemala, Escuintla, etc."
+        )
+
     def ask_irrigation(self, user_data: Dict[str, Any]) -> str:
         """Pregunta por el sistema de riego"""
         # Actualizar estado
@@ -839,7 +915,7 @@ class ConversationFlow:
         
         return (
             f"Perfecto. Venderá su {cultivo} en {channel_name} {emoji}\n\n"
-            f"¿Qué sistema de riego utiliza? Escoja una opción:\n\n"
+            f"¿Qué sistema de riego utilizarás? Escoja una opción:\n\n"
             f"1. Goteo 💧\n"
             f"2. Aspersión 💦\n"
             f"3. Gravedad 🌊\n"

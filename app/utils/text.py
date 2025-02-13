@@ -379,3 +379,65 @@ def parse_channel(text: str) -> Optional[str]:
     }
     
     return channel_map.get(text)
+
+def parse_irrigation(text: str) -> Optional[str]:
+    """
+    Parsea un sistema de riego
+    
+    Args:
+        text: Texto a parsear
+        
+    Returns:
+        str: Sistema normalizado o None si no es válido
+        
+    Examples:
+        >>> parse_irrigation("1")
+        'goteo'
+        >>> parse_irrigation("aspersion")
+        'aspersion'
+        >>> parse_irrigation("ninguno")
+        'temporal'
+    """
+    if not text:
+        return None
+        
+    # Normalizar texto
+    text = normalize_text(text)
+    
+    # Mapeo de respuestas válidas
+    irrigation_map = {
+        # Por número
+        '1': 'goteo',
+        '2': 'aspersion',
+        '3': 'gravedad',
+        '4': 'temporal',
+        
+        # Por texto - goteo
+        'goteo': 'goteo',
+        'gota': 'goteo',
+        'por goteo': 'goteo',
+        'sistema de goteo': 'goteo',
+        
+        # Por texto - aspersión
+        'aspersion': 'aspersion',
+        'aspersión': 'aspersion',
+        'aspersor': 'aspersion',
+        'aspersores': 'aspersion',
+        'sprinkler': 'aspersion',
+        
+        # Por texto - gravedad
+        'gravedad': 'gravedad',
+        'por gravedad': 'gravedad',
+        'inundacion': 'gravedad',
+        'inundación': 'gravedad',
+        
+        # Por texto - temporal
+        'temporal': 'temporal',
+        'lluvia': 'temporal',
+        'ninguno': 'temporal',
+        'no': 'temporal',
+        'nada': 'temporal',
+        'natural': 'temporal'
+    }
+    
+    return irrigation_map.get(text)
