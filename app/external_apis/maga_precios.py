@@ -6,6 +6,7 @@ import logging
 from typing import Optional, Dict, Any
 from datetime import datetime
 import os
+from app.utils.text import normalize_text, get_crop_variations
 
 logger = logging.getLogger(__name__)
 
@@ -19,30 +20,52 @@ class CanalComercializacion:
 class MAGAPreciosClient:
     """Cliente para obtener datos de cultivos del MAGA"""
     
-    # Mapeo de cultivos a sus nombres en el JSON
+    # Mapeo de nombres alternativos a nombres estándar
     CROP_MAPPING = {
-        'tomate': 'Tomate de cocina',
-        'papa': 'Papa',
-        'maiz': 'Maíz blanco',
-        'frijol': 'Frijol negro',
-        'cafe': 'Café',
-        'chile': 'Chile pimiento',
-        'cebolla': 'Cebolla',
-        'repollo': 'Repollo',
-        'arveja': 'Arveja china',
-        'camote': 'Camote'
+        'maiz': 'Maíz blanco, de primera',
+        'mais': 'Maíz blanco, de primera',
+        'máiz': 'Maíz blanco, de primera',
+        'máis': 'Maíz blanco, de primera',
+        'cafe': 'Café oro, de primera',
+        'café': 'Café oro, de primera',
+        'frijol': 'Frijol negro, de primera',
+        'fríjol': 'Frijol negro, de primera',
+        'frejol': 'Frijol negro, de primera',
+        'fréjol': 'Frijol negro, de primera',
+        'papa': 'Papa, grande, lavada',
+        'papas': 'Papa, grande, lavada',
+        'tomate': 'Tomate de cocina, grande, de primera',
+        'jitomate': 'Tomate de cocina, grande, de primera',
+        'chile': 'Chile pimiento, grande, de primera',
+        'chiles': 'Chile pimiento, grande, de primera',
+        'cebolla': 'Cebolla blanca, mediana, de primera',
+        'cebollas': 'Cebolla blanca, mediana, de primera',
+        'repollo': 'Repollo blanco, mediano',
+        'repollos': 'Repollo blanco, mediano',
+        'arveja': 'Arveja china, revuelta, de primera',
+        'arvejas': 'Arveja china, revuelta, de primera',
+        'aguacate': 'Aguacate Hass, de primera',
+        'aguacates': 'Aguacate Hass, de primera',
+        'platano': 'Plátano, mediano, de primera',
+        'plátano': 'Plátano, mediano, de primera',
+        'platanos': 'Plátano, mediano, de primera',
+        'plátanos': 'Plátano, mediano, de primera',
+        'limon': 'Limón criollo, mediano, de primera',
+        'limón': 'Limón criollo, mediano, de primera',
+        'limones': 'Limón criollo, mediano, de primera',
+        'zanahoria': 'Zanahoria, mediana, de primera',
+        'zanahorias': 'Zanahoria, mediana, de primera',
+        'brocoli': 'Brócoli, mediano, de primera',
+        'brócoli': 'Brócoli, mediano, de primera',
+        'brocolis': 'Brócoli, mediano, de primera',
+        'brócolis': 'Brócoli, mediano, de primera'
     }
     
     def __init__(self):
         """Inicializa el cliente de MAGA Precios"""
+        
         # Cargar precios del JSON
-        try:
-            json_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'maga_data.json')
-            with open(json_path, 'r', encoding='utf-8') as f:
-                self.maga_prices = json.load(f)
-        except Exception as e:
-            logger.error(f"Error cargando precios de MAGA: {str(e)}")
-            self.maga_prices = []
+        self.maga_prices = self._load_prices()
         
         # Cultivos que típicamente se exportan
         self.export_crops = {
@@ -62,6 +85,15 @@ class MAGAPreciosClient:
             CanalComercializacion.MERCADO_LOCAL: 0.8,  # 20% menos
         }
     
+    def _load_prices(self):
+        try:
+            json_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'maga_data.json')
+            with open(json_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"Error cargando precios de MAGA: {str(e)}")
+            return []
+    
     async def get_crop_price(self, crop_name: str) -> Optional[Dict[str, Any]]:
         """
         Obtiene el precio más reciente de un cultivo
@@ -71,35 +103,17 @@ class MAGAPreciosClient:
             Dict con datos del precio o None si hay error
         """
         try:
-            # Normalizar nombre (quitar acentos y convertir a minúsculas)
-            import unicodedata
+            # Normalizar nombre del cultivo
+            crop_norm = normalize_text(crop_name)
             
-            def normalize_text(text: str) -> str:
-                """Quita acentos y convierte a minúsculas"""
-                text = unicodedata.normalize('NFKD', text)
-                text = text.encode('ascii', 'ignore').decode('ascii')
-                return text.lower().strip()
-            
-            crop_name = normalize_text(crop_name)
-            
-            # Buscar precio en datos de MAGA
-            for precio in self.maga_prices:
-                producto = normalize_text(precio['Producto'])
-                if crop_name in producto:
-                    return {
-                        'nombre': precio['Producto'],
-                        'precio': precio['Precio'],
-                        'fecha': precio['Fecha'],
-                        'medida': precio['Medida'],
-                        'fuente': 'MAGA'
-                    }
-            
-            # Si no se encuentra, buscar en el mapeo
-            if crop_name in self.CROP_MAPPING:
-                mapped_name = normalize_text(self.CROP_MAPPING[crop_name])
+            # Buscar en el mapeo
+            if crop_norm in self.CROP_MAPPING:
+                product_name = self.CROP_MAPPING[crop_norm]
+                product_norm = normalize_text(product_name)
+                
+                # Buscar precio
                 for precio in self.maga_prices:
-                    producto = normalize_text(precio['Producto'])
-                    if mapped_name in producto:
+                    if normalize_text(precio['Producto']) == product_norm:
                         return {
                             'nombre': precio['Producto'],
                             'precio': precio['Precio'],
@@ -107,6 +121,23 @@ class MAGAPreciosClient:
                             'medida': precio['Medida'],
                             'fuente': 'MAGA'
                         }
+            
+            # Si no encontramos, intentar con variaciones
+            for variacion in get_crop_variations(crop_name):
+                var_norm = normalize_text(variacion)
+                if var_norm in self.CROP_MAPPING:
+                    product_name = self.CROP_MAPPING[var_norm]
+                    product_norm = normalize_text(product_name)
+                    
+                    for precio in self.maga_prices:
+                        if normalize_text(precio['Producto']) == product_norm:
+                            return {
+                                'nombre': precio['Producto'],
+                                'precio': precio['Precio'],
+                                'fecha': precio['Fecha'],
+                                'medida': precio['Medida'],
+                                'fuente': 'MAGA'
+                            }
             
             logger.warning(f"No se encontró precio para {crop_name}")
             return None

@@ -118,3 +118,167 @@ def normalize_yes_no(text: str) -> str:
         return 'no'
         
     return text
+
+"""
+Utilidades para manejo de texto
+"""
+import unicodedata
+import re
+from typing import Optional, Tuple
+
+def normalize_text_new(text: str) -> str:
+    """
+    Normaliza texto para búsquedas flexibles:
+    - Quita acentos
+    - Convierte a minúsculas
+    - Quita espacios extra
+    - Quita caracteres especiales
+    
+    Args:
+        text: Texto a normalizar
+        
+    Returns:
+        str: Texto normalizado
+        
+    Examples:
+        >>> normalize_text_new("Maíz")
+        'maiz'
+        >>> normalize_text_new("café oro")  
+        'cafe oro'
+        >>> normalize_text_new("FRÍJOL NEGRO")
+        'frijol negro'
+    """
+    if not text:
+        return ""
+        
+    # Convertir a minúsculas
+    text = text.lower()
+    
+    # Quitar acentos
+    text = unicodedata.normalize('NFKD', text)
+    text = text.encode('ascii', 'ignore').decode('ascii')
+    
+    # Normalizar caracteres especiales comunes
+    replacements = {
+        'ñ': 'n',
+        'ü': 'u',
+    }
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+    
+    # Quitar caracteres especiales y espacios extra
+    text = re.sub(r'[^a-z0-9\s]', '', text)
+    text = ' '.join(text.split())
+    
+    return text
+
+def parse_area(text: str) -> Optional[Tuple[float, str]]:
+    """
+    Parsea un texto que representa un área y devuelve el valor y la unidad
+    
+    Args:
+        text: Texto a parsear (ej: "2.5 manzanas", "3 ha", "1,000 mz")
+        
+    Returns:
+        Tuple[float, str]: (valor, unidad) o None si no se puede parsear
+        
+    Examples:
+        >>> parse_area("2.5 manzanas")
+        (2.5, 'manzana')
+        >>> parse_area("3 ha")
+        (3.0, 'hectarea')
+        >>> parse_area("1,000 mz")
+        (1000.0, 'manzana')
+    """
+    try:
+        # Quitar espacios extra y convertir a minúsculas
+        text = text.lower().strip()
+        
+        # Quitar comas de números grandes
+        text = text.replace(',', '')
+        
+        # Permitir punto o coma decimal
+        text = text.replace(';', '.')
+        
+        # Extraer número y unidad
+        match = re.match(r'^([\d.]+)\s*([a-zA-Z]+)$', text)
+        if not match:
+            return None
+            
+        value, unit = match.groups()
+        
+        # Convertir valor a float
+        value = float(value)
+        
+        # Normalizar unidad
+        unit_map = {
+            'mz': 'manzana',
+            'manzana': 'manzana',
+            'manzanas': 'manzana',
+            'ha': 'hectarea',
+            'has': 'hectarea',
+            'hectarea': 'hectarea',
+            'hectareas': 'hectarea',
+            'hectárea': 'hectarea',
+            'hectáreas': 'hectarea'
+        }
+        
+        unit = unit_map.get(unit)
+        if not unit:
+            return None
+            
+        return (value, unit)
+        
+    except Exception as e:
+        return None
+
+def format_number(number: float, decimals: int = 0) -> str:
+    """
+    Formatea un número con separadores de miles y decimales
+    
+    Args:
+        number: Número a formatear
+        decimals: Número de decimales a mostrar
+        
+    Returns:
+        str: Número formateado
+        
+    Examples:
+        >>> format_number(1234.56)
+        '1,235'
+        >>> format_number(1234.56, 2)
+        '1,234.56'
+    """
+    return f"{number:,.{decimals}f}"
+
+def get_crop_variations(crop: str) -> set:
+    """
+    Genera variaciones comunes de nombres de cultivos
+    
+    Args:
+        crop: Nombre del cultivo
+        
+    Returns:
+        set: Conjunto de variaciones del nombre
+        
+    Examples:
+        >>> get_crop_variations("maiz")
+        {'maiz', 'maíz', 'mais', 'máiz', 'máis'}
+    """
+    variations = {crop}
+    
+    # Mapa de variaciones comunes
+    variation_map = {
+        'maiz': {'mais', 'máiz', 'máis'},
+        'cafe': {'café'},
+        'frijol': {'fríjol', 'frejol', 'fréjol', 'frijoles'},
+        'platano': {'plátano', 'platanos', 'plátanos'},
+        'limon': {'limón', 'limones'},
+        'brocoli': {'brócoli', 'brocolis', 'brócolis'},
+    }
+    
+    normalized = normalize_text_new(crop)
+    if normalized in variation_map:
+        variations.update(variation_map[normalized])
+    
+    return variations

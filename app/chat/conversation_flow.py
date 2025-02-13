@@ -8,6 +8,7 @@ from app.views.financial_report import report_generator
 from app.external_apis.maga_precios import CanalComercializacion, maga_precios_client
 from app.services.whatsapp_service import WhatsAppService
 from app.database.firebase import firebase_manager
+from app.utils.text import normalize_text, parse_area, format_number
 
 logger = logging.getLogger(__name__)
 
@@ -730,6 +731,75 @@ class ConversationFlow:
             "con usted para finalizar su solicitud.\n\n"
             "Gracias por confiar en FinGro. ¡Que tenga un excelente día! 👋\n\n"
             "Puede escribir 'inicio' para comenzar una nueva consulta."
+        )
+
+    def process_area(self, user_data: Dict[str, Any], response: str) -> str:
+        """
+        Procesa la respuesta del área de cultivo
+        
+        Args:
+            user_data: Datos del usuario
+            response: Respuesta del usuario
+            
+        Returns:
+            str: Mensaje de respuesta
+        """
+        try:
+            # Parsear área
+            result = parse_area(response)
+            if not result:
+                return (
+                    "Por favor ingrese el área con su unidad. Por ejemplo:\n"
+                    "- 2 manzanas\n"
+                    "- 1.5 hectáreas\n"
+                    "- 3 mz\n"
+                    "- 2.5 ha"
+                )
+            
+            value, unit = result
+            
+            # Validar rango
+            if value <= 0:
+                return "El área debe ser mayor que 0. ¿Cuánto está sembrando? 🌱"
+                
+            if value > 1000:
+                return "El área parece muy grande. ¿Puede confirmar la cantidad? 🤔"
+            
+            # Convertir a hectáreas si es necesario
+            if unit == 'manzana':
+                hectareas = value * 0.7
+            else:
+                hectareas = value
+            
+            # Guardar en datos de usuario
+            user_data['area'] = hectareas
+            user_data['area_original'] = value
+            user_data['area_unit'] = unit
+            
+            # Siguiente pregunta
+            return self.ask_channel(user_data)
+            
+        except Exception as e:
+            logger.error(f"Error procesando área: {str(e)}")
+            return "Hubo un error. Por favor intente de nuevo con el área que está sembrando 🌱"
+
+    def ask_channel(self, user_data: Dict[str, Any]) -> str:
+        """Pregunta por el canal de comercialización"""
+        cultivo = user_data.get('crop', '').lower()
+        area = user_data.get('area_original', 0)
+        unit = user_data.get('area_unit', 'hectárea')
+        
+        # Actualizar estado
+        user_data['state'] = self.STATES['GET_CHANNEL']
+        
+        return (
+            f"Perfecto. Va a sembrar {format_number(area)} {unit}{'s' if area != 1 else ''} "
+            f"de {cultivo} 🌱\n\n"
+            f"¿Cómo piensa vender su cosecha? Escoja una opción:\n\n"
+            f"1. Mercado local\n"
+            f"2. Mayorista\n"
+            f"3. Cooperativa\n"
+            f"4. Exportación"
         )
 
 # Instancia global

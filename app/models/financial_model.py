@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import logging
 from app.external_apis.maga_precios import maga_precios_client, CanalComercializacion
+from app.utils.text import normalize_text, get_crop_variations
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,47 @@ class FinancialModel:
     
     def __init__(self):
         """Inicializa el modelo financiero"""
+        
+        # Mapeo de nombres alternativos a nombres estándar
+        self.crop_mapping = {
+            'maiz': 'maiz',
+            'mais': 'maiz',
+            'máiz': 'maiz',
+            'máis': 'maiz',
+            'cafe': 'cafe',
+            'café': 'cafe',
+            'frijol': 'frijol',
+            'fríjol': 'frijol',
+            'frejol': 'frijol',
+            'fréjol': 'frijol',
+            'papa': 'papa',
+            'papas': 'papa',
+            'tomate': 'tomate',
+            'jitomate': 'tomate',
+            'chile': 'chile',
+            'chiles': 'chile',
+            'cebolla': 'cebolla',
+            'cebollas': 'cebolla',
+            'repollo': 'repollo',
+            'repollos': 'repollo',
+            'arveja': 'arveja',
+            'arvejas': 'arveja',
+            'aguacate': 'aguacate',
+            'aguacates': 'aguacate',
+            'platano': 'platano',
+            'plátano': 'platano',
+            'platanos': 'platano',
+            'plátanos': 'platano',
+            'limon': 'limon',
+            'limón': 'limon',
+            'limones': 'limon',
+            'zanahoria': 'zanahoria',
+            'zanahorias': 'zanahoria',
+            'brocoli': 'brocoli',
+            'brócoli': 'brocoli',
+            'brocolis': 'brocoli',
+            'brócolis': 'brocoli'
+        }
         
         # Costos base por hectárea para diferentes cultivos
         self.costos_cultivos = {
@@ -226,10 +268,27 @@ class FinancialModel:
         Returns:
             Dict[str, float]: Desglose de costos
         """
-        # Obtener costos base o usar un cultivo similar
-        costos_base = self.costos_cultivos.get(cultivo)
+        # Normalizar nombre del cultivo
+        cultivo_norm = normalize_text(cultivo)
+        
+        # Buscar en el mapeo
+        if cultivo_norm in self.crop_mapping:
+            cultivo_norm = self.crop_mapping[cultivo_norm]
+        
+        # Obtener costos base
+        costos_base = self.costos_cultivos.get(cultivo_norm)
         if not costos_base:
-            # Usar costos del maíz como base
+            # Intentar con variaciones
+            for variacion in get_crop_variations(cultivo):
+                var_norm = normalize_text(variacion)
+                if var_norm in self.crop_mapping:
+                    cultivo_norm = self.crop_mapping[var_norm]
+                    costos_base = self.costos_cultivos.get(cultivo_norm)
+                    if costos_base:
+                        break
+        
+        if not costos_base:
+            # Si aún no encontramos, usar maíz como base
             costos_base = self.costos_cultivos['maiz']
             logger.warning(f"Usando costos base de maíz para {cultivo}")
         
