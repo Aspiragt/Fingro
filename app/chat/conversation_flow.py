@@ -653,25 +653,26 @@ class ConversationFlow:
             if ganancia <= 0:
                 return 0
                 
-            # El préstamo será el 80% de los costos o el 50% de los ingresos,
-            # el que sea menor
+            # El préstamo será el menor entre:
+            # - 80% de los costos
+            # - 60% de los ingresos anuales
             monto_por_costos = costos * 0.8
-            monto_por_ingresos = ingresos * 0.5
+            monto_por_ingresos = ingresos * 0.6
             
             monto = min(monto_por_costos, monto_por_ingresos)
             
-            # La cuota no puede ser más del 30% de la ganancia mensual
+            # Tasa del 2% mensual
+            tasa = 0.02
+            plazo = 12
+            
+            # La cuota no puede ser más del 40% de la ganancia mensual
             ganancia_mensual = ganancia / 12
-            cuota_maxima = ganancia_mensual * 0.3
+            cuota_maxima = ganancia_mensual * 0.4
             
-            # Calcular cuota con tasa del 2% mensual
-            tasa = 0.02  # 2% mensual
-            plazo = 12  # meses
-            
-            # Fórmula de cuota: P * (r * (1 + r)^n) / ((1 + r)^n - 1)
+            # Calcular cuota: P * (r * (1 + r)^n) / ((1 + r)^n - 1)
             cuota = monto * (tasa * (1 + tasa)**plazo) / ((1 + tasa)**plazo - 1)
             
-            # Si la cuota es mayor que el máximo, reducir el monto
+            # Si la cuota es mayor que el máximo, ajustar el monto
             if cuota > cuota_maxima:
                 # Despejar P de la fórmula de cuota
                 monto = cuota_maxima * ((1 + tasa)**plazo - 1) / (tasa * (1 + tasa)**plazo)
@@ -688,7 +689,7 @@ class ConversationFlow:
         try:
             # Obtener datos
             cultivo = user_data.get('crop', '').lower()
-            area = user_data.get('area', 0)  # En hectáreas
+            area = user_data.get('area', 0)
             channel = user_data.get('channel', '')
             irrigation = user_data.get('irrigation', '')
             location = user_data.get('location', '')
@@ -696,61 +697,50 @@ class ConversationFlow:
             # Calcular préstamo
             monto = self.calculate_loan_amount(user_data)
             if not monto:
-                return (
-                    "Lo siento, no pudimos calcular un préstamo para su proyecto 😔\n\n"
-                    "Por favor intente de nuevo con otros datos o escriba 'inicio' "
-                    "para hacer otra consulta."
-                )
+                return self.handle_error(user_data, Exception("No se pudo calcular el préstamo"), "loan")
             
-            # Obtener costos y precios
-            costos = maga_precios_client.get_costos_cultivo(cultivo)
-            precios = maga_precios_client.get_precios_cultivo(cultivo, channel)
+            # Obtener datos financieros
+            financial = user_data.get('financial_analysis', {})
+            produccion = financial.get('rendimiento', 0)
+            ingresos = financial.get('ingresos', 0)
+            
+            # Calcular cuota
+            tasa = 0.02  # 2% mensual
+            plazo = 12
+            cuota = monto * (tasa * (1 + tasa)**plazo) / ((1 + tasa)**plazo - 1)
             
             # Formatear números
             monto_str = format_number(monto)
-            cuota = format_number(monto * 0.12)  # 12% mensual aproximado
-            
-            # Calcular rendimiento esperado
-            rendimiento = costos.get('rendimiento_por_hectarea', 0)
-            area_ha = user_data.get('area', 0)  # En hectáreas
-            produccion = rendimiento * area_ha
-            precio_q = precios.get('precio_actual', 0)
-            ingreso = produccion * precio_q
-            
-            # Formatear producción
+            cuota_str = format_number(round(cuota))
             produccion_str = format_number(produccion)
-            ingreso_str = format_number(ingreso)
+            ingreso_str = format_number(ingresos)
             
             # Actualizar estado
-            user_data['state'] = self.STATES['CONFIRM_LOAN']
+            user_data['state'] = self.STATES['GET_LOAN_RESPONSE']
             user_data['loan_amount'] = monto
             
             # Construir mensaje
             return (
                 f"¡Buenas noticias! 🎉\n\n"
                 f"Con base en su proyecto:\n"
-                f"- {cultivo.capitalize()} en {location} 🌱\n"
-                f"- {format_number(area)} hectáreas de terreno\n"
-                f"- Riego por {irrigation} 💧\n"
-                f"- Venta en {channel} 🚛\n\n"
+                f"•⁠  ⁠{cultivo.capitalize()} en {location} 🌱\n"
+                f"•⁠  ⁠{format_number(area)} hectáreas de terreno\n"
+                f"•⁠  ⁠Riego por {irrigation} 💧\n"
+                f"•⁠  ⁠Venta en {channel} 🚛\n\n"
                 f"Producción esperada:\n"
-                f"- {produccion_str} quintales de {cultivo} 📦\n"
-                f"- Ingresos de Q{ingreso_str} 💰\n\n"
+                f"•⁠  ⁠{produccion_str} quintales de {cultivo} 📦\n"
+                f"•⁠  ⁠Ingresos de Q{ingreso_str} 💰\n\n"
                 f"Le podemos ofrecer:\n"
-                f"- Préstamo de Q{monto_str} 💸\n"
-                f"- Cuota de Q{cuota} al mes 📅\n"
-                f"- 12 meses de plazo 🗓️\n"
-                f"- Incluye asistencia técnica 🌿\n\n"
+                f"•⁠  ⁠Préstamo de Q{monto_str} 💸\n"
+                f"•⁠  ⁠Cuota de Q{cuota_str} al mes 📅\n"
+                f"•⁠  ⁠12 meses de plazo 🗓️\n"
+                f"•⁠  ⁠Incluye asistencia técnica 🌿\n\n"
                 f"¿Le interesa continuar con la solicitud? 🤝"
             )
             
         except Exception as e:
-            logger.error(f"Error generando oferta: {str(e)}")
-            return (
-                "Lo siento, hubo un error al generar su oferta 😔\n\n"
-                "Por favor intente de nuevo o escriba 'inicio' para hacer otra consulta."
-            )
-
+            return self.handle_error(user_data, e, "loan")
+            
     def validate_yes_no(self, response: str) -> bool:
         """Valida respuestas sí/no de forma flexible"""
         if not response:
