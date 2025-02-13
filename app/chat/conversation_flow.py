@@ -595,14 +595,13 @@ class ConversationFlow:
             str: Mensaje con oferta de préstamo
         """
         try:
-            if 'score_data' not in user_data or user_data['score_data'] is None:
+            if 'analysis' not in user_data or user_data['analysis'] is None:
                 return "❌ Lo siento, no pudimos analizar su proyecto en este momento. Por favor intente de nuevo."
 
-            score_data = user_data['score_data']
             analysis_data = user_data['analysis']
 
             # Validar que tenemos los datos necesarios
-            required_fields = ['costos_siembra', 'rendimiento_por_ha', 'crop']
+            required_fields = ['costos_siembra', 'rendimiento', 'cultivo']
             if not all(field in analysis_data for field in required_fields):
                 logger.error(f"Faltan campos en analysis_data: {analysis_data}")
                 return "❌ Lo siento, hubo un error en el análisis. Por favor intente de nuevo."
@@ -628,7 +627,7 @@ class ConversationFlow:
 
         except Exception as e:
             logger.error(f"Error generando oferta de préstamo: {str(e)}")
-            return "❌ Lo siento, hubo un error al generar la oferta. Por favor intente más tarde."
+            return "❌ Lo siento, hubo un error al generar la oferta. Por favor intente de nuevo."
 
     def _format_loan_offer(self, loan_data: Dict[str, Any], financial_data: Dict[str, Any]) -> str:
         """
