@@ -576,15 +576,16 @@ class ConversationFlow:
             area = user_data.get('area', 0)  # En hectáreas
             
             # Obtener costos y precios
-            costos = maga_precios_client.get_costos_cultivo(cultivo)
+            maga_precios_client = MagaPreciosClient()
+            costos = maga_precios_client.calcular_costos_totales(cultivo, area, user_data.get('irrigation', ''))
             if not costos:
                 raise ValueError("Faltan datos del cultivo")
                 
             # Calcular métricas
-            costo_total = costos['costo_por_hectarea'] * area
-            rendimiento = costos['rendimiento_por_hectarea'] * area
+            costo_total = costos['costos_totales']
+            rendimiento = maga_precios_client.get_rendimiento_cultivo(cultivo, user_data.get('irrigation', ''))
             precio_actual = maga_precios_client.get_precios_cultivo(cultivo, user_data.get('channel', '')).get('precio_actual', 0)
-            ingresos = rendimiento * precio_actual
+            ingresos = rendimiento * area * precio_actual
             ganancia = ingresos - costo_total
             
             # Guardar datos para préstamo
@@ -724,11 +725,12 @@ class ConversationFlow:
             channel = user_data.get('channel', '')
             
             # Calcular costos reales
-            costos = maga_precios_client.get_costos_cultivo(cultivo)
+            maga_precios_client = MagaPreciosClient()
+            costos = maga_precios_client.calcular_costos_totales(cultivo, area, irrigation)
             if not costos:
                 return 0
                 
-            costos_totales = costos['costo_por_hectarea'] * area
+            costos_totales = costos['costos_totales']
             
             # Obtener precios y calcular ingresos
             precios = maga_precios_client.get_precios_cultivo(cultivo, channel)
@@ -736,82 +738,19 @@ class ConversationFlow:
                 return 0
                 
             # Calcular producción e ingresos
-            rendimiento_ha = ciclo.get('rendimiento_por_hectarea', 35)
-            produccion = rendimiento_ha * area
+            rendimiento = maga_precios_client.get_rendimiento_cultivo(cultivo, irrigation)
+            produccion = rendimiento * area
             precio_venta = precios['precio_actual']
             ingresos = produccion * precio_venta
             
-            # Determinar plazo basado en ciclo
-            if ciclo['tipo'] == 'permanente':
-                # Para cultivos permanentes, préstamo más largo
-                plazo_meses = 24
-                max_costos = 0.7  # 70% de costos
-                max_ingresos = 0.5  # 50% de ingresos
-            else:
-                # Para cultivos anuales, préstamo por ciclo
-                plazo_meses = ciclo['duracion_meses']
-                max_costos = 0.8  # 80% de costos
-                max_ingresos = 0.6  # 60% de ingresos
+            # Calcular monto del préstamo (60-80% de costos totales)
+            factor_riesgo = self.get_risk_factor(irrigation, channel)
+            monto_prestamo = costos_totales * factor_riesgo
             
-            # Calcular montos base
-            monto_por_costos = costos_totales * max_costos
-            monto_por_ingresos = ingresos * max_ingresos
-            monto = min(monto_por_costos, monto_por_ingresos)
-            
-            # Ajustar tasa según plazo
-            if plazo_meses <= 6:
-                tasa_mensual = 0.015  # 1.5% mensual para corto plazo
-            elif plazo_meses <= 12:
-                tasa_mensual = 0.018  # 1.8% mensual para mediano plazo
-            else:
-                tasa_mensual = 0.02  # 2% mensual para largo plazo
-            
-            # Calcular cuota
-            if ciclo['tipo'] == 'permanente':
-                # Para cultivos permanentes, pagos mensuales
-                cuota = monto * (tasa_mensual * (1 + tasa_mensual)**plazo_meses) / ((1 + tasa_mensual)**plazo_meses - 1)
-                # Cuota no puede ser más del 40% de la ganancia mensual
-                ganancia_mensual = (ingresos - costos_totales) / 12
-                cuota_maxima = ganancia_mensual * 0.4
-            else:
-                # Para cultivos anuales, pago único al cosechar
-                tasa_total = tasa_mensual * plazo_meses
-                cuota = monto * (1 + tasa_total)
-                # Cuota no puede ser más del 60% del ingreso por cosecha
-                ingreso_por_cosecha = ingresos / ciclo['cosechas_por_año']
-                cuota_maxima = ingreso_por_cosecha * 0.6
-            
-            # Si la cuota es mayor que el máximo, ajustar el monto
-            if cuota > cuota_maxima:
-                if ciclo['tipo'] == 'permanente':
-                    # Despejar P de la fórmula de cuota mensual
-                    monto = cuota_maxima * ((1 + tasa_mensual)**plazo_meses - 1) / (tasa_mensual * (1 + tasa_mensual)**plazo_meses)
-                else:
-                    # Despejar P de la fórmula de pago único
-                    monto = cuota_maxima / (1 + tasa_total)
-            
-            # Guardar términos del préstamo y análisis financiero
-            user_data['loan_terms'] = {
-                'monto': monto,
-                'plazo_meses': plazo_meses,
-                'tasa_mensual': tasa_mensual,
-                'cuota': cuota,
-                'ciclo': ciclo,
-                'tipo_pago': 'mensual' if ciclo['tipo'] == 'permanente' else 'cosecha'
-            }
-            
-            user_data['financial_analysis'] = {
-                'costos': costos_totales,
-                'ingresos': ingresos,
-                'ganancia': ingresos - costos_totales,
-                'rendimiento': produccion
-            }
-            
-            # Redondear a miles
-            return round(monto / 1000) * 1000
+            return monto_prestamo
             
         except Exception as e:
-            logger.error(f"Error calculando préstamo: {str(e)}")
+            logger.error(f"Error calculando monto de préstamo: {str(e)}")
             return 0
             
     def process_show_loan(self, user_data: Dict[str, Any]) -> str:
@@ -830,15 +769,13 @@ class ConversationFlow:
                 return self.handle_error(user_data, Exception("No se pudo calcular el préstamo"), "loan")
             
             # Obtener términos del préstamo
-            terms = user_data.get('loan_terms', {})
-            plazo = terms.get('plazo_meses', 12)
-            cuota = terms.get('cuota', 0)
-            ciclo = terms.get('ciclo', {})
-            tipo_pago = terms.get('tipo_pago', 'mensual')
+            ciclo = self.get_crop_cycle(cultivo)
+            plazo = ciclo['duracion_meses']
+            cuota = monto / plazo
             
             # Obtener datos financieros
             financial = user_data.get('financial_analysis', {})
-            produccion = financial.get('rendimiento', 0)
+            produccion = financial.get('rendimiento', 0) * area
             ingresos = financial.get('ingresos', 0)
             
             # Formatear números
@@ -857,10 +794,7 @@ class ConversationFlow:
             user_data['loan_amount'] = monto
             
             # Construir mensaje de pago
-            if tipo_pago == 'mensual':
-                pago_str = f"{plazo} cuotas de Q{cuota_str} al mes 📅"
-            else:
-                pago_str = f"Un pago de Q{cuota_str} al cosechar 🌾"
+            pago_str = f"{plazo} cuotas de Q{cuota_str} al mes 📅"
             
             # Construir mensaje
             return (
@@ -1191,26 +1125,24 @@ class ConversationFlow:
             channel = user_data.get('channel', '')
             
             # Obtener costos
-            costos = maga_precios_client.get_costos_cultivo(cultivo)
+            maga_precios_client = MagaPreciosClient()
+            costos = maga_precios_client.calcular_costos_totales(cultivo, area, irrigation)
             if not costos:
                 raise ValueError(f"No se encontraron datos de costos para {cultivo}")
             
-            # Obtener precios y calcular ingresos
+            # Obtener precios
             precios = maga_precios_client.get_precios_cultivo(cultivo, channel)
             if not precios:
                 raise ValueError(f"No se encontraron precios para {cultivo}")
             
-            # Obtener ciclo del cultivo
-            ciclo = self.get_crop_cycle(cultivo)
-            
             # Calcular producción e ingresos
-            rendimiento_ha = ciclo.get('rendimiento_por_hectarea', 35)
-            produccion = rendimiento_ha * area
+            rendimiento = maga_precios_client.get_rendimiento_cultivo(cultivo, irrigation)
+            produccion = rendimiento * area
             precio_venta = precios['precio_actual']
             ingresos = produccion * precio_venta
             
             # Calcular rentabilidad
-            costos_totales = costos['costo_por_hectarea'] * area
+            costos_totales = costos['costos_totales']
             ganancia = ingresos - costos_totales
             rentabilidad = (ganancia / costos_totales) * 100 if costos_totales > 0 else 0
             
@@ -1226,47 +1158,40 @@ class ConversationFlow:
             # Formatear mensaje
             mensaje = (
                 f"📊 *Análisis Financiero*\n\n"
-                f"🌱 Cultivo: {ciclo.get('nombre', cultivo).title()}\n"
-                f"📏 Área: {area:,.1f} hectáreas\n"
-                f"💧 Riego: {irrigation.title()}\n"
-                f"🏪 Comercialización: {channel}\n\n"
+                
+                f"🌱 *Datos del Cultivo*\n"
+                f"- Cultivo: {cultivo.title()}\n"
+                f"- Área: {area} hectáreas\n"
+                f"- Riego: {irrigation}\n"
+                f"- Canal: {channel}\n\n"
                 
                 f"💰 *Costos*\n"
-                f"- Fijos: Q{costos['costo_por_hectarea'] * area:,.2f}\n"
-                f"- Variables: Q{costos['costo_por_hectarea'] * area:,.2f}\n"
+                f"- Fijos: Q{costos['costos_fijos']:,.2f}\n"
+                f"- Variables: Q{costos['costos_variables']:,.2f}\n"
                 f"- Total: Q{costos_totales:,.2f}\n\n"
                 
                 f"📈 *Producción y Ventas*\n"
-                f"- Rendimiento: {rendimiento_ha:,.1f} qq/ha\n"
-                f"- Producción Total: {produccion:,.1f} qq\n"
-                f"- Precio de Venta: Q{precio_venta:,.2f}/qq\n"
-                f"- Ingresos: Q{ingresos:,.2f}\n\n"
+                f"- Rendimiento: {rendimiento:.1f} qq/ha\n"
+                f"- Producción Total: {produccion:.1f} qq\n"
+                f"- Precio de Venta: Q{precio_venta:.2f}/qq\n"
+                f"- Ingresos Totales: Q{ingresos:,.2f}\n\n"
                 
-                f"📊 *Resultados*\n"
+                f"✨ *Resultados*\n"
                 f"- Ganancia: Q{ganancia:,.2f}\n"
                 f"- Rentabilidad: {rentabilidad:.1f}%\n\n"
+                
+                f"💡 *Recomendaciones*\n"
+                f"- {self.get_recommendations(rentabilidad)}\n\n"
+                
+                f"¿Le gustaría explorar opciones de préstamo? 🤝"
             )
-            
-            # Agregar recomendación según rentabilidad
-            if rentabilidad >= 30:
-                mensaje += (
-                    "✅ ¡Su proyecto es rentable!\n\n"
-                    "¿Le gustaría que le ayude a solicitar un préstamo? 🤝\n\n"
-                    "Responda SI o NO 👇"
-                )
-            else:
-                mensaje += (
-                    "⚠️ Este proyecto podría ser riesgoso.\n\n"
-                    "¿Le gustaría que le ayude a solicitar un préstamo? 🤝\n\n"
-                    "Responda SI o NO 👇"
-                )
             
             return mensaje
             
         except Exception as e:
-            logger.error(f"Error generando análisis financiero: {str(e)}")
-            raise
-
+            logger.error(f"Error procesando reporte: {str(e)}")
+            return self.handle_error(user_data, e, "financial")
+    
     def process_loan_response(self, user_data: Dict[str, Any], response: str) -> str:
         """Procesa la respuesta a la oferta de préstamo"""
         try:
