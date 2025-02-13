@@ -156,7 +156,7 @@ class ConversationFlow:
             return "¿En qué departamento está ubicado el terreno? 📍"
             
         return "❌ Estado no válido"
-    
+
     def validate_input(self, current_state: str, user_input: str) -> tuple:
         """
         Valida la entrada del usuario
@@ -431,11 +431,26 @@ class ConversationFlow:
                     
             # Actualizar estado
             user_data['state'] = next_state
-            await firebase_manager.update_user_state(phone_number, user_data)
             
             if next_state == self.STATES['SHOW_LOAN']:
-                loan_offer = self.process_show_loan(user_data['data'])
-                await self.whatsapp.send_message(phone_number, loan_offer)
+                try:
+                    loan_offer = self.process_show_loan(user_data['data'])
+                    await self.whatsapp.send_message(phone_number, loan_offer)
+                except ValueError as e:
+                    logger.error(f"Error mostrando préstamo: {str(e)}")
+                    error_message = str(e)
+                    await self.whatsapp.send_message(phone_number, error_message)
+                    # Regresar a ASK_LOAN
+                    user_data['state'] = self.STATES['ASK_LOAN']
+                except Exception as e:
+                    logger.error(f"Error inesperado en préstamo: {str(e)}")
+                    error_message = (
+                        "Lo siento, ha ocurrido un error procesando su solicitud. "
+                        "Por favor intente nuevamente."
+                    )
+                    await self.whatsapp.send_message(phone_number, error_message)
+                    # Regresar a ASK_LOAN
+                    user_data['state'] = self.STATES['ASK_LOAN']
                 
             elif next_state == self.STATES['DONE']:
                 if current_state == self.STATES['CONFIRM_LOAN']:
@@ -447,11 +462,14 @@ class ConversationFlow:
                         "Gracias por usar FinGro. ¡Que tenga un excelente día! 👋\n\n"
                         "Puede escribir 'inicio' para comenzar una nueva consulta."
                     )
-                return
-                
-            # Obtener siguiente mensaje
-            next_message = self.get_next_message(next_state, user_data)
-            await self.whatsapp.send_message(phone_number, next_message)
+            
+            # Guardar estado actualizado
+            await firebase_manager.update_user_state(phone_number, user_data)
+            
+            # Si no es estado especial, mostrar siguiente mensaje
+            if next_state not in [self.STATES['SHOW_LOAN'], self.STATES['DONE']]:
+                next_message = self.get_next_message(next_state, user_data)
+                await self.whatsapp.send_message(phone_number, next_message)
             
         except Exception as e:
             logger.error(f"Error procesando mensaje: {str(e)}")
@@ -460,7 +478,7 @@ class ConversationFlow:
                 "o contacta a soporte si el problema persiste."
             )
             await self.whatsapp.send_message(phone_number, error_message)
-    
+
     async def process_show_report(self, user_data: Dict[str, Any]) -> str:
         """
         Procesa y muestra el reporte financiero
@@ -486,6 +504,10 @@ class ConversationFlow:
             if not score_data:
                 raise ValueError("Error generando análisis financiero")
 
+            # Guardar datos del análisis
+            user_data['analysis'] = analysis_data
+            user_data['score_data'] = score_data
+
             # Generar reporte
             report = report_generator.generate_report(analysis_data, score_data)
             return report
@@ -496,31 +518,53 @@ class ConversationFlow:
     
     def process_show_loan(self, user_data: Dict[str, Any]) -> str:
         """
-        Muestra la oferta de préstamo
+        Procesa y muestra la oferta de préstamo
         
         Args:
             user_data: Datos del usuario
             
         Returns:
-            str: Oferta formateada
+            str: Mensaje con oferta de préstamo
         """
         try:
-            score_data = user_data.get('score_data')
-            if not score_data:
-                return "❌ Error: No hay datos de análisis"
-            
-            return report_generator.generate_loan_offer(score_data)
-            
-        except Exception as e:
-            logger.error(f"Error mostrando préstamo: {str(e)}")
-            return (
-                "❌ Error generando oferta\n\n"
-                "Por favor intenta de nuevo más tarde."
+            if 'score_data' not in user_data:
+                raise ValueError("No hay datos de análisis")
+
+            score_data = user_data['score_data']
+            analysis_data = user_data['analysis']
+
+            # Calcular monto del préstamo (80% del costo total)
+            costo_total = score_data.get('costo_total', 0)
+            monto_prestamo = costo_total * 0.8
+
+            # Formatear mensaje
+            mensaje = (
+                f"🏦 *Oferta de Préstamo*\n\n"
+                f"Para su cultivo de {analysis_data['crop']} en {analysis_data['location']}:\n\n"
+                f"💰 Monto: Q{monto_prestamo:,.2f}\n"
+                f"📅 Plazo: 12 meses\n"
+                f"💸 Tasa: 12% anual\n\n"
+                f"¿Desea proceder con la solicitud? Responda SI o NO 👇"
             )
-    
+            return mensaje
+
+        except Exception as e:
+            logger.error(f"Error procesando préstamo: {str(e)}")
+            raise ValueError(f"Error: {str(e)}")
+
     def process_confirm_loan(self) -> str:
-        """Genera mensaje de confirmación de solicitud"""
-        return report_generator.generate_success_message()
+        """
+        Procesa la confirmación del préstamo
+        
+        Returns:
+            str: Mensaje de confirmación
+        """
+        return (
+            "✅ ¡Excelente! En breve uno de nuestros asesores se pondrá en contacto "
+            "con usted para finalizar su solicitud.\n\n"
+            "Gracias por confiar en FinGro. ¡Que tenga un excelente día! 👋\n\n"
+            "Puede escribir 'inicio' para comenzar una nueva consulta."
+        )
 
 # Instancia global
 conversation_flow = ConversationFlow(WhatsAppService())
