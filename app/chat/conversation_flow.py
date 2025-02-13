@@ -491,59 +491,91 @@ class ConversationFlow:
             if 'crop' not in user_data or 'area' not in user_data:
                 raise ValueError("Faltan datos del cultivo")
                 
+            # Preparar datos para el análisis
+            analysis_data = {
+                'crop': user_data['crop'],
+                'area': float(user_data['area']),
+                'commercialization': user_data.get('channel', CanalComercializacion.MAYORISTA),
+                'irrigation': user_data.get('irrigation', 'ninguno'),
+                'location': user_data.get('location', 'Guatemala')
+            }
+            
             # Generar análisis financiero
-            analysis_data = financial_model.analyze_crop(
-                user_data['crop'],
-                user_data['area'],
-                user_data.get('channel', CanalComercializacion.MAYORISTA),
-                user_data.get('irrigation', 'ninguno'),
-                user_data.get('location', 'Guatemala')
-            )
+            financial_data = await financial_model.analyze_project(analysis_data)
             
-            if not analysis_data:
-                raise ValueError("Error generando análisis financiero")
-                
-            # Generar score
-            score_data = financial_model.score_analysis(analysis_data)
-            
-            if not score_data:
+            if not financial_data:
                 raise ValueError("Error generando análisis financiero")
 
             # Guardar datos del análisis
-            user_data['analysis'] = analysis_data
-            user_data['score_data'] = score_data
-
-            # Generar reporte
-            utilidad = analysis_data.get('utilidad', 0)
-            utilidad_por_ha = utilidad / user_data['area']
+            user_data['analysis'] = financial_data
+            
+            # Formatear reporte
+            crop = financial_data['cultivo'].capitalize()
+            area = financial_data['area']
+            rendimiento = round(financial_data['rendimiento_por_ha'])
+            precio = round(financial_data['precio_quintal'])
+            ingresos = round(financial_data['ingresos_totales'])
+            costos = round(financial_data['costos_siembra'])
+            utilidad = round(financial_data['utilidad'])
+            utilidad_por_ha = round(financial_data['utilidad_por_ha'])
             
             mensaje = (
-                f"✨ Análisis de su siembra de {analysis_data['crop']}\n\n"
+                f"✨ Análisis de su siembra de {crop}\n\n"
                 
-                f"🌱 Área: {analysis_data['area']} hectáreas\n"
-                f"📊 Rendimiento esperado: {analysis_data['rendimiento_por_ha']} quintales por hectárea\n"
-                f"💰 Precio de venta: Q{analysis_data['precio_quintal']:.2f} por quintal\n\n"
-                
-                f"💵 Lo que puede ganar:\n"
-                f"•⁠  ⁠Ingresos totales: Q{analysis_data['ingresos_totales']:.2f}\n"
-                f"•⁠  ⁠Costos de siembra: Q{analysis_data['costos_siembra']:.2f}\n"
-                f"•⁠  ⁠Ganancia esperada: Q{utilidad:.2f}\n\n"
+                f"🌱 Área: {area} hectáreas\n"
+                f"📊 Rendimiento esperado: {rendimiento} quintales por hectárea\n"
+                f"💰 Precio actual: Q{precio} por quintal\n\n"
+            )
+
+            # Desglosar costos principales
+            costos_desglose = financial_data['desglose_costos']
+            mensaje += (
+                f"💵 Costos principales por hectárea:\n"
+                f"•⁠  ⁠Preparación de tierra: Q{round(costos_desglose['preparacion_suelo']/area):,}\n"
+                f"•⁠  ⁠Semilla: Q{round(costos_desglose['semilla']/area):,}\n"
+                f"•⁠  ⁠Fertilizantes: Q{round(costos_desglose['fertilizantes']/area):,}\n"
+                f"•⁠  ⁠Mano de obra: Q{round(costos_desglose['mano_obra']/area):,}\n\n"
+            )
+
+            mensaje += (
+                f"💰 Resumen financiero:\n"
+                f"•⁠  ⁠Ingresos totales: Q{ingresos:,}\n"
+                f"•⁠  ⁠Costos totales: Q{costos:,}\n"
+                f"•⁠  ⁠Ganancia esperada: Q{utilidad:,}\n\n"
             )
 
             # Agregar mensaje según la rentabilidad
             if utilidad > 0:
                 mensaje += (
-                    f"✅ ¡Su proyecto es rentable!\n"
-                    f"Por cada hectárea podría ganar Q{utilidad_por_ha:.2f}"
+                    f"✅ ¡Su proyecto puede ser rentable!\n"
+                    f"Por cada hectárea podría ganar Q{utilidad_por_ha:,}\n\n"
+                    
+                    f"💡 Para mejorar sus ganancias:\n"
+                    f"1. Compare precios en diferentes mercados\n"
+                    f"2. Considere usar riego para mejorar el rendimiento\n"
+                    f"3. Lleve control de sus gastos"
                 )
             else:
+                quintales_equilibrio = abs(round(utilidad / precio))
                 mensaje += (
-                    f"⚠️ Con los precios actuales, este proyecto podría generar pérdidas.\n"
-                    f"La pérdida por hectárea sería de Q{abs(utilidad_por_ha):.2f}\n\n"
-                    f"💡 Le sugiero:\n"
-                    f"1. Revisar si puede reducir costos de producción\n"
-                    f"2. Considerar otros canales de venta con mejor precio\n"
-                    f"3. Evaluar si puede mejorar el rendimiento por hectárea"
+                    f"⚠️ Con los precios y costos actuales, este proyecto necesita ajustes:\n\n"
+                    
+                    f"💡 Le sugiero considerar:\n"
+                    f"1. Usar riego para mejorar su rendimiento\n"
+                    f"   - Sin riego: {rendimiento} quintales por hectárea\n"
+                    f"   - Con riego por goteo: {round(rendimiento * 2.17)} quintales por hectárea\n\n"
+                    
+                    f"2. Reducir costos de producción\n"
+                    f"   - Comparar precios de insumos\n"
+                    f"   - Organizar grupos de compra\n"
+                    f"   - Aprovechar programas de apoyo\n\n"
+                    
+                    f"3. Buscar mejores precios de venta\n"
+                    f"   - En cooperativa: +10% mejor precio\n"
+                    f"   - Para exportación: +20% mejor precio\n\n"
+                    
+                    f"Para cubrir los costos necesitaría producir {quintales_equilibrio} quintales más "
+                    f"o conseguir un precio de Q{round(costos/financial_data['rendimiento'])} por quintal"
                 )
             
             return mensaje
@@ -551,7 +583,7 @@ class ConversationFlow:
         except Exception as e:
             logger.error(f"Error generando reporte financiero: {str(e)}")
             raise
-    
+
     def process_show_loan(self, user_data: Dict[str, Any]) -> str:
         """
         Procesa y muestra la oferta de préstamo
@@ -616,7 +648,7 @@ class ConversationFlow:
             tasa = loan_data['tasa']
             cuota = loan_data['cuota_mensual']
             
-            crop = financial_data['crop']
+            crop = financial_data['cultivo']
             area = financial_data['area']
             rendimiento = financial_data['rendimiento']
             precio = financial_data['precio_quintal']
