@@ -513,6 +513,52 @@ class ConversationFlow:
             logger.error(f"Error generando reporte financiero: {str(e)}")
             raise
     
+    def process_show_loan(self, user_data: Dict[str, Any]) -> str:
+        """
+        Procesa y muestra la oferta de préstamo
+        
+        Args:
+            user_data: Datos del usuario
+            
+        Returns:
+            str: Mensaje con oferta de préstamo
+        """
+        try:
+            if 'score_data' not in user_data or user_data['score_data'] is None:
+                return "❌ Lo siento, no pudimos analizar su proyecto en este momento. Por favor intente de nuevo."
+
+            score_data = user_data['score_data']
+            analysis_data = user_data['analysis']
+
+            # Validar que tenemos los datos necesarios
+            required_fields = ['costos_siembra', 'rendimiento_por_ha', 'crop']
+            if not all(field in analysis_data for field in required_fields):
+                logger.error(f"Faltan campos en analysis_data: {analysis_data}")
+                return "❌ Lo siento, hubo un error en el análisis. Por favor intente de nuevo."
+
+            # Calcular monto del préstamo (80% del costo total)
+            costo_total = analysis_data['costos_siembra']
+            monto_prestamo = costo_total * 0.8
+            
+            # Calcular cuota mensual (principal + intereses simple)
+            cuota_mensual = (monto_prestamo + (monto_prestamo * 0.12)) / 12
+
+            # Preparar datos del préstamo
+            loan_data = {
+                'monto': monto_prestamo,
+                'plazo': 12,
+                'tasa': 12,
+                'cuota_mensual': cuota_mensual
+            }
+
+            # Formatear mensaje
+            mensaje = self._format_loan_offer(loan_data, analysis_data)
+            return mensaje
+
+        except Exception as e:
+            logger.error(f"Error generando oferta de préstamo: {str(e)}")
+            return "❌ Lo siento, hubo un error al generar la oferta. Por favor intente de nuevo."
+
     def _format_loan_offer(self, loan_data: Dict[str, Any], financial_data: Dict[str, Any]) -> str:
         """
         Formatea el mensaje de oferta de préstamo
@@ -531,12 +577,12 @@ class ConversationFlow:
             tasa = loan_data['tasa']
             cuota = loan_data['cuota_mensual']
             
-            cultivo = financial_data['cultivo']
+            crop = financial_data['crop']
             area = financial_data['area']
             rendimiento = financial_data['rendimiento']
             precio = financial_data['precio_quintal']
-            medida = financial_data['medida']
-            canal = financial_data['canal']
+            medida = financial_data.get('medida', 'Quintal')
+            canal = financial_data.get('canal', 'Mayorista')
             utilidad = financial_data['utilidad']
             
             # Calcular cuántos quintales necesita vender para pagar la cuota
@@ -546,7 +592,7 @@ class ConversationFlow:
             mensaje = (
                 f"Don {self.user_name}, ¡tengo buenas noticias! 🎉\n\n"
                 
-                f"Basado en su cultivo de {cultivo} en {area:.1f} hectáreas:\n"
+                f"Basado en su cultivo de {crop} en {area:.1f} hectáreas:\n"
                 f"✅ Producción esperada: {rendimiento:.1f} {medida}s\n"
                 f"✅ Precio actual: Q{precio:.2f} por {medida}\n"
                 f"✅ Canal de venta: {canal}\n"
@@ -569,50 +615,6 @@ class ConversationFlow:
         except Exception as e:
             logger.error(f"Error formateando oferta: {str(e)}")
             return "Lo siento, hubo un error al generar la oferta de préstamo. Por favor intente más tarde."
-
-    def process_show_loan(self, user_data: Dict[str, Any]) -> str:
-        """
-        Procesa y muestra la oferta de préstamo
-        
-        Args:
-            user_data: Datos del usuario
-            
-        Returns:
-            str: Mensaje con oferta de préstamo
-        """
-        try:
-            if 'score_data' not in user_data or user_data['score_data'] is None:
-                return "❌ Lo siento, no pudimos analizar su proyecto en este momento. Por favor intente de nuevo."
-
-            score_data = user_data['score_data']
-            analysis_data = user_data['analysis']
-
-            # Validar que tenemos los datos necesarios
-            required_fields = ['costos_siembra', 'rendimiento_por_ha', 'cultivo']
-            if not all(field in score_data for field in required_fields):
-                logger.error(f"Faltan campos en score_data: {score_data}")
-                return "❌ Lo siento, hubo un error en el análisis. Por favor intente de nuevo."
-
-            # Calcular monto del préstamo (80% del costo total)
-            costo_total = score_data['costos_siembra']
-            monto_prestamo = costo_total * 0.8
-            
-            # Calcular cuota mensual (principal + intereses simple)
-            cuota_mensual = (monto_prestamo + (monto_prestamo * 0.12)) / 12
-
-            # Formatear mensaje
-            loan_data = {
-                'monto': monto_prestamo,
-                'plazo': 12,
-                'tasa': 12,
-                'cuota_mensual': cuota_mensual
-            }
-            mensaje = self._format_loan_offer(loan_data, analysis_data)
-            return mensaje
-
-        except Exception as e:
-            logger.error(f"Error procesando préstamo: {str(e)}")
-            return "❌ Lo siento, hubo un error procesando su solicitud. Por favor intente de nuevo."
 
     def validate_yes_no(self, response: str) -> bool:
         """Valida respuestas sí/no de forma flexible"""
