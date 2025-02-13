@@ -334,9 +334,17 @@ class FinancialModel:
         """
         try:
             # Extraer datos
-            cultivo = user_data['crop'].lower()
-            area = float(user_data['area'])
-            riego = user_data['irrigation'].lower()
+            cultivo = user_data.get('crop', '').lower()
+            if not cultivo:
+                logger.error("Cultivo no especificado")
+                return None
+                
+            area = float(user_data.get('area', 0))
+            if area <= 0:
+                logger.error("Área inválida")
+                return None
+                
+            riego = user_data.get('irrigation', 'ninguno').lower()
             canal = user_data.get('commercialization', CanalComercializacion.MAYORISTA)
             
             # 1. Obtener precios
@@ -361,13 +369,14 @@ class FinancialModel:
             
             # 3. Calcular rendimiento
             rendimiento = self._get_rendimiento_esperado(cultivo, area, riego)
+            rendimiento_por_hectarea = rendimiento / area if area > 0 else 0
             
             # 4. Calcular ingresos
             ingresos = rendimiento * precio_quintal
             
             # 5. Calcular rentabilidad
             utilidad = ingresos - costos_siembra
-            utilidad_por_ha = utilidad / area
+            utilidad_por_ha = utilidad / area if area > 0 else 0
             
             # 6. Calcular riesgo
             risk_score = self._calculate_risk_score(cultivo, canal, riego)
@@ -377,16 +386,17 @@ class FinancialModel:
                 'cultivo': cultivo,
                 'area': area,
                 'rendimiento': rendimiento,
-                'rendimiento_por_ha': rendimiento / area,
+                'rendimiento_por_hectarea': rendimiento_por_hectarea,  # Campo requerido por el reporte
+                'rendimiento_por_ha': rendimiento_por_hectarea,  # Mantener por compatibilidad
                 'precio_original': precio_original,
                 'medida_original': medida_original,
                 'precio_quintal': precio_quintal,
                 'ingresos_totales': ingresos,
                 'costos_siembra': costos_siembra,
-                'costos_por_ha': costos_siembra / area,
+                'costos_por_ha': costos_siembra / area if area > 0 else 0,
                 'utilidad': utilidad,
                 'utilidad_por_ha': utilidad_por_ha,
-                'roi': (utilidad / costos_siembra) * 100,
+                'roi': (utilidad / costos_siembra * 100) if costos_siembra > 0 else 0,
                 'riesgo': risk_score,
                 'desglose_costos': costos
             }
