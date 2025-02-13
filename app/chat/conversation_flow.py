@@ -595,10 +595,17 @@ class ConversationFlow:
             str: Mensaje de respuesta
         """
         try:
-            if not self.validate_yes_no(response):
+            # Normalizar respuesta
+            response = response.lower().strip()
+            
+            # Lista de respuestas válidas
+            valid_yes = ['si', 'sí', 's', 'yes', 'y']
+            valid_no = ['no', 'n']
+            
+            if response not in valid_yes and response not in valid_no:
                 return "Por favor responda SI o NO"
 
-            if response.lower() in ['si', 'sí', 's', 'yes']:
+            if response in valid_yes:
                 # Guardar usuario como cliente potencial
                 user_data['status'] = 'prestamo_solicitado'
                 
@@ -689,20 +696,24 @@ class ConversationFlow:
 
     def validate_yes_no(self, response: str) -> bool:
         """Valida respuestas sí/no de forma flexible"""
-        valid_yes = ['si', 'sí', 'SI', 'SÍ', 'Si', 'Sí', 's', 'S', 'yes', 'YES']
-        valid_no = ['no', 'NO', 'No', 'n', 'N']
+        if not response:
+            return False
+            
+        # Normalizar respuesta
+        response = response.lower().strip()
         
-        # Limpiar respuesta
-        clean_response = response.strip().lower()
+        # Lista de respuestas válidas
+        valid_yes = ['si', 'sí', 's', 'yes', 'y']
+        valid_no = ['no', 'n']
         
-        return clean_response in valid_yes or clean_response in valid_no
+        return response in valid_yes or response in valid_no
 
     def get_yes_no(self, response: str) -> Optional[bool]:
         """Obtiene valor booleano de respuesta sí/no"""
         if not self.validate_yes_no(response):
             return None
             
-        valid_yes = ['si', 'sí', 'SI', 'SÍ', 'Si', 'Sí', 's', 'S', 'yes', 'YES']
+        valid_yes = ['si', 'sí', 's', 'yes', 'y']
         clean_response = response.strip().lower()
         
         return clean_response in valid_yes
