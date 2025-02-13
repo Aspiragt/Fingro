@@ -28,6 +28,15 @@ class FinancialModel:
         
         # Costos base por hectárea para diferentes cultivos
         self.costos_cultivos = {
+            'cafe': CostosCultivo(
+                preparacion_suelo=4000,    # Preparación y hoyado
+                semilla=15000,             # Plantas de almácigo
+                fertilizantes=8000,        # NPK + foliares
+                pesticidas=5000,           # Control roya y broca
+                mano_obra=12000,           # Podas, control, deshije
+                cosecha=6000,              # Cosecha selectiva
+                otros=4000                 # Beneficiado, secado
+            ),
             'maiz': CostosCultivo(
                 preparacion_suelo=2000,    # Arado y rastra
                 semilla=1500,              # Semilla certificada
