@@ -9,7 +9,12 @@ from app.models.user import User
 logger = logging.getLogger(__name__)
 
 class ConversationService:
+    """Servicio para manejar conversaciones de WhatsApp"""
+
     def __init__(self):
+        """Inicializa el servicio de conversación"""
+        self.flow = ConversationFlow()
+        self.whatsapp = WhatsAppService()
         self.db = db
     
     async def create_conversation(self, user_id: str) -> Conversation:
@@ -100,3 +105,95 @@ class ConversationService:
         )
         
         return True
+
+    async def handle_message(self, phone_number: str, message: str) -> None:
+        """
+        Maneja un mensaje de WhatsApp
+        
+        Args:
+            phone_number: Número de teléfono del usuario
+            message: Mensaje recibido
+        """
+        try:
+            # Normalizar mensaje
+            message = message.strip()
+            
+            # Si es comando especial, procesar
+            if message.lower() == 'inicio':
+                await self.restart_conversation(phone_number)
+                return
+                
+            if message.lower() == 'ayuda':
+                await self.show_help(phone_number)
+                return
+                
+            if message.lower() == 'asesor':
+                await self.connect_to_advisor(phone_number)
+                return
+            
+            # Procesar mensaje normal
+            await self.flow.process_message(phone_number, message)
+            
+        except Exception as e:
+            logger.error(f"Error en handle_message: {str(e)}")
+            await self.whatsapp.send_message(
+                phone_number,
+                "Lo siento, hubo un error. Por favor escriba 'inicio' para empezar de nuevo."
+            )
+
+    async def restart_conversation(self, phone_number: str) -> None:
+        """Reinicia la conversación"""
+        try:
+            # Limpiar datos del usuario
+            self.flow.user_data[phone_number] = {'data': {}, 'state': 'start'}
+            
+            # Enviar mensaje de bienvenida
+            welcome = self.flow.start_conversation()
+            await self.whatsapp.send_message(phone_number, welcome)
+            
+        except Exception as e:
+            logger.error(f"Error reiniciando conversación: {str(e)}")
+            await self.whatsapp.send_message(
+                phone_number,
+                "Lo siento, hubo un error. Por favor intente de nuevo."
+            )
+
+    async def show_help(self, phone_number: str) -> None:
+        """Muestra mensaje de ayuda"""
+        try:
+            # Obtener estado actual
+            user_data = self.flow.user_data.get(phone_number, {'data': {}})
+            
+            # Obtener ayuda contextual
+            help_message = self.flow.show_help(user_data)
+            await self.whatsapp.send_message(phone_number, help_message)
+            
+        except Exception as e:
+            logger.error(f"Error mostrando ayuda: {str(e)}")
+            await self.whatsapp.send_message(
+                phone_number,
+                "Lo siento, hubo un error. Por favor escriba 'inicio' para empezar de nuevo."
+            )
+
+    async def connect_to_advisor(self, phone_number: str) -> None:
+        """Conecta con un asesor"""
+        try:
+            # Obtener datos del usuario
+            user_data = self.flow.user_data.get(phone_number, {'data': {}})
+            
+            # Conectar con asesor
+            message = self.flow.connect_to_advisor(user_data)
+            await self.whatsapp.send_message(phone_number, message)
+            
+            # Guardar datos actualizados
+            self.flow.user_data[phone_number] = user_data
+            
+        except Exception as e:
+            logger.error(f"Error conectando con asesor: {str(e)}")
+            await self.whatsapp.send_message(
+                phone_number,
+                "Lo siento, hubo un error. Por favor escriba 'inicio' para empezar de nuevo."
+            )
+
+# Instancia global
+conversation_service = ConversationService()
