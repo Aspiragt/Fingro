@@ -10,6 +10,13 @@ from app.utils.text import normalize_text, get_crop_variations
 
 logger = logging.getLogger(__name__)
 
+__all__ = [
+    'CanalComercializacion',
+    'MAGAPreciosClient',
+    'MagaPreciosClient',
+    'maga_precios_client'
+]
+
 class CanalComercializacion:
     """Tipos de canales de comercialización"""
     MAYORISTA = 'mayorista'
@@ -236,11 +243,15 @@ class MAGAPreciosClient:
             'exportacion': 1.3
         }
         
-        precio_base = precios_base.get(cultivo, 0)
+        precio_base = precios_base.get(cultivo)
+        if not precio_base:
+            return None
+                
         factor = factores_canal.get(channel, 1.0)
+        precio_actual = precio_base * factor
         
         return {
-            'precio_actual': precio_base * factor,
+            'precio_actual': precio_actual,
             'precio_minimo': precio_base * 0.8,
             'precio_maximo': precio_base * 1.4
         }
@@ -407,6 +418,152 @@ class MAGAPreciosClient:
             Lista de cultivos
         """
         return list(self.CROP_MAPPING.keys())
+
+class MagaPreciosClient:
+    """Cliente para obtener precios y costos del MAGA"""
+    
+    def get_rendimiento_cultivo(self, cultivo: str, riego: str) -> float:
+        """Obtiene rendimiento base del cultivo en quintales por hectárea"""
+        rendimientos_base = {
+            'frijol': 25,    # qq/ha
+            'maiz': 80,      # qq/ha
+            'cafe': 40,      # qq/ha pergamino
+            'papa': 350,     # qq/ha
+            'tomate': 2000   # qq/ha
+        }
+        
+        # Factores por tipo de riego
+        factores_riego = {
+            'goteo': 1.3,
+            'aspersion': 1.2,
+            'gravedad': 1.1,
+            'ninguno': 1.0
+        }
+        
+        rendimiento_base = rendimientos_base.get(cultivo, 0)
+        factor = factores_riego.get(riego, 1.0)
+        
+        return rendimiento_base * factor
+
+    def get_costos_cultivo(self, cultivo: str) -> Dict[str, Any]:
+        """Obtiene estructura de costos del cultivo"""
+        costos = {
+            'frijol': {
+                'costos_fijos': {
+                    'preparacion_suelo': 2000,
+                    'siembra': 1500,
+                    'mantenimiento': 1000
+                },
+                'costos_por_hectarea': {
+                    'semilla': 1200,
+                    'fertilizantes': 3000,
+                    'pesticidas': 1500,
+                    'mano_obra': 4000,
+                    'riego': {
+                        'goteo': 8000,
+                        'aspersion': 6000,
+                        'gravedad': 4000,
+                        'ninguno': 0
+                    }
+                }
+            },
+            'maiz': {
+                'costos_fijos': {
+                    'preparacion_suelo': 2500,
+                    'siembra': 2000,
+                    'mantenimiento': 1500
+                },
+                'costos_por_hectarea': {
+                    'semilla': 1800,
+                    'fertilizantes': 4000,
+                    'pesticidas': 2000,
+                    'mano_obra': 5000,
+                    'riego': {
+                        'goteo': 8000,
+                        'aspersion': 6000,
+                        'gravedad': 4000,
+                        'ninguno': 0
+                    }
+                }
+            },
+            'cafe': {
+                'costos_fijos': {
+                    'preparacion_suelo': 3000,
+                    'siembra': 2500,
+                    'mantenimiento': 2000
+                },
+                'costos_por_hectarea': {
+                    'plantas': 15000,
+                    'fertilizantes': 6000,
+                    'pesticidas': 3000,
+                    'mano_obra': 8000,
+                    'riego': {
+                        'goteo': 10000,
+                        'aspersion': 8000,
+                        'gravedad': 6000,
+                        'ninguno': 0
+                    }
+                }
+            }
+        }
+        
+        return costos.get(cultivo, {})
+
+    def get_precios_cultivo(self, cultivo: str, channel: str = 'mercado_local') -> Dict[str, float]:
+        """Obtiene precios actuales por canal de venta"""
+        precios_base = {
+            'frijol': 550,    # Q/quintal
+            'maiz': 450,      # Q/quintal
+            'cafe': 1200,     # Q/quintal pergamino
+            'papa': 300,      # Q/quintal
+            'tomate': 200     # Q/quintal
+        }
+        
+        # Factores por canal
+        factores_canal = {
+            'mercado_local': 1.0,
+            'cooperativa': 1.15,
+            'mayorista': 1.2,
+            'exportacion': 1.3
+        }
+        
+        precio_base = precios_base.get(cultivo)
+        if not precio_base:
+            return None
+                
+        factor = factores_canal.get(channel, 1.0)
+        precio_actual = precio_base * factor
+        
+        return {
+            'precio_actual': precio_actual,
+            'precio_minimo': precio_base * 0.8,
+            'precio_maximo': precio_base * 1.4
+        }
+
+    def calcular_costos_totales(self, cultivo: str, area: float, irrigation: str) -> Dict[str, float]:
+        """Calcula costos totales considerando fijos y variables"""
+        costos = self.get_costos_cultivo(cultivo)
+        if not costos:
+            return {}
+
+        # Costos fijos (no dependen del área)
+        costos_fijos = sum(costos.get('costos_fijos', {}).values())
+
+        # Costos por hectárea
+        costos_ha = costos.get('costos_por_hectarea', {})
+        costo_riego = costos_ha.get('riego', {}).get(irrigation, 0)
+        
+        # Suma de costos por hectárea sin riego
+        costos_ha_sin_riego = sum(v for k, v in costos_ha.items() if k != 'riego')
+        
+        # Costos variables totales (dependen del área)
+        costos_variables = (costos_ha_sin_riego + costo_riego) * area
+
+        return {
+            'costos_fijos': costos_fijos,
+            'costos_variables': costos_variables,
+            'costos_totales': costos_fijos + costos_variables
+        }
 
 # Cliente global
 maga_precios_client = MAGAPreciosClient()
