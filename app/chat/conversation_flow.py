@@ -764,65 +764,54 @@ class ConversationFlow:
         """Procesa y muestra la oferta de préstamo"""
         try:
             # Obtener datos básicos
-            cultivo = user_data.get('crop', '').lower()
-            area = user_data.get('area', 0)
-            channel = user_data.get('channel', '')
-            irrigation = user_data.get('irrigation', '')
-            location = user_data.get('location', '')
-            
-            # Calcular préstamo
-            monto = self.calculate_loan_amount(user_data)
-            if not monto:
-                return self.handle_error(user_data, Exception("No se pudo calcular el préstamo"), "loan")
-            
-            # Obtener términos del préstamo
+            cultivo = user_data.get('crop', '')
             ciclo = self.get_crop_cycle(cultivo)
-            plazo = ciclo['duracion_meses']
-            cuota = monto / plazo
-            
-            # Obtener datos financieros
             financial = user_data.get('financial_analysis', {})
-            produccion = financial.get('rendimiento', 0) * area
-            ingresos = financial.get('ingresos', 0)
             
-            # Formatear números
-            monto_str = format_number(monto)
-            cuota_str = format_number(round(cuota))
-            produccion_str = format_number(produccion)
-            ingreso_str = format_number(ingresos)
+            # Calcular monto del préstamo (80% de los costos totales)
+            costos = financial.get('costos', 0)
+            monto_prestamo = costos * 0.8
             
-            # Determinar próximo mes de siembra
-            hoy = datetime.now()
-            meses_siembra = ciclo.get('meses_siembra', [5])
-            proximo_mes = min((m for m in meses_siembra if m >= hoy.month), default=meses_siembra[0])
+            # Calcular plazo basado en ciclo del cultivo
+            plazo_meses = ciclo.get('duracion_meses', 4)
             
-            # Actualizar estado
-            user_data['state'] = self.STATES['GET_LOAN_RESPONSE']
-            user_data['loan_amount'] = monto
+            # Calcular cuota mensual (tasa del 1% mensual)
+            tasa_mensual = 0.01  # 12% anual
+            cuota = (monto_prestamo * tasa_mensual) / (1 - (1 + tasa_mensual) ** -plazo_meses)
             
-            # Construir mensaje de pago
-            pago_str = f"{plazo} cuotas de Q{cuota_str} al mes 📅"
+            # Guardar datos del préstamo
+            user_data['loan_offer'] = {
+                'monto': monto_prestamo,
+                'plazo': plazo_meses,
+                'cuota': cuota
+            }
             
-            # Construir mensaje
-            return (
-                f"¡Buenas noticias! 🎉\n\n"
-                f"Con base en su proyecto:\n"
-                f"•⁠  ⁠{ciclo['nombre'].capitalize()} en {location} 🌱\n"
-                f"•⁠  ⁠{format_number(area)} hectáreas de terreno\n"
-                f"•⁠  ⁠Riego por {irrigation} 💧\n"
-                f"•⁠  ⁠Venta en {channel} 🚛\n\n"
-                f"Producción esperada:\n"
-                f"•⁠  ⁠{produccion_str} quintales de {cultivo} 📦\n"
-                f"•⁠  ⁠Ingresos de Q{ingreso_str} por cosecha 💰\n\n"
-                f"Le podemos ofrecer:\n"
-                f"•⁠  ⁠Préstamo de Q{monto_str} 💸\n"
-                f"•⁠  ⁠{pago_str}\n"
-                f"•⁠  ⁠Incluye asistencia técnica 🌿\n\n"
-                f"¿Le interesa continuar con la solicitud? 🤝"
+            # Calcular ejemplos prácticos
+            quintales_semilla = monto_prestamo / 200  # Asumiendo Q200 por quintal de semilla
+            area_adicional = quintales_semilla * 0.5  # Asumiendo 0.5 hectáreas por quintal
+            
+            # Formatear mensaje
+            mensaje = (
+                f"💰 *Préstamo para su {cultivo}*\n\n"
+                f"Con este préstamo usted podría:\n"
+                f"• Comprar {int(quintales_semilla)} quintales de semilla 🌱\n"
+                f"• Sembrar {int(area_adicional)} cuerdas más ✨\n\n"
+                f"*Detalles del préstamo:*\n"
+                f"• Le prestamos: {format_currency(monto_prestamo)}\n"
+                f"• Plazo: {plazo_meses} meses (una cosecha)\n"
+                f"• Pago mensual: {format_currency(cuota)}\n\n"
+                f"¿Le gustaría continuar con la solicitud? 🤝\n"
+                f"Responda SI o NO"
             )
             
+            return mensaje
+            
         except Exception as e:
-            return self.handle_error(user_data, e, "loan")
+            logger.error(f"Error calculando monto de préstamo: {str(e)}")
+            return (
+                "Disculpe, hubo un problema al calcular su préstamo 😔\n"
+                "¿Le gustaría intentar de nuevo? 🔄"
+            )
             
     def process_loan_response(self, user_data: Dict[str, Any], response: str) -> str:
         """Procesa la respuesta a la oferta de préstamo"""
@@ -921,17 +910,17 @@ class ConversationFlow:
             # Calcular producción e ingresos
             rendimiento = maga_precios_client.get_rendimiento_cultivo(cultivo, irrigation)
             produccion = rendimiento * area
-            precio_venta = precios['precio_actual']
+            precio_venta = precios['precio']
             ingresos = produccion * precio_venta
             
             # Calcular rentabilidad
-            costos_totales = costos['costos_totales']
-            ganancia = ingresos - costos_totales
-            rentabilidad = (ganancia / costos_totales) * 100 if costos_totales > 0 else 0
+            costos_total = costos['total']
+            ganancia = ingresos - costos_total
+            rentabilidad = (ganancia / costos_total) * 100 if costos_total > 0 else 0
             
             # Guardar análisis financiero
             user_data['financial_analysis'] = {
-                'costos': costos_totales,
+                'costos': costos_total,
                 'ingresos': ingresos,
                 'ganancia': ganancia,
                 'rentabilidad': rentabilidad,
@@ -949,9 +938,9 @@ class ConversationFlow:
                 f"- Canal: {channel}\n\n"
                 
                 f"💰 *Costos*\n"
-                f"- Fijos: Q{costos['costos_fijos']:,.2f}\n"
-                f"- Variables: Q{costos['costos_variables']:,.2f}\n"
-                f"- Total: Q{costos_totales:,.2f}\n\n"
+                f"- Fijos: Q{costos['fijos']:,.2f}\n"
+                f"- Variables: Q{costos['variables']:,.2f}\n"
+                f"- Total: Q{costos_total:,.2f}\n\n"
                 
                 f"📈 *Producción y Ventas*\n"
                 f"- Rendimiento: {rendimiento:.1f} qq/ha\n"
