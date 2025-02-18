@@ -12,7 +12,6 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     'CanalComercializacion',
-    'MAGAPreciosClient',
     'MagaPreciosClient',
     'maga_precios_client'
 ]
@@ -24,10 +23,9 @@ class CanalComercializacion:
     EXPORTACION = 'exportacion'
     MERCADO_LOCAL = 'mercado_local'
 
-class MAGAPreciosClient:
-    """Cliente para obtener datos de cultivos del MAGA"""
+class MagaPreciosClient:
+    """Cliente para obtener precios y costos del MAGA"""
     
-    # Mapeo de nombres alternativos a nombres estándar
     CROP_MAPPING = {
         'maiz': 'Maíz blanco, de primera',
         'mais': 'Maíz blanco, de primera',
@@ -67,7 +65,7 @@ class MAGAPreciosClient:
         'brocolis': 'Brócoli, mediano, de primera',
         'brócolis': 'Brócoli, mediano, de primera'
     }
-    
+
     def __init__(self, data_file: str = 'maga_data.json'):
         """
         Inicializa el cliente
@@ -95,333 +93,16 @@ class MAGAPreciosClient:
             CanalComercializacion.EXPORTACION: 1.3,  # 30% más
             CanalComercializacion.MERCADO_LOCAL: 0.8,  # 20% menos
         }
-    
+
     def _load_data(self):
         """Carga datos del archivo JSON"""
         try:
-            with open(self.data_file, 'r') as f:
+            with open(self.data_file, 'r', encoding='utf-8') as f:
                 self.data = json.load(f)
         except Exception as e:
             logger.error(f"Error cargando datos: {str(e)}")
-            self.data = {
-                'cultivos': {},
-                'precios': {},
-                'costos': {}
-            }
-            
-    def get_costos_cultivo(self, cultivo: str) -> Dict[str, Any]:
-        """Obtiene costos de producción para un cultivo"""
-        costos = {
-            'frijol': {
-                'costos_fijos': {
-                    'preparacion_tierra': 800,    # Maquinaria/herramientas
-                    'asistencia_tecnica': 500,    # Por ciclo
-                    'administracion': 400,        # Por ciclo
-                    'imprevistos': 300           # Por ciclo
-                },
-                'costos_por_hectarea': {
-                    'semilla': 1200,             # 60 lb/ha a Q20/lb
-                    'fertilizantes': 1500,       # NPK + foliar
-                    'pesticidas': 800,           # Herbicidas + insecticidas
-                    'mano_obra': 2000,           # Siembra, fumigación, cosecha
-                    'riego': {
-                        'temporal': 0,
-                        'gravedad': 500,
-                        'aspersion': 800,
-                        'goteo': 1200
-                    }
-                },
-                'rendimiento_por_hectarea': 35,  # quintales/ha
-                'merma': 0.05                    # 5% pérdida
-            },
-            'maiz': {
-                'costos_fijos': {
-                    'preparacion_tierra': 1000,   # Más alto por ser cultivo más pesado
-                    'asistencia_tecnica': 500,
-                    'administracion': 400,
-                    'imprevistos': 300
-                },
-                'costos_por_hectarea': {
-                    'semilla': 1500,             # Semilla certificada
-                    'fertilizantes': 2000,       # Mayor demanda nutricional
-                    'pesticidas': 1000,
-                    'mano_obra': 2500,           # Más labor en cosecha
-                    'riego': {
-                        'temporal': 0,
-                        'gravedad': 600,
-                        'aspersion': 900,
-                        'goteo': 1400
-                    }
-                },
-                'rendimiento_por_hectarea': 45,
-                'merma': 0.08
-            },
-            'cafe': {
-                'costos_fijos': {
-                    'preparacion_tierra': 2000,   # Incluye terrazas/sombra
-                    'asistencia_tecnica': 800,    # Más especializada
-                    'administracion': 600,
-                    'imprevistos': 500
-                },
-                'costos_por_hectarea': {
-                    'plantas': 8000,              # 3000 plantas/ha a Q2.67
-                    'fertilizantes': 3000,        # 3 aplicaciones/año
-                    'pesticidas': 1500,           # Control roya/broca
-                    'mano_obra': 5000,            # Alta en cosecha
-                    'riego': {
-                        'temporal': 0,
-                        'gravedad': 800,
-                        'aspersion': 1200,
-                        'goteo': 2000
-                    }
-                },
-                'rendimiento_por_hectarea': 30,   # qq pergamino
-                'merma': 0.05
-            },
-            'papa': {
-                'costos_fijos': {
-                    'preparacion_tierra': 1200,
-                    'asistencia_tecnica': 600,
-                    'administracion': 400,
-                    'imprevistos': 400
-                },
-                'costos_por_hectarea': {
-                    'semilla': 6000,              # 2000 kg/ha a Q3/kg
-                    'fertilizantes': 2500,
-                    'pesticidas': 2000,           # Alto control plagas
-                    'mano_obra': 3000,
-                    'riego': {
-                        'temporal': 0,
-                        'gravedad': 700,
-                        'aspersion': 1000,
-                        'goteo': 1600
-                    }
-                },
-                'rendimiento_por_hectarea': 250,  # qq/ha
-                'merma': 0.1
-            },
-            'tomate': {
-                'costos_fijos': {
-                    'preparacion_tierra': 1500,
-                    'asistencia_tecnica': 800,
-                    'administracion': 500,
-                    'imprevistos': 500
-                },
-                'costos_por_hectarea': {
-                    'plantulas': 7000,            # 25000 plantas/ha
-                    'fertilizantes': 3500,        # Fertirrigación
-                    'pesticidas': 2500,           # Control intensivo
-                    'mano_obra': 4000,            # Tutorado + cosecha
-                    'riego': {
-                        'temporal': 0,
-                        'gravedad': 1000,
-                        'aspersion': 1500,
-                        'goteo': 2500             # Ideal para tomate
-                    }
-                },
-                'rendimiento_por_hectarea': 2000, # qq/ha
-                'merma': 0.15                     # Alta perecibilidad
-            }
-        }
-        return costos.get(cultivo, {})
-    
-    def get_precios_cultivo(self, cultivo: str, channel: str = 'mercado_local') -> Dict[str, float]:
-        """Obtiene precios actuales por canal de venta"""
-        precios_base = {
-            'frijol': 550,    # Q/quintal
-            'maiz': 450,      # Q/quintal
-            'cafe': 1200,     # Q/quintal pergamino
-            'papa': 300,      # Q/quintal
-            'tomate': 200     # Q/quintal
-        }
-        
-        # Factores por canal
-        factores_canal = {
-            'mercado_local': 1.0,
-            'cooperativa': 1.15,
-            'mayorista': 1.2,
-            'exportacion': 1.3
-        }
-        
-        precio_base = precios_base.get(cultivo)
-        if not precio_base:
-            return None
-                
-        factor = factores_canal.get(channel, 1.0)
-        precio_actual = precio_base * factor
-        
-        return {
-            'precio_actual': precio_actual,
-            'precio_minimo': precio_base * 0.8,
-            'precio_maximo': precio_base * 1.4
-        }
+            self.data = {}
 
-    def calcular_costos_totales(self, cultivo: str, area: float, irrigation: str) -> Dict[str, float]:
-        """Calcula costos totales considerando fijos y variables"""
-        costos = self.get_costos_cultivo(cultivo)
-        if not costos:
-            return {}
-
-        # Costos fijos (no dependen del área)
-        costos_fijos = sum(costos.get('costos_fijos', {}).values())
-
-        # Costos por hectárea
-        costos_ha = costos.get('costos_por_hectarea', {})
-        costo_riego = costos_ha.get('riego', {}).get(irrigation, 0)
-        
-        # Suma de costos por hectárea sin riego
-        costos_ha_sin_riego = sum(v for k, v in costos_ha.items() if k != 'riego')
-        
-        # Costos variables totales (dependen del área)
-        costos_variables = (costos_ha_sin_riego + costo_riego) * area
-
-        return {
-            'costos_fijos': costos_fijos,
-            'costos_variables': costos_variables,
-            'costos_totales': costos_fijos + costos_variables
-        }
-    
-    def get_precios_cultivo_original(self, cultivo: str, canal: str = 'mayorista') -> Dict[str, Any]:
-        """
-        Obtiene precios actuales para un cultivo
-        
-        Args:
-            cultivo: Nombre del cultivo
-            canal: Canal de comercialización
-            
-        Returns:
-            dict: Datos de precios o None si no existe
-        """
-        try:
-            cultivo = normalize_text(cultivo)
-            canal = normalize_text(canal)
-            
-            # Precios base por quintal
-            precios_base = {
-                'maiz': 200,
-                'frijol': 500,
-                'cafe': 1000,
-                'tomate': 300,
-                'papa': 250
-            }
-            
-            # Factores por canal
-            factores_canal = {
-                'mercado_local': 0.9,  # 10% menos que mayorista
-                'mayorista': 1.0,  # Precio base
-                'cooperativa': 1.1,  # 10% más que mayorista
-                'exportacion': 1.3  # 30% más que mayorista
-            }
-            
-            # Calcular precio
-            precio_base = precios_base.get(cultivo)
-            if not precio_base:
-                return None
-                
-            factor = factores_canal.get(canal, 1.0)
-            precio_actual = precio_base * factor
-            
-            return {
-                'precio_actual': precio_actual,
-                'precio_base': precio_base,
-                'tendencia': 'estable'
-            }
-            
-        except Exception as e:
-            logger.error(f"Error obteniendo precios: {str(e)}")
-            return None
-            
-    def get_cultivos_region(self, region: str) -> List[str]:
-        """
-        Obtiene cultivos recomendados para una región
-        
-        Args:
-            region: Nombre de la región o departamento
-            
-        Returns:
-            list: Lista de cultivos recomendados
-        """
-        try:
-            region = normalize_text(region)
-            
-            # Cultivos por región
-            cultivos_region = {
-                'guatemala': ['maiz', 'frijol', 'tomate'],
-                'peten': ['maiz', 'frijol'],
-                'alta_verapaz': ['cafe', 'cardamomo'],
-                'escuintla': ['caña', 'platano'],
-                'san_marcos': ['cafe', 'papa']
-            }
-            
-            return cultivos_region.get(region, ['maiz', 'frijol'])  # Cultivos default
-            
-        except Exception as e:
-            logger.error(f"Error obteniendo cultivos: {str(e)}")
-            return ['maiz', 'frijol']  # Cultivos default
-            
-    async def get_crop_price(self, crop_name: str) -> Optional[Dict[str, Any]]:
-        """
-        Obtiene el precio más reciente de un cultivo
-        Args:
-            crop_name: Nombre del cultivo
-        Returns:
-            Dict con datos del precio o None si hay error
-        """
-        try:
-            # Normalizar nombre del cultivo
-            crop_norm = normalize_text(crop_name)
-            
-            # Buscar en el mapeo
-            if crop_norm in self.CROP_MAPPING:
-                product_name = self.CROP_MAPPING[crop_norm]
-                product_norm = normalize_text(product_name)
-                
-                # Buscar precio
-                for precio in self.data['precios']:
-                    if normalize_text(precio['Producto']) == product_norm:
-                        return {
-                            'nombre': precio['Producto'],
-                            'precio': precio['Precio'],
-                            'fecha': precio['Fecha'],
-                            'medida': precio['Medida'],
-                            'fuente': 'MAGA'
-                        }
-            
-            # Si no encontramos, intentar con variaciones
-            for variacion in get_crop_variations(crop_name):
-                var_norm = normalize_text(variacion)
-                if var_norm in self.CROP_MAPPING:
-                    product_name = self.CROP_MAPPING[var_norm]
-                    product_norm = normalize_text(product_name)
-                    
-                    for precio in self.data['precios']:
-                        if normalize_text(precio['Producto']) == product_norm:
-                            return {
-                                'nombre': precio['Producto'],
-                                'precio': precio['Precio'],
-                                'fecha': precio['Fecha'],
-                                'medida': precio['Medida'],
-                                'fuente': 'MAGA'
-                            }
-            
-            logger.warning(f"No se encontró precio para {crop_name}")
-            return None
-            
-        except Exception as e:
-            logger.error(f"Error obteniendo precio para {crop_name}: {str(e)}")
-            return None
-    
-    async def get_available_crops(self) -> list:
-        """
-        Obtiene lista de cultivos disponibles
-        Returns:
-            Lista de cultivos
-        """
-        return list(self.CROP_MAPPING.keys())
-
-class MagaPreciosClient:
-    """Cliente para obtener precios y costos del MAGA"""
-    
     def get_rendimiento_cultivo(self, cultivo: str, riego: str) -> float:
         """Obtiene rendimiento base del cultivo en quintales por hectárea"""
         rendimientos_base = {
@@ -429,7 +110,16 @@ class MagaPreciosClient:
             'maiz': 80,      # qq/ha
             'cafe': 40,      # qq/ha pergamino
             'papa': 350,     # qq/ha
-            'tomate': 2000   # qq/ha
+            'tomate': 2000,  # qq/ha
+            'chile': 1500,   # qq/ha
+            'cebolla': 800,  # qq/ha
+            'repollo': 900,  # qq/ha
+            'arveja': 150,   # qq/ha
+            'aguacate': 300, # qq/ha
+            'platano': 700,  # qq/ha
+            'limon': 400,    # qq/ha
+            'zanahoria': 600,# qq/ha
+            'brocoli': 400   # qq/ha
         }
         
         # Factores por tipo de riego
@@ -437,11 +127,12 @@ class MagaPreciosClient:
             'goteo': 1.3,
             'aspersion': 1.2,
             'gravedad': 1.1,
+            'temporal': 1.0,
             'ninguno': 1.0
         }
         
-        rendimiento_base = rendimientos_base.get(cultivo, 0)
-        factor = factores_riego.get(riego, 1.0)
+        rendimiento_base = rendimientos_base.get(cultivo.lower(), 0)
+        factor = factores_riego.get(riego.lower(), 1.0)
         
         return rendimiento_base * factor
 
@@ -449,121 +140,154 @@ class MagaPreciosClient:
         """Obtiene estructura de costos del cultivo"""
         costos = {
             'frijol': {
-                'costos_fijos': {
-                    'preparacion_suelo': 2000,
-                    'siembra': 1500,
-                    'mantenimiento': 1000
+                'fijos': {
+                    'preparacion_terreno': 2000,
+                    'sistema_riego': 5000,
+                    'herramientas': 1000
                 },
-                'costos_por_hectarea': {
-                    'semilla': 1200,
-                    'fertilizantes': 3000,
-                    'pesticidas': 1500,
-                    'mano_obra': 4000,
-                    'riego': {
-                        'goteo': 8000,
-                        'aspersion': 6000,
-                        'gravedad': 4000,
-                        'ninguno': 0
-                    }
+                'variables': {
+                    'semilla': 800,
+                    'fertilizantes': 2000,
+                    'pesticidas': 1000,
+                    'mano_obra': 5000,
+                    'cosecha': 2000,
+                    'transporte': 1000
                 }
             },
             'maiz': {
-                'costos_fijos': {
-                    'preparacion_suelo': 2500,
-                    'siembra': 2000,
-                    'mantenimiento': 1500
+                'fijos': {
+                    'preparacion_terreno': 2500,
+                    'sistema_riego': 5000,
+                    'herramientas': 1000
                 },
-                'costos_por_hectarea': {
-                    'semilla': 1800,
-                    'fertilizantes': 4000,
-                    'pesticidas': 2000,
-                    'mano_obra': 5000,
-                    'riego': {
-                        'goteo': 8000,
-                        'aspersion': 6000,
-                        'gravedad': 4000,
-                        'ninguno': 0
-                    }
+                'variables': {
+                    'semilla': 1000,
+                    'fertilizantes': 2500,
+                    'pesticidas': 1200,
+                    'mano_obra': 6000,
+                    'cosecha': 2500,
+                    'transporte': 1500
                 }
             },
             'cafe': {
-                'costos_fijos': {
-                    'preparacion_suelo': 3000,
-                    'siembra': 2500,
-                    'mantenimiento': 2000
+                'fijos': {
+                    'preparacion_terreno': 3000,
+                    'sistema_riego': 6000,
+                    'herramientas': 2000
                 },
-                'costos_por_hectarea': {
-                    'plantas': 15000,
-                    'fertilizantes': 6000,
-                    'pesticidas': 3000,
+                'variables': {
+                    'semilla': 2000,
+                    'fertilizantes': 3000,
+                    'pesticidas': 2000,
                     'mano_obra': 8000,
-                    'riego': {
-                        'goteo': 10000,
-                        'aspersion': 8000,
-                        'gravedad': 6000,
-                        'ninguno': 0
-                    }
+                    'cosecha': 4000,
+                    'transporte': 2000
+                }
+            },
+            'papa': {
+                'fijos': {
+                    'preparacion_terreno': 3000,
+                    'sistema_riego': 6000,
+                    'herramientas': 1500
+                },
+                'variables': {
+                    'semilla': 4000,
+                    'fertilizantes': 3000,
+                    'pesticidas': 2000,
+                    'mano_obra': 7000,
+                    'cosecha': 3000,
+                    'transporte': 2000
+                }
+            },
+            'tomate': {
+                'fijos': {
+                    'preparacion_terreno': 3500,
+                    'sistema_riego': 8000,
+                    'herramientas': 2000
+                },
+                'variables': {
+                    'semilla': 5000,
+                    'fertilizantes': 4000,
+                    'pesticidas': 3000,
+                    'mano_obra': 10000,
+                    'cosecha': 4000,
+                    'transporte': 2500
                 }
             }
         }
         
-        return costos.get(cultivo, {})
+        cultivo = cultivo.lower()
+        if cultivo not in costos:
+            logger.error(f"No se encontraron costos para el cultivo: {cultivo}")
+            raise ValueError(f"Faltan datos del cultivo: {cultivo}")
+            
+        return costos[cultivo]
 
-    def get_precios_cultivo(self, cultivo: str, channel: str = 'mercado_local') -> Dict[str, float]:
+    def get_precios_cultivo(self, cultivo: str, channel: str = 'mercado_local') -> Dict[str, Any]:
         """Obtiene precios actuales por canal de venta"""
         precios_base = {
-            'frijol': 550,    # Q/quintal
-            'maiz': 450,      # Q/quintal
-            'cafe': 1200,     # Q/quintal pergamino
-            'papa': 300,      # Q/quintal
-            'tomate': 200     # Q/quintal
+            'frijol': 500,     # Q/qq
+            'maiz': 200,       # Q/qq
+            'cafe': 1000,      # Q/qq
+            'papa': 300,       # Q/qq
+            'tomate': 250,     # Q/qq
+            'chile': 400,      # Q/qq
+            'cebolla': 200,    # Q/qq
+            'repollo': 100,    # Q/qq
+            'arveja': 600,     # Q/qq
+            'aguacate': 450,   # Q/qq
+            'platano': 150,    # Q/qq
+            'limon': 300,      # Q/qq
+            'zanahoria': 200,  # Q/qq
+            'brocoli': 300     # Q/qq
         }
         
-        # Factores por canal
-        factores_canal = {
-            'mercado_local': 1.0,
-            'cooperativa': 1.15,
-            'mayorista': 1.2,
-            'exportacion': 1.3
-        }
-        
-        precio_base = precios_base.get(cultivo)
-        if not precio_base:
-            return None
-                
-        factor = factores_canal.get(channel, 1.0)
-        precio_actual = precio_base * factor
+        cultivo = cultivo.lower()
+        if cultivo not in precios_base:
+            logger.error(f"No se encontraron precios para el cultivo: {cultivo}")
+            raise ValueError(f"Faltan datos del cultivo: {cultivo}")
+            
+        # Aplicar ajuste por canal
+        precio_base = precios_base[cultivo]
+        factor = self.price_adjustments.get(channel, 1.0)
         
         return {
-            'precio_actual': precio_actual,
-            'precio_minimo': precio_base * 0.8,
-            'precio_maximo': precio_base * 1.4
+            'precio': precio_base * factor,
+            'moneda': 'GTQ',
+            'unidad': 'quintal',
+            'canal': channel
         }
 
-    def calcular_costos_totales(self, cultivo: str, area: float, irrigation: str) -> Dict[str, float]:
+    def calcular_costos_totales(self, cultivo: str, area: float, irrigation: str) -> Dict[str, Any]:
         """Calcula costos totales considerando fijos y variables"""
-        costos = self.get_costos_cultivo(cultivo)
-        if not costos:
-            return {}
+        try:
+            costos = self.get_costos_cultivo(cultivo)
+            
+            # Costos fijos no dependen del área pero sí del riego
+            costos_fijos = sum(costos['fijos'].values())
+            if irrigation in ['ninguno', 'temporal']:
+                costos_fijos -= costos['fijos']['sistema_riego']
+                
+            # Costos variables se multiplican por el área
+            costos_variables = sum(costos['variables'].values()) * area
+            
+            return {
+                'fijos': costos_fijos,
+                'variables': costos_variables,
+                'total': costos_fijos + costos_variables
+            }
+            
+        except Exception as e:
+            logger.error(f"Error calculando costos para {cultivo}: {str(e)}")
+            raise ValueError(f"Error calculando costos: {str(e)}")
 
-        # Costos fijos (no dependen del área)
-        costos_fijos = sum(costos.get('costos_fijos', {}).values())
-
-        # Costos por hectárea
-        costos_ha = costos.get('costos_por_hectarea', {})
-        costo_riego = costos_ha.get('riego', {}).get(irrigation, 0)
-        
-        # Suma de costos por hectárea sin riego
-        costos_ha_sin_riego = sum(v for k, v in costos_ha.items() if k != 'riego')
-        
-        # Costos variables totales (dependen del área)
-        costos_variables = (costos_ha_sin_riego + costo_riego) * area
-
-        return {
-            'costos_fijos': costos_fijos,
-            'costos_variables': costos_variables,
-            'costos_totales': costos_fijos + costos_variables
-        }
+    def get_available_crops(self) -> List[str]:
+        """
+        Obtiene lista de cultivos disponibles
+        Returns:
+            Lista de cultivos
+        """
+        return list(set(self.CROP_MAPPING.keys()))
 
 # Cliente global
-maga_precios_client = MAGAPreciosClient()
+maga_precios_client = MagaPreciosClient()
