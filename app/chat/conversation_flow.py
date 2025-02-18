@@ -1043,10 +1043,14 @@ class ConversationFlow:
             str: Mensaje de confirmación
         """
         return (
-            "✅ ¡Excelente! En breve uno de nuestros asesores se pondrá en contacto "
-            "con usted para finalizar su solicitud.\n\n"
-            "Gracias por confiar en FinGro. ¡Que tenga un excelente día! 👋\n\n"
-            "Puede escribir 'inicio' para comenzar una nueva consulta."
+            "✨ *¡Excelente decisión!*\n\n"
+            "Su solicitud de préstamo está siendo procesada.\n\n"
+            "En las próximas 24 horas:\n"
+            "• Revisaremos su solicitud 📋\n"
+            "• Prepararemos los documentos 📄\n"
+            "• Nos comunicaremos con usted 📱\n\n"
+            "¿Tiene alguna pregunta mientras tanto? 🤝\n"
+            "Estoy aquí para ayudarle."
         )
 
     def process_area(self, user_data: Dict[str, Any], response: str) -> str:
