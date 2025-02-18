@@ -832,7 +832,7 @@ class ConversationFlow:
             if result is None:
                 return (
                     "Por favor responda SI o NO.\n\n"
-                    "¿Desea continuar con la solicitud de préstamo? 🤝"
+                    "¿Desea continuar con la solicitud? 🤝"
                 )
             
             if not result:
@@ -856,7 +856,7 @@ class ConversationFlow:
                 "Disculpe, hubo un error al procesar su respuesta 😔\n"
                 "¿Le gustaría intentar de nuevo? 🔄"
             )
-{{ ... }}
+            
     def process_location(self, user_data: Dict[str, Any], response: str) -> str:
         """
         Procesa la respuesta de la ubicación
@@ -963,18 +963,18 @@ class ConversationFlow:
                 f"- Ganancia: Q{ganancia:,.2f}\n"
                 f"- Rentabilidad: {rentabilidad:.1f}%\n\n"
                 
-                f"💡 *Recomendaciones*\n"
-                f"- {self.get_recommendations(rentabilidad)}\n\n"
-                
-                f"¿Le gustaría explorar opciones de préstamo? 🤝"
+                f"¿Le gustaría explorar opciones de préstamo? 💳"
             )
             
             return mensaje
             
         except Exception as e:
             logger.error(f"Error procesando reporte: {str(e)}")
-            return self.handle_error(user_data, e, "financial")
-    
+            return (
+                "Disculpe, hubo un error al procesar su análisis 😔\n"
+                "¿Le gustaría intentar de nuevo? 🔄"
+            )
+            
     def process_loan_response(self, user_data: Dict[str, Any], response: str) -> str:
         """Procesa la respuesta a la oferta de préstamo"""
         try:
@@ -1002,8 +1002,12 @@ class ConversationFlow:
             return self.process_show_loan(user_data)
             
         except Exception as e:
-            return self.handle_error(user_data, e, "loan")
-
+            logger.error(f"Error procesando respuesta de préstamo: {str(e)}")
+            return (
+                "Disculpe, hubo un error al procesar su respuesta 😔\n"
+                "¿Le gustaría intentar de nuevo? 🔄"
+            )
+            
     def validate_yes_no(self, response: str) -> bool:
         """Valida respuestas sí/no de forma flexible"""
         if not response:
@@ -1394,10 +1398,10 @@ class ConversationFlow:
             ),
             self.STATES['GET_IRRIGATION']: (
                 "¿Cómo riega sus cultivos?\n\n"
-                "1. Goteo - Ahorra agua\n"
-                "2. Aspersión - Como lluvia\n"
-                "3. Gravedad - Por canales\n"
-                "4. Ninguno - Solo lluvia"
+                "1. Goteo 💧\n"
+                "2. Aspersión 💦\n"
+                "3. Gravedad 🌊\n"
+                "4. Ninguno (depende de lluvia) 🌧️"
             ),
             self.STATES['GET_LOCATION']: (
                 "¿En qué departamento está su terreno?\n\n"
