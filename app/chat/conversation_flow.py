@@ -4,6 +4,7 @@ Módulo para manejar el flujo de conversación con usuarios
 from typing import Dict, Any, Optional, List
 import logging
 from datetime import datetime
+import unidecode
 
 from app.database.firebase import firebase_manager
 from app.external_apis.maga_precios import (
@@ -815,35 +816,27 @@ class ConversationFlow:
             
     def process_loan_response(self, user_data: Dict[str, Any], response: str) -> str:
         """Procesa la respuesta a la oferta de préstamo"""
-        try:
-            # Validar respuesta
-            result = self.get_yes_no(response)
-            if result is None:
-                return (
-                    "Por favor responda SI o NO.\n\n"
-                    "¿Desea continuar con la solicitud? 🤝"
-                )
-            
-            if not result:
-                return (
-                    "Entiendo. Si más adelante necesita financiamiento, puede escribir "
-                    "'préstamo' para revisar las opciones disponibles. 💡\n\n"
-                    "¿Hay algo más en que pueda ayudarle? 🌱"
-                )
-                
-            # Si aceptó, mostrar préstamo
-            if 'financial_analysis' not in user_data:
-                return "Primero necesitamos hacer un análisis de su cultivo. ¿Qué cultivo está sembrando? 🌱"
-                
-            # Actualizar estado y mostrar préstamo
-            user_data['state'] = self.STATES['SHOW_LOAN']
-            return self.process_show_loan(user_data)
-            
-        except Exception as e:
-            logger.error(f"Error procesando respuesta de préstamo: {str(e)}")
+        # Normalizar respuesta
+        response = unidecode(response.lower().strip())
+        
+        # Lista de respuestas válidas
+        respuestas_si = ['si', 'sí', 's', 'yes', 'claro', 'dale', 'ok', 'okay']
+        respuestas_no = ['no', 'n', 'nel', 'nop', 'nope']
+        
+        if response in respuestas_si:
+            user_data['state'] = self.STATES['CONFIRM_LOAN']
+            return self.process_confirm_loan()
+        elif response in respuestas_no:
+            user_data['state'] = self.STATES['DONE']
             return (
-                "Disculpe, hubo un error al procesar su respuesta 😔\n"
-                "¿Le gustaría intentar de nuevo? 🔄"
+                "Entiendo 👍 Si cambia de opinión o necesita más información, "
+                "estoy aquí para ayudarle.\n\n"
+                "Puede escribir 'inicio' para hacer una nueva consulta."
+            )
+        else:
+            return (
+                "Por favor responda SI o NO para continuar con la solicitud del préstamo 🤔\n"
+                "¿Le gustaría proceder con la solicitud?"
             )
             
     def process_location(self, user_data: Dict[str, Any], response: str) -> str:
