@@ -7,6 +7,7 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 import os
 from app.utils.text import normalize_text, get_crop_variations
+from unidecode import unidecode
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +104,10 @@ class MagaPreciosClient:
             logger.error(f"Error cargando datos: {str(e)}")
             self.data = {}
 
+    def _normalize_crop(self, cultivo: str) -> str:
+        """Normaliza el nombre del cultivo removiendo tildes y espacios"""
+        return unidecode(cultivo.lower().strip())
+
     def get_rendimiento_cultivo(self, cultivo: str, riego: str) -> float:
         """Obtiene rendimiento base del cultivo en quintales por hectárea"""
         rendimientos_base = {
@@ -131,8 +136,11 @@ class MagaPreciosClient:
             'ninguno': 1.0
         }
         
-        rendimiento_base = rendimientos_base.get(cultivo.lower(), 0)
-        factor = factores_riego.get(riego.lower(), 1.0)
+        cultivo_norm = self._normalize_crop(cultivo)
+        riego_norm = self._normalize_crop(riego)
+        
+        rendimiento_base = rendimientos_base.get(cultivo_norm, 0)
+        factor = factores_riego.get(riego_norm, 1.0)
         
         return rendimiento_base * factor
 
@@ -216,12 +224,12 @@ class MagaPreciosClient:
             }
         }
         
-        cultivo = cultivo.lower()
-        if cultivo not in costos:
+        cultivo_norm = self._normalize_crop(cultivo)
+        if cultivo_norm not in costos:
             logger.error(f"No se encontraron costos para el cultivo: {cultivo}")
             raise ValueError(f"Faltan datos del cultivo: {cultivo}")
             
-        return costos[cultivo]
+        return costos[cultivo_norm]
 
     def get_precios_cultivo(self, cultivo: str, channel: str = 'mercado_local') -> Dict[str, Any]:
         """Obtiene precios actuales por canal de venta"""
@@ -242,13 +250,13 @@ class MagaPreciosClient:
             'brocoli': 300     # Q/qq
         }
         
-        cultivo = cultivo.lower()
-        if cultivo not in precios_base:
+        cultivo_norm = self._normalize_crop(cultivo)
+        if cultivo_norm not in precios_base:
             logger.error(f"No se encontraron precios para el cultivo: {cultivo}")
             raise ValueError(f"Faltan datos del cultivo: {cultivo}")
             
         # Aplicar ajuste por canal
-        precio_base = precios_base[cultivo]
+        precio_base = precios_base[cultivo_norm]
         factor = self.price_adjustments.get(channel, 1.0)
         
         return {
