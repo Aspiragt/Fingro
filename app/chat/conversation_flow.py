@@ -875,7 +875,7 @@ class ConversationFlow:
         except Exception as e:
             logger.error(f"Error procesando análisis financiero: {str(e)}")
             return (
-                "Disculpe, hubo un error al procesar su análisis 😔\n"
+                "Disculpe, hubo un problema al generar su análisis 😔\n"
                 "¿Le gustaría intentar de nuevo? 🔄"
             )
 
@@ -1301,42 +1301,3 @@ class ConversationFlow:
 
 # Instancia global
 conversation_flow = ConversationFlow(WhatsAppService())
-
-def parse_yes_no(message: str) -> Optional[bool]:
-    """
-    Valida una respuesta si/no
-    
-    Args:
-        message: Mensaje a validar
-        
-    Returns:
-        bool: True si es sí, False si es no, None si es inválido
-    """
-    # Normalizar mensaje
-    message = normalize_text(message)
-    
-    # Validar respuesta
-    if message in ['si', 'sí', 's', 'yes', 'y', '1']:
-        return True
-        
-    if message in ['no', 'n', '2']:
-        return False
-        
-    return None
-
-def process_loan_response(user_data: Dict[str, Any], message: str) -> bool:
-    """Procesa la respuesta a la oferta de préstamo"""
-    try:
-        # Validar respuesta
-        result = parse_yes_no(message)
-        if result is None:
-            raise ValueError("Por favor responda SI o NO")
-            
-        if result:
-            user_data['loan_approved'] = True
-            
-        return result
-        
-    except Exception as e:
-        logger.error(f"Error procesando respuesta de préstamo: {str(e)}")
-        raise
