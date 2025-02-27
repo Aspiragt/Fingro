@@ -788,35 +788,27 @@ class ConversationFlow:
             
     def process_loan_response(self, user_data: Dict[str, Any], response: str) -> str:
         """Procesa la respuesta a la oferta de préstamo"""
-        try:
-            # Validar respuesta
-            result = self.get_yes_no(response)
-            if result is None:
-                return (
-                    "Por favor responda SI o NO.\n\n"
-                    "¿Desea continuar con la solicitud? 🤝"
-                )
-            
-            if not result:
-                return (
-                    "Entiendo. Si más adelante necesita financiamiento, puede escribir "
-                    "'préstamo' para revisar las opciones disponibles. 💡\n\n"
-                    "¿Hay algo más en que pueda ayudarle? 🌱"
-                )
-                
-            # Si aceptó, mostrar préstamo
-            if 'financial_analysis' not in user_data:
-                return "Primero necesitamos hacer un análisis de su cultivo. ¿Qué cultivo está sembrando? 🌱"
-                
-            # Actualizar estado y mostrar préstamo
-            user_data['state'] = self.STATES['SHOW_LOAN']
-            return self.process_show_loan(user_data)
-            
-        except Exception as e:
-            logger.error(f"Error procesando respuesta de préstamo: {str(e)}")
+        # Normalizar respuesta
+        response = unidecode(response.lower().strip())
+        
+        # Lista de respuestas válidas
+        respuestas_si = ['si', 'sí', 's', 'yes', 'claro', 'dale', 'ok', 'okay']
+        respuestas_no = ['no', 'n', 'nel', 'nop', 'nope']
+        
+        if response in respuestas_si:
+            user_data['state'] = self.STATES['CONFIRM_LOAN']
+            return self.process_confirm_loan()
+        elif response in respuestas_no:
+            user_data['state'] = self.STATES['DONE']
             return (
-                "Disculpe, hubo un problema al procesar su respuesta 😔\n"
-                "¿Le gustaría intentar de nuevo? 🔄"
+                "Entiendo 👍 Si cambia de opinión o necesita más información, "
+                "estoy aquí para ayudarle.\n\n"
+                "Puede escribir 'inicio' para hacer una nueva consulta."
+            )
+        else:
+            return (
+                "Por favor responda SI o NO para continuar con la solicitud del préstamo 🤔\n"
+                "¿Le gustaría proceder con la solicitud?"
             )
             
     def process_location(self, user_data: Dict[str, Any], response: str) -> str:
@@ -864,112 +856,30 @@ class ConversationFlow:
         """Procesa y muestra el análisis financiero"""
         try:
             # Obtener datos básicos
-            cultivo = normalize_text(user_data.get('crop', ''))
-            area = float(user_data.get('area', 0))
-            irrigation = user_data.get('irrigation', '')
+            cultivo = user_data.get('crop', '')
+            area = user_data.get('area', 0)
             channel = user_data.get('channel', '')
+            irrigation = user_data.get('irrigation', '')
+            location = user_data.get('location', '')
             
-            # Obtener costos
-            maga_precios_client = MagaPreciosClient()
-            costos = maga_precios_client.calcular_costos_totales(cultivo, area, irrigation)
-            if not costos:
-                raise ValueError(f"No se encontraron datos de costos para {cultivo}")
-            
-            # Obtener precios
-            precios = maga_precios_client.get_precios_cultivo(cultivo, channel)
-            if not precios:
-                raise ValueError(f"No se encontraron precios para {cultivo}")
-            
-            # Calcular producción e ingresos
-            rendimiento = maga_precios_client.get_rendimiento_cultivo(cultivo, irrigation)
-            produccion = rendimiento * area
-            precio_venta = precios['precio']
-            ingresos = produccion * precio_venta
-            
-            # Calcular rentabilidad
-            costos_total = costos['total']
-            ganancia = ingresos - costos_total
-            rentabilidad = (ganancia / costos_total) * 100 if costos_total > 0 else 0
-            
-            # Guardar análisis financiero
-            user_data['financial_analysis'] = {
-                'costos': costos_total,
-                'ingresos': ingresos,
-                'ganancia': ganancia,
-                'rentabilidad': rentabilidad,
-                'produccion': produccion
-            }
-            
-            # Formatear mensaje
-            mensaje = (
-                f"📊 *Análisis Financiero*\n\n"
+            # Calcular análisis financiero
+            financial = self.calculate_financial_analysis(cultivo, area, channel, irrigation)
+            if not financial:
+                return self.handle_error(user_data, Exception("No se pudo calcular el análisis financiero"), "financial")
                 
-                f"🌱 *Datos del Cultivo*\n"
-                f"- Cultivo: {cultivo.title()}\n"
-                f"- Área: {area} hectáreas\n"
-                f"- Riego: {irrigation}\n"
-                f"- Canal: {channel}\n\n"
-                
-                f"💰 *Costos*\n"
-                f"- Fijos: Q{costos['fijos']:,.2f}\n"
-                f"- Variables: Q{costos['variables']:,.2f}\n"
-                f"- Total: Q{costos_total:,.2f}\n\n"
-                
-                f"📈 *Producción y Ventas*\n"
-                f"- Rendimiento: {rendimiento:.1f} qq/ha\n"
-                f"- Producción Total: {produccion:.1f} qq\n"
-                f"- Precio de Venta: Q{precio_venta:.2f}/qq\n"
-                f"- Ingresos Totales: Q{ingresos:,.2f}\n\n"
-                
-                f"✨ *Resultados*\n"
-                f"- Ganancia: Q{ganancia:,.2f}\n"
-                f"- Rentabilidad: {rentabilidad:.1f}%\n\n"
-                
-                f"¿Le gustaría explorar opciones de préstamo? 💳"
-            )
+            # Guardar análisis en datos de usuario
+            user_data['financial_analysis'] = financial
             
-            return mensaje
+            # Formatear y mostrar análisis
+            return self.format_financial_analysis(financial, user_data)
             
         except Exception as e:
-            logger.error(f"Error procesando reporte: {str(e)}")
+            logger.error(f"Error procesando análisis financiero: {str(e)}")
             return (
                 "Disculpe, hubo un error al procesar su análisis 😔\n"
                 "¿Le gustaría intentar de nuevo? 🔄"
             )
-            
-    def process_loan_response(self, user_data: Dict[str, Any], response: str) -> str:
-        """Procesa la respuesta a la oferta de préstamo"""
-        try:
-            # Validar respuesta
-            result = self.get_yes_no(response)
-            if result is None:
-                return (
-                    "Por favor responda SI o NO.\n\n"
-                    "¿Desea continuar con la solicitud? 🤝"
-                )
-            
-            if not result:
-                return (
-                    "Entiendo. Si más adelante necesita financiamiento, puede escribir "
-                    "'préstamo' para revisar las opciones disponibles. 💡\n\n"
-                    "¿Hay algo más en que pueda ayudarle? 🌱"
-                )
-                
-            # Si aceptó, mostrar préstamo
-            if 'financial_analysis' not in user_data:
-                return "Primero necesitamos hacer un análisis de su cultivo. ¿Qué cultivo está sembrando? 🌱"
-                
-            # Actualizar estado y mostrar préstamo
-            user_data['state'] = self.STATES['SHOW_LOAN']
-            return self.process_show_loan(user_data)
-            
-        except Exception as e:
-            logger.error(f"Error procesando respuesta de préstamo: {str(e)}")
-            return (
-                "Disculpe, hubo un problema al procesar su respuesta 😔\n"
-                "¿Le gustaría intentar de nuevo? 🔄"
-            )
-            
+
     def validate_yes_no(self, response: str) -> bool:
         """Valida respuestas sí/no de forma flexible"""
         if not response:
