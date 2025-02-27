@@ -726,9 +726,9 @@ class ConversationFlow:
         """Calcula el monto del préstamo basado en hectáreas"""
         area = user_data.get('area', 0)
         
-        if area <= 1:
+        if area <= 10:
             return 4000
-        elif area <= 2:
+        elif area <= 15:
             return 8000
         else:
             return 16000
