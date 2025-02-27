@@ -723,7 +723,7 @@ class ConversationFlow:
         }
 
     def calculate_loan_amount(self, user_data: Dict[str, Any]) -> float:
-        """Calcula el monto del préstamo basado en hectáreas"""
+        """Calcula el monto del préstamo según modelo escalonado basado en hectáreas"""
         area = user_data.get('area', 0)
         
         if area <= 10:
@@ -741,9 +741,8 @@ class ConversationFlow:
             ciclo = self.get_crop_cycle(cultivo)
             financial = user_data.get('financial_analysis', {})
             
-            # Calcular monto del préstamo (80% de los costos totales)
-            costos = financial.get('costos', 0)
-            monto_prestamo = costos * 0.8
+            # Calcular monto del préstamo según modelo escalonado basado en hectáreas
+            monto_prestamo = self.calculate_loan_amount(user_data)
             
             # Calcular plazo basado en ciclo del cultivo
             plazo_meses = ciclo.get('duracion_meses', 4)
