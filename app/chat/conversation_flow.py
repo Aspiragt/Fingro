@@ -347,8 +347,8 @@ class ConversationFlow:
             # Normalizar mensaje
             message = message.lower().strip()
             
-            # Comando de reinicio
-            if message in ['reiniciar', 'reset', 'comenzar', 'inicio']:
+            # Comando de reinicio o saludo inicial
+            if message in ['reiniciar', 'reset', 'comenzar', 'inicio', 'hola']:
                 # Limpiar caché de Firebase
                 await firebase_manager.clear_user_cache(phone_number)
                 
