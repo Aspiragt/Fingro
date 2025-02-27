@@ -723,44 +723,16 @@ class ConversationFlow:
         }
 
     def calculate_loan_amount(self, user_data: Dict[str, Any]) -> float:
-        """Calcula el monto y términos del préstamo basado en ciclo agrícola"""
-        try:
-            # Obtener datos básicos
-            cultivo = user_data.get('crop', '')
-            ciclo = self.get_crop_cycle(cultivo)
-            area = float(user_data.get('area', 0))
-            irrigation = user_data.get('irrigation', '')
-            channel = user_data.get('channel', '')
-            
-            # Calcular costos reales
-            maga_precios_client = MagaPreciosClient()
-            costos = maga_precios_client.calcular_costos_totales(cultivo, area, irrigation)
-            if not costos:
-                return 0
-                
-            costos_totales = costos['costos_totales']
-            
-            # Obtener precios y calcular ingresos
-            precios = maga_precios_client.get_precios_cultivo(cultivo, channel)
-            if not precios:
-                return 0
-                
-            # Calcular producción e ingresos
-            rendimiento = maga_precios_client.get_rendimiento_cultivo(cultivo, irrigation)
-            produccion = rendimiento * area
-            precio_venta = precios['precio_actual']
-            ingresos = produccion * precio_venta
-            
-            # Calcular monto del préstamo (60-80% de costos totales)
-            factor_riesgo = self.get_risk_factor(irrigation, channel)
-            monto_prestamo = costos_totales * factor_riesgo
-            
-            return monto_prestamo
-            
-        except Exception as e:
-            logger.error(f"Error calculando monto de préstamo: {str(e)}")
-            return 0
-            
+        """Calcula el monto del préstamo basado en hectáreas"""
+        area = user_data.get('area', 0)
+        
+        if area <= 1:
+            return 4000
+        elif area <= 2:
+            return 8000
+        else:
+            return 16000
+
     def process_show_loan(self, user_data: Dict[str, Any]) -> str:
         """Procesa y muestra la oferta de préstamo"""
         try:
@@ -816,27 +788,35 @@ class ConversationFlow:
             
     def process_loan_response(self, user_data: Dict[str, Any], response: str) -> str:
         """Procesa la respuesta a la oferta de préstamo"""
-        # Normalizar respuesta
-        response = unidecode(response.lower().strip())
-        
-        # Lista de respuestas válidas
-        respuestas_si = ['si', 'sí', 's', 'yes', 'claro', 'dale', 'ok', 'okay']
-        respuestas_no = ['no', 'n', 'nel', 'nop', 'nope']
-        
-        if response in respuestas_si:
-            user_data['state'] = self.STATES['CONFIRM_LOAN']
-            return self.process_confirm_loan()
-        elif response in respuestas_no:
-            user_data['state'] = self.STATES['DONE']
+        try:
+            # Validar respuesta
+            result = self.get_yes_no(response)
+            if result is None:
+                return (
+                    "Por favor responda SI o NO.\n\n"
+                    "¿Desea continuar con la solicitud? 🤝"
+                )
+            
+            if not result:
+                return (
+                    "Entiendo. Si más adelante necesita financiamiento, puede escribir "
+                    "'préstamo' para revisar las opciones disponibles. 💡\n\n"
+                    "¿Hay algo más en que pueda ayudarle? 🌱"
+                )
+                
+            # Si aceptó, mostrar préstamo
+            if 'financial_analysis' not in user_data:
+                return "Primero necesitamos hacer un análisis de su cultivo. ¿Qué cultivo está sembrando? 🌱"
+                
+            # Actualizar estado y mostrar préstamo
+            user_data['state'] = self.STATES['SHOW_LOAN']
+            return self.process_show_loan(user_data)
+            
+        except Exception as e:
+            logger.error(f"Error procesando respuesta de préstamo: {str(e)}")
             return (
-                "Entiendo 👍 Si cambia de opinión o necesita más información, "
-                "estoy aquí para ayudarle.\n\n"
-                "Puede escribir 'inicio' para hacer una nueva consulta."
-            )
-        else:
-            return (
-                "Por favor responda SI o NO para continuar con la solicitud del préstamo 🤔\n"
-                "¿Le gustaría proceder con la solicitud?"
+                "Disculpe, hubo un problema al procesar su respuesta 😔\n"
+                "¿Le gustaría intentar de nuevo? 🔄"
             )
             
     def process_location(self, user_data: Dict[str, Any], response: str) -> str:
@@ -986,7 +966,7 @@ class ConversationFlow:
         except Exception as e:
             logger.error(f"Error procesando respuesta de préstamo: {str(e)}")
             return (
-                "Disculpe, hubo un error al procesar su respuesta 😔\n"
+                "Disculpe, hubo un problema al procesar su respuesta 😔\n"
                 "¿Le gustaría intentar de nuevo? 🔄"
             )
             
