@@ -7,7 +7,7 @@ import re
 import unidecode
 from datetime import datetime
 
-from app.services.whatsapp_service import WhatsAppService
+from app.services.whatsapp_service import whatsapp_service
 from app.models.commercial_channel import CanalComercializacion
 from app.utils.currency import format_currency
 from app.services.firebase_service import firebase_manager
@@ -19,12 +19,9 @@ logger = logging.getLogger(__name__)
 class ConversationFlow:
     """Maneja el flujo de conversación con usuarios"""
     
-    def __init__(self, whatsapp_service: WhatsAppService):
+    def __init__(self):
         """
         Inicializa el manejador de conversación
-        
-        Args:
-            whatsapp_service: Servicio de WhatsApp para enviar mensajes
         """
         self.whatsapp = whatsapp_service
         
@@ -570,6 +567,8 @@ class ConversationFlow:
             str: Análisis financiero formateado
         """
         try:
+            from app.presentation.financial_results import financial_presenter
+            
             # Obtener datos básicos
             cultivo = user_data.get('crop', '')
             area = user_data.get('area', 0)  # En hectáreas
@@ -597,60 +596,14 @@ class ConversationFlow:
                 'rendimiento': rendimiento
             }
             
-            # Formatear números
-            ingresos_str = format_currency(ingresos)
-            costos_str = format_currency(costos['total'])
-            ganancia_str = format_currency(ganancia)
-            rendimiento_str = format_number(rendimiento * area)
-            
-            # Construir mensaje
-            mensaje = (
-                f"✨ *Su Cultivo de {cultivo.capitalize()}*\n\n"
-                f"🌱 Área sembrada: {area} hectáreas\n"
-                f"💧 Tipo de riego: {irrigation.capitalize()}\n"
-                f"🏪 Dónde venderá: {channel}\n\n"
-                f"📊 *¿Cuánto producirá?*\n"
-                f"• Cosecha esperada: {rendimiento_str} quintales\n"
-                f"• Precio por quintal: {format_currency(precio_actual)}\n\n"
-                f"💰 *¿Cuánto invertirá y ganará?*\n"
-                f"• Gastos fijos: {format_currency(costos['fijos'])}\n"
-                f"• Gastos por hectárea: {format_currency(costos['variables'])}\n"
-                f"• Total de gastos: {costos_str}\n"
-                f"• Total de ventas: {ingresos_str}\n"
-                f"• Ganancia esperada: {ganancia_str}\n\n"
-            )
-            
-            # Agregar recomendación
-            if ganancia > 0:
-                mensaje += "✅ *¿Qué le parece?*\n"
-                if ganancia > costos['total'] * 0.3:  # 30% de rentabilidad
-                    mensaje += "¡Este proyecto se ve muy bueno! Podría ganar más del 30% de lo invertido 🌟\n\n"
-                else:
-                    mensaje += "Este proyecto puede funcionar. La ganancia es positiva 👍\n\n"
-            else:
-                mensaje += "⚠️ *¿Qué le parece?*\n"
-                mensaje += "Hay que revisar bien los números. Los costos son mayores que los ingresos esperados 🔍\n\n"
-            
-            mensaje += "¿Le gustaría ver qué opciones de préstamo tenemos para su cultivo? 💳"
-            
-            return mensaje
-            
-        except ValueError as e:
-            logger.error(f"Error generando análisis financiero: {str(e)}")
-            return (
-                "Disculpe, no pude hacer los cálculos para su cultivo 😔\n\n"
-                "Esto puede ser porque:\n"
-                "• Falta información del cultivo\n"
-                "• No tenemos datos de ese cultivo todavía\n"
-                "• Hubo un error en los cálculos\n\n"
-                "¿Le gustaría intentar de nuevo? 🔄"
-            )
+            # Usar el presentador de resultados financieros
+            return financial_presenter.format_financial_analysis(user_data)
             
         except Exception as e:
-            logger.error(f"Error procesando reporte: {str(e)}")
-            return (
-                "Disculpe, tuvimos un problema al hacer los cálculos 😔\n"
-                "¿Le gustaría intentar de nuevo? 🔄"
+            logger.error(f"Error analizando financiamiento: {str(e)}")
+            raise ValueError(
+                "Lo sentimos, ha ocurrido un error analizando su proyecto. "
+                "Por favor intente nuevamente."
             )
 
     def process_show_loan(self, user_data: Dict[str, Any]) -> str:
@@ -1248,4 +1201,4 @@ class ConversationFlow:
         ))
 
 # Instancia global
-conversation_flow = ConversationFlow(WhatsAppService())
+conversation_flow = ConversationFlow()

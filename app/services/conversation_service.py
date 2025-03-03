@@ -5,6 +5,8 @@ import uuid
 from app.database.firebase import db
 from app.models.conversation import Conversation, Message
 from app.models.user import User
+from app.chat.conversation_flow import conversation_flow
+from app.services.whatsapp_service import whatsapp_service
 
 logger = logging.getLogger(__name__)
 
@@ -13,8 +15,8 @@ class ConversationService:
 
     def __init__(self):
         """Inicializa el servicio de conversación"""
-        self.flow = ConversationFlow()
-        self.whatsapp = WhatsAppService()
+        self.flow = conversation_flow
+        self.whatsapp = whatsapp_service
         self.db = db
     
     async def create_conversation(self, user_id: str) -> Conversation:
