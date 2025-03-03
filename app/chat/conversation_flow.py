@@ -316,7 +316,8 @@ class ConversationFlow:
         for normalized, full_name in crop_names.items():
             if crop.startswith(normalized):
                 return full_name
-                
+        
+        # Si no hay coincidencia, devolver el cultivo original con la primera letra en mayúscula
         return crop.capitalize()
     
     async def handle_message(self, phone_number: str, message: str):
@@ -779,6 +780,326 @@ class ConversationFlow:
                 "Disculpe, hubo un problema al generar su análisis 😔\n"
                 "¿Le gustaría intentar de nuevo? 🔄"
             )
+
+    def validate_yes_no(self, response: str) -> bool:
+        """Valida respuestas sí/no de forma flexible"""
+        if not response:
+            return False
+            
+        # Normalizar respuesta
+        response = self._normalize_text(response)
+        
+        # Variaciones positivas
+        positivas = [
+            'si', 'sí', 's', 'yes', 'ok', 'dale', 'va', 'bueno', 
+            'esta bien', 'está bien', 'claro', 'por supuesto',
+            'adelante', 'hagamoslo', 'hagámoslo', 'me interesa'
+        ]
+        
+        # Variaciones negativas
+        negativas = [
+            'no', 'nel', 'nop', 'nope', 'n', 'mejor no',
+            'no gracias', 'paso', 'ahorita no', 'después',
+            'en otro momento', 'todavía no', 'todavia no'
+        ]
+        
+        if any(p in response for p in positivas):
+            return True
+            
+        if any(n in response for n in negativas):
+            return False
+            
+        # Si no coincide con ninguna, pedir aclaración
+        return None
+
+    def get_yes_no(self, response: str) -> Optional[bool]:
+        """Obtiene valor booleano de respuesta sí/no"""
+        result = self.validate_yes_no(response)
+        if result is None:
+            return None
+        return result
+
+    def process_confirm_loan(self) -> str:
+        """
+        Procesa la confirmación del préstamo
+        
+        Returns:
+            str: Mensaje de confirmación
+        """
+        return (
+            "✨ *¡Excelente decisión!*\n\n"
+            "Su solicitud de préstamo está siendo procesada.\n\n"
+            "En las próximas 24 horas:\n"
+            "• Revisaremos su solicitud 📋\n"
+            "• Prepararemos los documentos 📄\n"
+            "• Nos comunicaremos con usted 📱\n\n"
+            "¿Tiene alguna pregunta mientras tanto? 🤝\n"
+            "Estoy aquí para ayudarle."
+        )
+
+    def process_area(self, user_data: Dict[str, Any], response: str) -> str:
+        """
+        Procesa la respuesta del área de cultivo
+        
+        Args:
+            user_data: Datos del usuario
+            response: Respuesta del usuario
+            
+        Returns:
+            str: Mensaje de respuesta
+        """
+        try:
+            # Parsear área
+            result = FinancialAnalyzer().parse_area(response)
+            if not result:
+                return (
+                    "Por favor ingrese el área con su unidad. Por ejemplo:\n"
+                    "- 2 manzanas\n"
+                    "- 1.5 hectáreas\n"
+                    "- 3 mz\n"
+                    "- 2.5 ha"
+                )
+            
+            value, unit = result
+            
+            # Validar rango
+            if value <= 0:
+                return "El área debe ser mayor que 0. ¿Cuánto está sembrando? 🌱"
+                
+            if value > 1000:
+                return "El área parece muy grande. ¿Puede confirmar la cantidad? 🤔"
+            
+            # Convertir a hectáreas si es necesario
+            if unit == 'manzana':
+                hectareas = value * 0.7
+            else:
+                hectareas = value
+            
+            # Guardar en datos de usuario
+            user_data['area'] = hectareas
+            user_data['area_original'] = value
+            user_data['area_unit'] = unit
+            
+            # Siguiente pregunta
+            return self.ask_channel(user_data)
+            
+        except Exception as e:
+            logger.error(f"Error procesando área: {str(e)}")
+            return "Hubo un error. Por favor intente de nuevo con el área que está sembrando 🌱"
+
+    def process_channel(self, user_data: Dict[str, Any], response: str) -> str:
+        """
+        Procesa la respuesta del canal de comercialización
+        
+        Args:
+            user_data: Datos del usuario
+            response: Respuesta del usuario
+            
+        Returns:
+            str: Mensaje de respuesta
+        """
+        try:
+            # Validar canal
+            channel = FinancialAnalyzer().parse_channel(response)
+            if not channel:
+                return (
+                    "Por favor escoja una opción válida:\n\n"
+                    "1. Mercado local - En su comunidad\n"
+                    "2. Mayorista - A distribuidores\n"
+                    "3. Cooperativa - Con otros productores\n"
+                    "4. Exportación - A otros países"
+                )
+            
+            # Guardar canal
+            user_data['channel'] = channel
+            
+            # Verificar si el cultivo es típicamente de exportación
+            cultivo = FinancialAnalyzer().normalize_text(user_data.get('crop', ''))
+            if channel == 'exportacion' and cultivo not in FinancialAnalyzer().export_crops:
+                return (
+                    f"El {cultivo} no es muy común para exportación 🤔\n"
+                    f"¿Está seguro que quiere exportar? Escoja una opción:\n\n"
+                    f"1. Sí, tengo comprador para exportación\n"
+                    f"2. No, mejor escojo otro canal"
+                )
+            
+            # Siguiente pregunta
+            return self.ask_irrigation(user_data)
+            
+        except Exception as e:
+            logger.error(f"Error procesando canal: {str(e)}")
+            return "Hubo un error. Por favor intente de nuevo 🙏"
+
+    def process_irrigation(self, user_data: Dict[str, Any], response: str) -> str:
+        """
+        Procesa la respuesta del sistema de riego
+        
+        Args:
+            user_data: Datos del usuario
+            response: Respuesta del usuario
+            
+        Returns:
+            str: Mensaje de respuesta
+        """
+        try:
+            # Validar sistema
+            system = FinancialAnalyzer().parse_irrigation(response)
+            if not system:
+                return (
+                    "Por favor escoja una opción válida:\n\n"
+                    "1. Goteo 💧\n"
+                    "2. Aspersión 💦\n"
+                    "3. Gravedad 🌊\n"
+                    "4. Ninguno (depende de lluvia) 🌧️"
+                )
+            
+            # Guardar sistema
+            user_data['irrigation'] = system
+            
+            # Verificar si es temporal para cultivos que necesitan riego
+            cultivo = FinancialAnalyzer().normalize_text(user_data.get('crop', ''))
+            if system == 'temporal' and cultivo in FinancialAnalyzer().irrigated_crops:
+                return (
+                    f"El {cultivo} generalmente necesita riego para buenos resultados 🤔\n"
+                    f"¿Está seguro que no usará ningún sistema de riego? Escoja una opción:\n\n"
+                    f"1. Sí, solo dependeré de la lluvia\n"
+                    f"2. No, mejor escojo un sistema de riego"
+                )
+            
+            # Siguiente pregunta
+            return self.ask_location(user_data)
+            
+        except Exception as e:
+            logger.error(f"Error procesando sistema de riego: {str(e)}")
+            return "Hubo un error. Por favor intente de nuevo 🙏"
+
+    def ask_location(self, user_data: Dict[str, Any]) -> str:
+        """Pregunta por la ubicación"""
+        # Actualizar estado
+        user_data['state'] = self.STATES['GET_LOCATION']
+        
+        cultivo = user_data.get('crop', '').lower()
+        irrigation = user_data.get('irrigation', '')
+        
+        # Mapeo de sistemas a emojis
+        irrigation_emojis = {
+            'goteo': '💧',
+            'aspersion': '💦',
+            'gravedad': '🌊',
+            'temporal': '🌧️'
+        }
+        
+        # Mapeo de sistemas a nombres amigables
+        irrigation_names = {
+            'goteo': 'goteo',
+            'aspersion': 'aspersión',
+            'gravedad': 'gravedad',
+            'temporal': 'temporal (lluvia)'
+        }
+        
+        emoji = irrigation_emojis.get(irrigation, '')
+        system_name = irrigation_names.get(irrigation, irrigation)
+        
+        return (
+            f"Perfecto. Usará riego por {system_name} {emoji}\n\n"
+            f"¿En qué departamento está su terreno?\n"
+            f"Por ejemplo: Guatemala, Escuintla, etc."
+        )
+
+    def ask_irrigation(self, user_data: Dict[str, Any]) -> str:
+        """Pregunta por el sistema de riego"""
+        # Actualizar estado
+        user_data['state'] = self.STATES['GET_IRRIGATION']
+        
+        cultivo = user_data.get('crop', '').lower()
+        channel = user_data.get('channel', '')
+        
+        # Mapeo de canales a emojis
+        channel_emojis = {
+            'mercado_local': '🏪',
+            'mayorista': '🚛',
+            'cooperativa': '🤝',
+            'exportacion': '✈️'
+        }
+        
+        # Mapeo de canales a nombres amigables
+        channel_names = {
+            'mercado_local': 'mercado local',
+            'mayorista': 'mayorista',
+            'cooperativa': 'cooperativa',
+            'exportacion': 'exportación'
+        }
+        
+        emoji = channel_emojis.get(channel, '')
+        channel_name = channel_names.get(channel, channel)
+        
+        return (
+            f"Perfecto. Venderá su {cultivo} en {channel_name} {emoji}\n\n"
+            f"¿Qué sistema de riego utilizarás? Escoja una opción:\n\n"
+            f"1. Goteo 💧\n"
+            f"2. Aspersión 💦\n"
+            f"3. Gravedad 🌊\n"
+            f"4. Ninguno (depende de lluvia) 🌧️"
+        )
+
+    def handle_error(self, user_data: Dict[str, Any], error: Exception, context: str) -> str:
+        """
+        Maneja errores de forma amigable y ofrece alternativas
+        
+        Args:
+            user_data: Datos del usuario
+            error: Error ocurrido
+            context: Contexto del error (cultivo, area, etc)
+            
+        Returns:
+            str: Mensaje de error amigable
+        """
+        logger.error(f"Error en {context}: {str(error)}")
+        
+        # Mensajes por contexto
+        mensajes = {
+            'crop': (
+                "Lo siento, no pude procesar el cultivo indicado. 😕\n"
+                "Por favor, escriba el nombre del cultivo que planea sembrar. "
+                "Por ejemplo: maíz, frijol, café, etc. 🌱"
+            ),
+            'area': (
+                "El área indicada no es válida. 😕\n"
+                "Por favor indique el área en hectáreas o cuerdas. "
+                "Por ejemplo: 2.5 o 4 🌾"
+            ),
+            'channel': (
+                "Por favor seleccione una opción válida:\n\n"
+                "1. Mayorista\n"
+                "2. Cooperativa\n"
+                "3. Exportación\n"
+                "4. Mercado Local\n\n"
+                "Responda con el número de su elección 🏪"
+            ),
+            'irrigation': (
+                "Por favor seleccione una opción válida:\n\n"
+                "1. Goteo\n"
+                "2. Aspersión\n"
+                "3. Gravedad\n"
+                "4. Ninguno (depende de lluvia)\n\n"
+                "Responda con el número de su elección 💧"
+            ),
+            'location': (
+                "Lo siento, no reconozco ese departamento. 😕\n"
+                "Por favor escriba el nombre del departamento donde está el terreno. "
+                "Por ejemplo: Guatemala, Escuintla, etc. 📍"
+            ),
+            'financial': (
+                "Lo siento, hubo un problema al generar su análisis. 😕\n"
+                "¿Le gustaría intentar nuevamente? Responda SI o NO 🔄"
+            ),
+            'loan': (
+                "Lo siento, hubo un problema al procesar su solicitud. 😕\n"
+                "¿Le gustaría intentar nuevamente? Responda SI o NO 🔄"
+            )
+        }
+        
+        return mensajes.get(context, "Lo siento, hubo un error. ¿Podría intentar nuevamente? 🔄")
 
     def validate_yes_no(self, response: str) -> bool:
         """Valida respuestas sí/no de forma flexible"""
