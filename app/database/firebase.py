@@ -219,6 +219,53 @@ class FirebaseDB:
         except Exception as e:
             logger.error(f"Error consultando colección: {str(e)}")
             raise FirebaseError(f"Error querying collection: {str(e)}")
+    
+    async def update_user_state(self, phone: str, user_data: Dict[str, Any]) -> None:
+        """
+        Actualiza el estado de un usuario, útil para la conversación
+        
+        Args:
+            phone: Número de teléfono del usuario
+            user_data: Nueva información del usuario
+        """
+        try:
+            collection_key = f"user_state_{phone}"
+            self.memory_db[collection_key] = user_data
+            # Actualizar caché
+            cache_key = f"user_{phone}"
+            self.cache[cache_key] = user_data
+        except Exception as e:
+            logger.error(f"Error al actualizar estado del usuario {phone}: {e}")
+            raise FirebaseError(f"Error al actualizar usuario: {e}")
+    
+    async def clear_user_cache(self, phone: str) -> None:
+        """
+        Limpia la caché y el estado del usuario para comenzar una conversación nueva
+        
+        Args:
+            phone: Número de teléfono del usuario
+        """
+        try:
+            # Eliminar del caché
+            cache_key = f"user_{phone}"
+            conv_cache_key = f"conv_state_{phone}"
+            if cache_key in self.cache:
+                del self.cache[cache_key]
+            if conv_cache_key in self.cache:
+                del self.cache[conv_cache_key]
+            
+            # Eliminar del almacenamiento en memoria
+            collection_key = f"user_state_{phone}"
+            conv_collection_key = f"conversations_{phone}"
+            if collection_key in self.memory_db:
+                del self.memory_db[collection_key]
+            if conv_collection_key in self.memory_db:
+                del self.memory_db[conv_collection_key]
+                
+            logger.info(f"Caché del usuario {phone} limpiada correctamente")
+        except Exception as e:
+            logger.error(f"Error al limpiar caché del usuario {phone}: {e}")
+            # No lanzamos excepción para no interrumpir el flujo si hay error de caché
 
 # Instancia global
 firebase_manager = FirebaseDB()
