@@ -3,29 +3,16 @@ Módulo para manejar el flujo de conversación con usuarios
 """
 from typing import Dict, Any, Optional, List
 import logging
-from datetime import datetime
+import re
 import unidecode
+from datetime import datetime
 
-from app.database.firebase import firebase_manager
-from app.external_apis.maga_precios import (
-    MagaPreciosClient,
-    CanalComercializacion,
-    maga_precios_client
-)
-from app.utils.text import (
-    normalize_text,
-    parse_yes_no,
-    parse_area,
-    format_number,
-    parse_channel,
-    parse_irrigation,
-    parse_department
-)
-from app.utils.currency import format_currency
-from app.models.financial_model import financial_model
-from app.views.financial_report import report_generator
 from app.services.whatsapp_service import WhatsAppService
-from app.utils.text import normalize_text, parse_area, format_number, parse_channel, parse_irrigation, parse_department
+from app.models.commercial_channel import CanalComercializacion
+from app.utils.currency import format_currency
+from app.services.firebase_service import firebase_manager
+from app.analysis.financial import FinancialAnalyzer
+from app.scoring.credit_score import score_calculator
 
 logger = logging.getLogger(__name__)
 
@@ -593,9 +580,9 @@ class ConversationFlow:
                 raise ValueError("Por favor ingrese el cultivo y el área")
             
             # Obtener costos y precios
-            costos = maga_precios_client.calcular_costos_totales(cultivo, area, irrigation)
-            precios = maga_precios_client.get_precios_cultivo(cultivo, channel)
-            rendimiento = maga_precios_client.get_rendimiento_cultivo(cultivo, irrigation)
+            costos = FinancialAnalyzer().calculate_total_costs(cultivo, area, irrigation)
+            precios = FinancialAnalyzer().get_crop_prices(cultivo, channel)
+            rendimiento = FinancialAnalyzer().get_crop_yield(cultivo, irrigation)
             
             # Calcular métricas
             precio_actual = precios['precio']
@@ -666,83 +653,20 @@ class ConversationFlow:
                 "¿Le gustaría intentar de nuevo? 🔄"
             )
 
-    def get_crop_cycle(self, crop: str) -> Dict[str, Any]:
-        """Obtiene información del ciclo del cultivo"""
-        cycles = {
-            'maiz': {
-                'duracion_meses': 4,
-                'cosechas_por_año': 2,
-                'meses_siembra': [5, 11],  # Mayo y Noviembre
-                'tipo': 'anual',
-                'nombre': 'maíz'
-            },
-            'frijol': {
-                'duracion_meses': 3,
-                'cosechas_por_año': 3,
-                'meses_siembra': [3, 6, 9],  # Marzo, Junio, Septiembre
-                'tipo': 'anual',
-                'nombre': 'frijol'
-            },
-            'cafe': {
-                'duracion_meses': 8,
-                'cosechas_por_año': 1,
-                'meses_siembra': [5],  # Mayo
-                'tipo': 'permanente',
-                'nombre': 'café'
-            }
-        }
-        return cycles.get(crop, {
-            'duracion_meses': 4,
-            'cosechas_por_año': 2,
-            'meses_siembra': [5, 11],
-            'tipo': 'anual',
-            'nombre': crop
-        })
-
-    def get_risk_factors(self, irrigation: str, channel: str) -> Dict[str, float]:
-        """Calcula factores de riesgo basados en riego y canal de venta"""
-        # Factores por sistema de riego
-        irrigation_factors = {
-            'goteo': 1.2,     # +20% por sistema de goteo
-            'aspersion': 1.15, # +15% por aspersión
-            'gravedad': 1.1,   # +10% por gravedad
-            'temporal': 1.0    # Sin ajuste para temporal
-        }
-        
-        # Factores por canal de comercialización
-        channel_factors = {
-            'exportacion': 1.3,    # +30% para exportación
-            'mayorista': 1.2,      # +20% para mayorista
-            'cooperativa': 1.15,   # +15% para cooperativa
-            'mercado_local': 1.0   # Sin ajuste para mercado local
-        }
-        
-        return {
-            'riego': irrigation_factors.get(irrigation, 1.0),
-            'canal': channel_factors.get(channel, 1.0)
-        }
-
-    def calculate_loan_amount(self, user_data: Dict[str, Any]) -> float:
-        """Calcula el monto del préstamo según modelo escalonado basado en hectáreas"""
-        area = user_data.get('area', 0)
-        
-        if area <= 10:
-            return 4000
-        elif area <= 15:
-            return 8000
-        else:
-            return 16000
-
     def process_show_loan(self, user_data: Dict[str, Any]) -> str:
-        """Procesa y muestra la oferta de préstamo"""
+        """Procesa y muestra la oferta de préstamo con evaluación de Fingro Score"""
         try:
             # Obtener datos básicos
             cultivo = user_data.get('crop', '')
-            ciclo = self.get_crop_cycle(cultivo)
+            ciclo = FinancialAnalyzer().get_crop_cycle(cultivo)
             financial = user_data.get('financial_analysis', {})
             
+            # Calcular Fingro Score
+            score, score_details = score_calculator.calculate_fingro_score(user_data)
+            approval_status, approval_message = score_calculator.get_loan_approval_status(score)
+            
             # Calcular monto del préstamo según modelo escalonado basado en hectáreas
-            monto_prestamo = self.calculate_loan_amount(user_data)
+            monto_prestamo = FinancialAnalyzer().calculate_loan_amount(user_data)
             
             # Calcular plazo basado en ciclo del cultivo
             plazo_meses = ciclo.get('duracion_meses', 4)
@@ -751,20 +675,31 @@ class ConversationFlow:
             tasa_mensual = 0.01  # 12% anual
             cuota = (monto_prestamo * tasa_mensual) / (1 - (1 + tasa_mensual) ** -plazo_meses)
             
-            # Guardar datos del préstamo
+            # Guardar datos del préstamo y score en user_data
             user_data['loan_offer'] = {
                 'monto': monto_prestamo,
                 'plazo': plazo_meses,
-                'cuota': cuota
+                'cuota': cuota,
+                'fingro_score': score,
+                'score_details': score_details,
+                'approval_status': approval_status
             }
             
             # Calcular ejemplos prácticos
             quintales_semilla = monto_prestamo / 200  # Asumiendo Q200 por quintal de semilla
             area_adicional = quintales_semilla * 0.5  # Asumiendo 0.5 hectáreas por quintal
             
-            # Formatear mensaje
+            # Formatear mensaje según puntaje
             mensaje = (
                 f"💰 *Préstamo para su {cultivo}*\n\n"
+                f"*FINGRO SCORE: {score}/1000* {'✅' if score >= 800 else '🔍' if score >= 500 else '⚠️'}\n"
+                f"• Cultivo: {score_details['cultivo']}/200 pts\n"
+                f"• Área: {score_details['area']}/200 pts\n"
+                f"• Comercialización: {score_details['comercializacion']}/200 pts\n"
+                f"• Riego: {score_details['riego']}/250 pts\n"
+                f"• Ubicación: {score_details['ubicacion']}/150 pts\n\n"
+                f"*ESTADO: {approval_status}*\n"
+                f"{approval_message}\n\n"
                 f"Con este préstamo usted podría:\n"
                 f"• Comprar {int(quintales_semilla)} quintales de semilla 🌱\n"
                 f"• Sembrar {int(area_adicional)} cuerdas más ✨\n\n"
@@ -772,14 +707,27 @@ class ConversationFlow:
                 f"• Le prestamos: {format_currency(monto_prestamo)}\n"
                 f"• Plazo: {plazo_meses} meses (una cosecha)\n"
                 f"• Pago mensual: {format_currency(cuota)}\n\n"
-                f"¿Le gustaría continuar con la solicitud? 🤝\n"
-                f"Responda SI o NO"
             )
+            
+            if score >= 500:
+                mensaje += (
+                    f"¿Le gustaría continuar con la solicitud? 🤝\n"
+                    f"Responda SI o NO"
+                )
+            else:
+                mensaje += (
+                    f"Puede mejorar su Fingro Score con estas recomendaciones:\n"
+                    f"• Use sistema de riego por goteo o aspersión 💧\n"
+                    f"• Explore canales de comercialización como cooperativas 🏪\n"
+                    f"• Diversifique sus cultivos 🌱\n\n"
+                    f"Escriba 'inicio' para hacer una nueva consulta."
+                )
+                user_data['state'] = self.STATES['DONE']
             
             return mensaje
             
         except Exception as e:
-            logger.error(f"Error calculando monto de préstamo: {str(e)}")
+            logger.error(f"Error calculando préstamo y Fingro Score: {str(e)}")
             return (
                 "Disculpe, hubo un problema al calcular su préstamo 😔\n"
                 "¿Le gustaría intentar de nuevo? 🔄"
@@ -823,7 +771,7 @@ class ConversationFlow:
         """
         try:
             # Validar departamento
-            department = parse_department(response)
+            department = FinancialAnalyzer().parse_department(response)
             if not department:
                 return (
                     "Por favor ingrese un departamento válido.\n"
@@ -835,8 +783,8 @@ class ConversationFlow:
             user_data['location'] = department
             
             # Verificar si el cultivo es adecuado para la región
-            cultivo = normalize_text(user_data.get('crop', ''))
-            if not maga_precios_client.is_crop_suitable(cultivo, department):
+            cultivo = FinancialAnalyzer().normalize_text(user_data.get('crop', ''))
+            if not FinancialAnalyzer().is_crop_suitable(cultivo, department):
                 return (
                     f"El {cultivo} no es muy común en {department} 🤔\n"
                     f"¿Está seguro que quiere sembrar aquí? Escoja una opción:\n\n"
@@ -862,7 +810,7 @@ class ConversationFlow:
             location = user_data.get('location', '')
             
             # Calcular análisis financiero
-            financial = self.calculate_financial_analysis(cultivo, area, channel, irrigation)
+            financial = FinancialAnalyzer().calculate_financial_analysis(cultivo, area, channel, irrigation)
             if not financial:
                 return self.handle_error(user_data, Exception("No se pudo calcular el análisis financiero"), "financial")
                 
@@ -948,7 +896,7 @@ class ConversationFlow:
         """
         try:
             # Parsear área
-            result = parse_area(response)
+            result = FinancialAnalyzer().parse_area(response)
             if not result:
                 return (
                     "Por favor ingrese el área con su unidad. Por ejemplo:\n"
@@ -998,7 +946,7 @@ class ConversationFlow:
         """
         try:
             # Validar canal
-            channel = parse_channel(response)
+            channel = FinancialAnalyzer().parse_channel(response)
             if not channel:
                 return (
                     "Por favor escoja una opción válida:\n\n"
@@ -1012,8 +960,8 @@ class ConversationFlow:
             user_data['channel'] = channel
             
             # Verificar si el cultivo es típicamente de exportación
-            cultivo = normalize_text(user_data.get('crop', ''))
-            if channel == 'exportacion' and cultivo not in maga_precios_client.export_crops:
+            cultivo = FinancialAnalyzer().normalize_text(user_data.get('crop', ''))
+            if channel == 'exportacion' and cultivo not in FinancialAnalyzer().export_crops:
                 return (
                     f"El {cultivo} no es muy común para exportación 🤔\n"
                     f"¿Está seguro que quiere exportar? Escoja una opción:\n\n"
@@ -1041,7 +989,7 @@ class ConversationFlow:
         """
         try:
             # Validar sistema
-            system = parse_irrigation(response)
+            system = FinancialAnalyzer().parse_irrigation(response)
             if not system:
                 return (
                     "Por favor escoja una opción válida:\n\n"
@@ -1055,8 +1003,8 @@ class ConversationFlow:
             user_data['irrigation'] = system
             
             # Verificar si es temporal para cultivos que necesitan riego
-            cultivo = normalize_text(user_data.get('crop', ''))
-            if system == 'temporal' and cultivo in maga_precios_client.irrigated_crops:
+            cultivo = FinancialAnalyzer().normalize_text(user_data.get('crop', ''))
+            if system == 'temporal' and cultivo in FinancialAnalyzer().irrigated_crops:
                 return (
                     f"El {cultivo} generalmente necesita riego para buenos resultados 🤔\n"
                     f"¿Está seguro que no usará ningún sistema de riego? Escoja una opción:\n\n"

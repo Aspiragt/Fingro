@@ -69,6 +69,25 @@ class FinancialAnalyzer:
     def __init__(self):
         """Inicializa el analizador"""
         pass
+        
+    def calculate_loan_amount(self, user_data: Dict[str, Any]) -> float:
+        """
+        Calcula el monto del préstamo según modelo escalonado basado en hectáreas
+        
+        Args:
+            user_data: Datos del usuario con información del área
+            
+        Returns:
+            float: Monto del préstamo
+        """
+        area = user_data.get('area', 0)
+        
+        if area <= 10:
+            return 4000
+        elif area <= 15:
+            return 8000
+        else:
+            return 16000
     
     async def analizar_proyecto(self, proyecto: ProyectoAgricola) -> Optional[Dict[str, Any]]:
         """
