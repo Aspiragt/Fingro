@@ -1,0 +1,58 @@
+{
+  "maiz": {
+    "local": 150,
+    "mayorista": 170,
+    "exportacion": 200,
+    "fuente": "MAGA",
+    "fecha_actualizacion": "2025-03-01"
+  },
+  "frijol": {
+    "local": 450,
+    "mayorista": 500,
+    "exportacion": 580,
+    "fuente": "MAGA",
+    "fecha_actualizacion": "2025-03-01"
+  },
+  "cafe": {
+    "local": 950,
+    "mayorista": 1050,
+    "exportacion": 1200,
+    "fuente": "MAGA",
+    "fecha_actualizacion": "2025-03-01"
+  },
+  "tomate": {
+    "local": 200,
+    "mayorista": 240,
+    "exportacion": 280,
+    "fuente": "MAGA",
+    "fecha_actualizacion": "2025-03-01"
+  },
+  "chile": {
+    "local": 300,
+    "mayorista": 350,
+    "exportacion": 420,
+    "fuente": "MAGA",
+    "fecha_actualizacion": "2025-03-01"
+  },
+  "papa": {
+    "local": 180,
+    "mayorista": 220,
+    "exportacion": 260,
+    "fuente": "MAGA",
+    "fecha_actualizacion": "2025-03-01"
+  },
+  "aguacate": {
+    "local": 400,
+    "mayorista": 450,
+    "exportacion": 550,
+    "fuente": "MAGA",
+    "fecha_actualizacion": "2025-03-01"
+  },
+  "cardamomo": {
+    "local": 2500,
+    "mayorista": 2800,
+    "exportacion": 3200,
+    "fuente": "MAGA",
+    "fecha_actualizacion": "2025-03-01"
+  }
+}

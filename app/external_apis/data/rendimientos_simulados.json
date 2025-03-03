@@ -1,0 +1,50 @@
+{
+  "maiz": {
+    "quintales_por_hectarea": 60,
+    "variacion_anual": 0.04,
+    "fuente": "MAGA",
+    "fecha_actualizacion": "2025-03-01"
+  },
+  "frijol": {
+    "quintales_por_hectarea": 25,
+    "variacion_anual": 0.06,
+    "fuente": "MAGA",
+    "fecha_actualizacion": "2025-03-01"
+  },
+  "cafe": {
+    "quintales_por_hectarea": 18,
+    "variacion_anual": 0.03,
+    "fuente": "MAGA",
+    "fecha_actualizacion": "2025-03-01"
+  },
+  "tomate": {
+    "quintales_por_hectarea": 750,
+    "variacion_anual": 0.08,
+    "fuente": "MAGA",
+    "fecha_actualizacion": "2025-03-01"
+  },
+  "chile": {
+    "quintales_por_hectarea": 400,
+    "variacion_anual": 0.07,
+    "fuente": "MAGA",
+    "fecha_actualizacion": "2025-03-01"
+  },
+  "papa": {
+    "quintales_por_hectarea": 350,
+    "variacion_anual": 0.05,
+    "fuente": "MAGA",
+    "fecha_actualizacion": "2025-03-01"
+  },
+  "aguacate": {
+    "quintales_por_hectarea": 120,
+    "variacion_anual": 0.04,
+    "fuente": "MAGA",
+    "fecha_actualizacion": "2025-03-01"
+  },
+  "cardamomo": {
+    "quintales_por_hectarea": 15,
+    "variacion_anual": 0.03,
+    "fuente": "MAGA",
+    "fecha_actualizacion": "2025-03-01"
+  }
+}
