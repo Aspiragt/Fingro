@@ -276,12 +276,7 @@ class ConversationFlow:
             return self.STATES['SHOW_ANALYSIS']
             
         elif current_state == self.STATES['SHOW_ANALYSIS']:
-            return self.STATES['ASK_LOAN']
-            
-        elif current_state == self.STATES['ASK_LOAN']:
-            if processed_value:  # Si respondió SI
-                return self.STATES['SHOW_LOAN']
-            return self.STATES['DONE']  # Si respondió NO
+            return self.STATES['SHOW_LOAN']
             
         elif current_state == self.STATES['SHOW_LOAN']:
             return self.STATES['CONFIRM_LOAN']
@@ -289,7 +284,7 @@ class ConversationFlow:
         elif current_state == self.STATES['CONFIRM_LOAN']:
             if processed_value:  # Si respondió SI
                 return self.STATES['DONE']
-            return self.STATES['ASK_LOAN']  # Si respondió NO
+            return self.STATES['SHOW_LOAN']  # Si respondió NO
             
         elif current_state == self.STATES['GET_LOAN_RESPONSE']:
             return self.STATES['DONE']
@@ -419,20 +414,14 @@ class ConversationFlow:
             # Procesar estado especial
             if next_state == self.STATES['SHOW_ANALYSIS']:
                 try:
-                    # Mostrar reporte y preguntar por préstamo
+                    # Mostrar reporte
                     report = await self.process_show_analysis(user_data['data'])
                     await self.whatsapp.send_message(phone_number, report)
                     
-                    # Actualizar estado a ASK_LOAN
-                    user_data['state'] = self.STATES['ASK_LOAN']
+                    # Actualizar estado a SHOW_LOAN
+                    user_data['state'] = self.STATES['SHOW_LOAN']
                     await firebase_manager.update_user_state(phone_number, user_data)
                     
-                    loan_message = (
-                        "¿Le gustaría que le ayude a solicitar un préstamo para este proyecto? 🤝\n\n"
-                        "Responda SI o NO 👇"
-                    )
-                    await self.whatsapp.send_message(phone_number, loan_message)
-                    return
                 except Exception as e:
                     logger.error(f"Error procesando reporte: {str(e)}")
                     # Mantener el estado actual si hay error
@@ -652,30 +641,26 @@ class ConversationFlow:
             
             # Formatear mensaje según puntaje
             mensaje = (
-                f"💰 *Préstamo para su {cultivo}*\n\n"
-                f"*FINGRO SCORE: {score}/1000* {'✅' if score >= 800 else '🔍' if score >= 500 else '⚠️'}\n\n"
-                f"*ESTADO: {approval_status}*\n"
-                f"{approval_message}\n\n"
-                f"Con este préstamo usted podría:\n"
-                f"• Comprar {int(quintales_semilla)} quintales de semilla 🌱\n"
-                f"• Sembrar {int(area_adicional)} cuerdas más ✨\n\n"
-                f"*Detalles del préstamo:*\n"
-                f"• Le prestamos: {format_currency(monto_prestamo)}\n"
-                f"• Plazo: {plazo_meses} meses (una cosecha)\n"
-                f"• Pago mensual: {format_currency(cuota)}\n\n"
+                f"📊 Análisis de su proyecto de {cultivo}\n\n"
+                f"Su Fingro Score es: {score} puntos\n"
+                f"{approval_status} {approval_message}\n\n"
+                f"Monto máximo recomendado: {format_currency(monto_prestamo)}\n"
+                f"Este monto está calculado para su área de {user_data.get('area', 0)} hectáreas de {cultivo}.\n\n"
+                f"Recomendaciones para mejorar:\n"
+                f"1.⁠ ⁠Depender solo de la lluvia es riesgoso. Un sistema de riego simple podría ayudarle a sembrar todo el año 💧.\n"
+                f"2.⁠ ⁠Los cultivos como el aguacate 🥑, café ☕ o cardamomo rinden mejores ganancias que los cultivos tradicionales.\n\n"
             )
             
             if score >= 500:
                 mensaje += (
-                    f"¿Le gustaría continuar con la solicitud? 🤝\n"
-                    f"Responda SI o NO"
+                    f"¿Le interesa continuar con su solicitud de préstamo de hasta {format_currency(monto_prestamo)}? 📝\n"
+                    f"El proceso tomará 48 horas para aprobación.\n\n"
+                    f"Responda SÍ para continuar o NO para finalizar."
                 )
             else:
                 mensaje += (
-                    f"Puede mejorar su Fingro Score con estas recomendaciones:\n"
-                    f"• Use sistema de riego por goteo o aspersión 💧\n"
-                    f"• Explore canales de comercialización como cooperativas 🏪\n"
-                    f"• Diversifique sus cultivos 🌱\n\n"
+                    f"Su puntaje no califica para un préstamo en este momento.\n\n"
+                    f"Puede mejorar su Fingro Score siguiendo estas recomendaciones.\n\n"
                     f"Escriba 'inicio' para hacer una nueva consulta."
                 )
                 user_data['state'] = self.STATES['DONE']
