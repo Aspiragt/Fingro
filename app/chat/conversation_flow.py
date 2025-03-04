@@ -387,6 +387,9 @@ class ConversationFlow:
             if current_state == 'start':
                 current_state = self.STATES['GET_CROP']
                 user_data['state'] = current_state
+                # Asegurar que existe la estructura de datos
+                if 'data' not in user_data:
+                    user_data['data'] = {}
             
             # Validar entrada del usuario
             is_valid, processed_value = self.validate_input(current_state, message)
