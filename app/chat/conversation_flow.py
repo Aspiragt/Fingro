@@ -643,7 +643,6 @@ class ConversationFlow:
                 'plazo': plazo_meses,
                 'cuota': cuota,
                 'fingro_score': score,
-                'score_details': score_details,
                 'approval_status': approval_status
             }
             
@@ -654,12 +653,7 @@ class ConversationFlow:
             # Formatear mensaje según puntaje
             mensaje = (
                 f"💰 *Préstamo para su {cultivo}*\n\n"
-                f"*FINGRO SCORE: {score}/1000* {'✅' if score >= 800 else '🔍' if score >= 500 else '⚠️'}\n"
-                f"• Cultivo: {score_details['cultivo']}/200 pts\n"
-                f"• Área: {score_details['area']}/200 pts\n"
-                f"• Comercialización: {score_details['comercializacion']}/200 pts\n"
-                f"• Riego: {score_details['riego']}/250 pts\n"
-                f"• Ubicación: {score_details['ubicacion']}/150 pts\n\n"
+                f"*FINGRO SCORE: {score}/1000* {'✅' if score >= 800 else '🔍' if score >= 500 else '⚠️'}\n\n"
                 f"*ESTADO: {approval_status}*\n"
                 f"{approval_message}\n\n"
                 f"Con este préstamo usted podría:\n"
@@ -701,7 +695,9 @@ class ConversationFlow:
         response = unidecode(response.lower().strip())
         
         # Lista de respuestas válidas
-        respuestas_si = ['si', 'sí', 's', 'yes', 'claro', 'dale', 'ok', 'okay']
+        respuestas_si = ['si', 'sí', 's', 'yes', 'ok', 'dale', 'va', 'bueno', 
+            'esta bien', 'está bien', 'claro', 'por supuesto',
+            'adelante', 'hagamoslo', 'hagámoslo', 'me interesa']
         respuestas_no = ['no', 'n', 'nel', 'nop', 'nope']
         
         if response in respuestas_si:
@@ -811,10 +807,10 @@ class ConversationFlow:
             'en otro momento', 'todavía no', 'todavia no'
         ]
         
-        if any(p in response for p in positivas):
+        if response in positivas or any(p in response for p in positivas):
             return True
             
-        if any(n in response for n in negativas):
+        if response in negativas or any(n in response for n in negativas):
             return False
             
         # Si no coincide con ninguna, pedir aclaración
@@ -1302,10 +1298,10 @@ class ConversationFlow:
             'en otro momento', 'todavía no', 'todavia no'
         ]
         
-        if any(p in response for p in positivas):
+        if response in positivas or any(p in response for p in positivas):
             return True
             
-        if any(n in response for n in negativas):
+        if response in negativas or any(n in response for n in negativas):
             return False
             
         # Si no coincide con ninguna, pedir aclaración
