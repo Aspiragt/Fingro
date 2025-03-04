@@ -100,6 +100,44 @@ class MagaAPI:
             }
         
         return self.rendimientos_data.get(cultivo, {})
+    
+    def get_datos_cultivo(self, cultivo: str) -> Dict[str, Any]:
+        """
+        Obtiene datos generales para un cultivo (precio, rendimiento, costos)
+        
+        Args:
+            cultivo: Nombre del cultivo
+            
+        Returns:
+            Diccionario con datos del cultivo
+        """
+        cultivo = cultivo.lower()
+        
+        # Obtener precio y rendimiento
+        precios = self.get_precio_mercado(cultivo)
+        rendimiento = self.get_rendimiento(cultivo)
+        
+        # Datos por defecto para cualquier cultivo
+        return {
+            "nombre": cultivo.capitalize(),
+            "rendimiento_promedio": rendimiento.get("quintales_por_hectarea", 50),
+            "precio_quintal": precios.get("mayorista", 150),
+            "costo_por_hectarea": 8000,  # Costo estimado en quetzales
+            "tiempo_cultivo": 120,  # Días promedio
+            "riesgo_mercado": 0.1,  # 10% riesgo de mercado
+        }
+    
+    async def get_datos_historicos(self, cultivo: str) -> Dict[str, Any]:
+        """
+        Obtiene datos históricos para un cultivo (asíncrono para compatibilidad)
+        
+        Args:
+            cultivo: Nombre del cultivo
+            
+        Returns:
+            Diccionario con datos históricos
+        """
+        return self.get_datos_cultivo(cultivo)
 
 # Instancia global
 maga_api = MagaAPI()

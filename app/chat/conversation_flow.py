@@ -1209,5 +1209,114 @@ class ConversationFlow:
             "- 'ayuda' para ver opciones\n"
         ))
 
+    def format_financial_analysis(self, financial: Dict[str, Any], user_data: Dict[str, Any]) -> str:
+        """
+        Formatea el análisis financiero para mostrarlo al usuario
+        
+        Args:
+            financial: Datos del análisis financiero
+            user_data: Datos del usuario
+            
+        Returns:
+            str: Mensaje formateado
+        """
+        try:
+            cultivo = user_data.get('crop', '').capitalize()
+            area_original = user_data.get('area_original', user_data.get('area', 0))
+            area_unit = user_data.get('area_unit', 'hectáreas')
+            
+            # Datos financieros
+            resumen = financial.get('resumen', {})
+            detalle = financial.get('detalle', {})
+            
+            # Valores clave
+            score = resumen.get('score', 0)
+            roi = resumen.get('roi', 0)
+            utilidad = resumen.get('utilidad_neta', 0)
+            
+            costos = detalle.get('costos', {}).get('total', 0)
+            ingresos = detalle.get('ingresos', {}).get('brutos', 0)
+            rendimiento = detalle.get('rendimiento', {}).get('ajustado', 0)
+            precio = detalle.get('precios', {}).get('precio_actual', 0)
+            
+            # Formatear valores monetarios
+            costos_fmt = format_currency(costos)
+            ingresos_fmt = format_currency(ingresos)
+            utilidad_fmt = format_currency(utilidad)
+            precio_fmt = format_currency(precio)
+            
+            # Evaluar resultado
+            if score >= 75:
+                calificacion = "excelente ⭐⭐⭐⭐⭐"
+                recomendacion = "¡Este proyecto tiene un excelente potencial! Podemos ofrecerle un préstamo inmediato."
+            elif score >= 50:
+                calificacion = "bueno ⭐⭐⭐⭐"
+                recomendacion = "Este proyecto tiene buen potencial. Podemos evaluar un préstamo para usted."
+            elif score >= 30:
+                calificacion = "regular ⭐⭐⭐"
+                recomendacion = "Este proyecto tiene potencial moderado. Podríamos evaluar un préstamo con algunas condiciones."
+            else:
+                calificacion = "bajo ⭐⭐"
+                recomendacion = "Este proyecto tiene un potencial limitado. Le recomendamos ajustar algunos aspectos."
+            
+            # Construir mensaje
+            message = (
+                f"📊 *Análisis de su proyecto de {cultivo}*\n\n"
+                f"Con {area_original} {area_unit} de {cultivo}, estos son sus resultados:\n\n"
+                f"🌱 *Rendimiento esperado:* {rendimiento:.1f} quintales/hectárea\n"
+                f"💰 *Precio actual:* {precio_fmt} por quintal\n\n"
+                f"📈 *Resultados financieros:*\n"
+                f"• Ingresos estimados: {ingresos_fmt}\n"
+                f"• Costos totales: {costos_fmt}\n"
+                f"• Utilidad esperada: {utilidad_fmt}\n"
+                f"• Retorno sobre inversión: {roi:.1f}%\n\n"
+                f"🏆 *FinGro Score:* {score}/100 ({calificacion})\n\n"
+                f"{recomendacion}"
+            )
+            
+            return message
+            
+        except Exception as e:
+            logger.error(f"Error analizando financiamiento: {str(e)}")
+            return "Lo sentimos, ha ocurrido un error analizando su proyecto. Por favor intente nuevamente."
+
+    def validate_yes_no(self, response: str) -> bool:
+        """Valida respuestas sí/no de forma flexible"""
+        if not response:
+            return False
+            
+        # Normalizar respuesta
+        response = self._normalize_text(response)
+        
+        # Variaciones positivas
+        positivas = [
+            'si', 'sí', 's', 'yes', 'ok', 'dale', 'va', 'bueno', 
+            'esta bien', 'está bien', 'claro', 'por supuesto',
+            'adelante', 'hagamoslo', 'hagámoslo', 'me interesa'
+        ]
+        
+        # Variaciones negativas
+        negativas = [
+            'no', 'nel', 'nop', 'nope', 'n', 'mejor no',
+            'no gracias', 'paso', 'ahorita no', 'después',
+            'en otro momento', 'todavía no', 'todavia no'
+        ]
+        
+        if any(p in response for p in positivas):
+            return True
+            
+        if any(n in response for n in negativas):
+            return False
+            
+        # Si no coincide con ninguna, pedir aclaración
+        return None
+
+    def get_yes_no(self, response: str) -> Optional[bool]:
+        """Obtiene valor booleano de respuesta sí/no"""
+        result = self.validate_yes_no(response)
+        if result is None:
+            return None
+        return result
+
 # Instancia global
 conversation_flow = ConversationFlow()
