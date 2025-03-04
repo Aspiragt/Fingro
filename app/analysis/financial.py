@@ -472,5 +472,140 @@ class FinancialAnalyzer:
         
         return rendimiento_base * factor_riego
         
+    def get_crop_cycle(self, cultivo: str) -> Dict[str, Any]:
+        """
+        Obtiene información sobre el ciclo del cultivo
+        
+        Args:
+            cultivo: Nombre del cultivo
+            
+        Returns:
+            Dict con información del ciclo
+        """
+        cultivo = self.normalize_text(cultivo)
+        
+        # Ciclos de cultivo en meses por tipo
+        ciclos = {
+            'cafe': {'duracion_meses': 12, 'tipo': 'permanente'},
+            'aguacate': {'duracion_meses': 12, 'tipo': 'permanente'},
+            'cardamomo': {'duracion_meses': 8, 'tipo': 'semipermanente'},
+            'limon': {'duracion_meses': 12, 'tipo': 'permanente'},
+            'naranja': {'duracion_meses': 12, 'tipo': 'permanente'},
+            'platano': {'duracion_meses': 10, 'tipo': 'semipermanente'},
+            'mango': {'duracion_meses': 12, 'tipo': 'permanente'},
+            'macadamia': {'duracion_meses': 12, 'tipo': 'permanente'},
+            'caña': {'duracion_meses': 12, 'tipo': 'semipermanente'},
+            'maiz': {'duracion_meses': 4, 'tipo': 'anual'},
+            'frijol': {'duracion_meses': 3, 'tipo': 'anual'},
+            'arroz': {'duracion_meses': 4, 'tipo': 'anual'},
+            'trigo': {'duracion_meses': 4, 'tipo': 'anual'},
+            'tomate': {'duracion_meses': 3, 'tipo': 'anual'},
+            'chile': {'duracion_meses': 4, 'tipo': 'anual'},
+            'papa': {'duracion_meses': 3, 'tipo': 'anual'},
+            'cebolla': {'duracion_meses': 3, 'tipo': 'anual'},
+            'zanahoria': {'duracion_meses': 3, 'tipo': 'anual'},
+            'brocoli': {'duracion_meses': 3, 'tipo': 'anual'},
+            'coliflor': {'duracion_meses': 3, 'tipo': 'anual'},
+            'piña': {'duracion_meses': 12, 'tipo': 'semipermanente'}
+        }
+        
+        return ciclos.get(cultivo, {'duracion_meses': 6, 'tipo': 'anual'})
+        
+    def calculate_financial_analysis(self, cultivo: str, area: float, channel: str, irrigation: str) -> Dict[str, Any]:
+        """
+        Calcula el análisis financiero para un proyecto agrícola
+        
+        Args:
+            cultivo: Tipo de cultivo
+            area: Área en hectáreas
+            channel: Canal de comercialización 
+            irrigation: Sistema de riego
+            
+        Returns:
+            Dict[str, Any]: Análisis financiero
+        """
+        try:
+            # Obtener datos base
+            datos_base = maga_api.get_datos_cultivo(cultivo)
+            if not datos_base:
+                logger.error(f"No hay datos para cultivo: {cultivo}")
+                return None
+                
+            # Obtener factor de riego y riesgo
+            factor_riego = self.FACTOR_RIEGO.get(irrigation, 1.0)
+            factor_riesgo = self.RIESGO_RIEGO.get(irrigation, 0.3)
+            
+            # Calculamos rendimiento
+            rendimiento_base = datos_base.get('rendimiento_promedio', 30)  # Quintal/hectárea
+            rendimiento_ajustado = rendimiento_base * factor_riego
+            
+            # Calculamos costos
+            costo_por_hectarea = datos_base.get('costo_por_hectarea', 8000)
+            costos_totales = costo_por_hectarea * area
+            
+            # Ajustar precio según canal
+            precio_base = datos_base.get('precio_quintal', 150)
+            factor_precio = {
+                'local': 0.9,        # -10% mercado local
+                'mayorista': 1.0,    # Precio base
+                'cooperativa': 1.1,  # +10% cooperativa
+                'exportacion': 1.3   # +30% exportación
+            }
+            precio_ajustado = precio_base * factor_precio.get(channel, 1.0)
+            
+            # Calculamos ingresos
+            ingresos_brutos = rendimiento_ajustado * area * precio_ajustado
+            ingresos_ajustados = ingresos_brutos * (1 - factor_riesgo)
+            
+            # Calculamos utilidad y ROI
+            utilidad_bruta = ingresos_brutos - costos_totales
+            utilidad_neta = ingresos_ajustados - costos_totales
+            roi = (utilidad_neta / costos_totales) * 100 if costos_totales > 0 else 0
+            
+            # Calculamos punto de equilibrio
+            punto_equilibrio = costos_totales / precio_ajustado if precio_ajustado > 0 else 0
+            
+            # Calculamos score
+            score = self._calcular_score(
+                roi=roi,
+                riesgo=factor_riesgo,
+                hectareas=area,
+                metodo_riego=irrigation
+            )
+            
+            return {
+                'resumen': {
+                    'score': score,
+                    'roi': roi,
+                    'utilidad_neta': utilidad_neta,
+                    'punto_equilibrio': punto_equilibrio
+                },
+                'detalle': {
+                    'rendimiento': {
+                        'base': rendimiento_base,
+                        'ajustado': rendimiento_ajustado,
+                        'factor_riego': factor_riego
+                    },
+                    'costos': {
+                        'fijos': costos_totales * 0.4,  # Estimación: 40% costos fijos
+                        'variables': costos_totales * 0.6,  # Estimación: 60% costos variables
+                        'total': costos_totales
+                    },
+                    'ingresos': {
+                        'brutos': ingresos_brutos,
+                        'ajustados': ingresos_ajustados,
+                        'factor_riesgo': factor_riesgo
+                    },
+                    'precios': {
+                        'precio_actual': precio_ajustado,
+                        'precio_por_unidad': precio_ajustado
+                    }
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Error en análisis financiero: {str(e)}")
+            return None
+        
 # Instancia global
 financial_analyzer = FinancialAnalyzer()
