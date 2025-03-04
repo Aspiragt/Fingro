@@ -8,7 +8,7 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-@router.get("/webhook")
+@router.get("/webhook/whatsapp")
 async def verify_webhook(request: Request):
     """Verify webhook for WhatsApp API"""
     try:
@@ -30,7 +30,7 @@ async def verify_webhook(request: Request):
         logger.error(f"Error verifying webhook: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/webhook")
+@router.post("/webhook/whatsapp")
 async def receive_message(request: Request, whatsapp: WhatsAppService = Depends()):
     """Handle incoming WhatsApp messages"""
     try:
