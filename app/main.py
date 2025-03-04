@@ -40,6 +40,11 @@ async def verify_webhook_signature(request: Request) -> bool:
     Verifica la firma del webhook de WhatsApp
     """
     try:
+        # Si no hay secreto configurado, omitir la verificación
+        if not hasattr(settings, 'WHATSAPP_WEBHOOK_SECRET') or not settings.WHATSAPP_WEBHOOK_SECRET:
+            logger.warning("WHATSAPP_WEBHOOK_SECRET no está configurado. Omitiendo verificación de firma")
+            return True
+            
         signature = request.headers.get('x-hub-signature-256', '')
         if not signature:
             logger.warning("No se encontró firma en el webhook")
@@ -123,7 +128,7 @@ async def verify_webhook(request: Request):
         challenge = request.query_params.get('hub.challenge')
         
         # Validar modo y token
-        if mode == 'subscribe' and token == settings.WHATSAPP_VERIFY_TOKEN:
+        if mode == 'subscribe' and token == settings.WHATSAPP_WEBHOOK_VERIFY_TOKEN:
             if not challenge:
                 return JSONResponse(
                     status_code=400,

@@ -58,6 +58,10 @@ class Settings(BaseModel):
         default=os.getenv("WHATSAPP_WEBHOOK_VERIFY_TOKEN", ""),
         description="Token para verificar webhook de WhatsApp"
     )
+    WHATSAPP_WEBHOOK_SECRET: str = Field(
+        default=os.getenv("WHATSAPP_WEBHOOK_SECRET", ""),
+        description="Secreto para validar firmas de los webhooks de WhatsApp"
+    )
     
     # Firebase
     FIREBASE_CREDENTIALS: Dict[str, Any] = Field(
