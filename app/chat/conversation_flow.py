@@ -216,11 +216,20 @@ class ConversationFlow:
                 return True, user_input.strip().capitalize()
             return False, None
             
-        elif current_state in [self.STATES['ASK_LOAN'], self.STATES['CONFIRM_LOAN'], self.STATES['SHOW_ANALYSIS']]:
+        elif current_state in [self.STATES['ASK_LOAN'], self.STATES['CONFIRM_LOAN'], self.STATES['SHOW_ANALYSIS'], self.STATES['SHOW_LOAN']]:
             # Validar respuestas SI/NO
-            if self.validate_yes_no(user_input) is not None:
-                return True, self.get_yes_no(user_input)
-            return False, None
+            respuestas_si = ['si', 'sí', 's', 'yes', 'claro', 'por supuesto', 'ok', 'dale', 'va', 'bueno', 
+                'esta bien', 'está bien', 'adelante', 'hagamoslo', 'hagámoslo', 'me interesa']
+            respuestas_no = ['no', 'n', 'nel', 'nop', 'nope', 'nunca', 'jamas', 'jamás', 'negativo']
+            
+            normalized_input = unidecode(user_input.lower().strip())
+            
+            if normalized_input in respuestas_si:
+                return True, True
+            elif normalized_input in respuestas_no:
+                return True, False
+            else:
+                return False, None
             
         return False, None
 
@@ -246,7 +255,7 @@ class ConversationFlow:
         elif current_state == self.STATES['GET_LOCATION']:
             return "❌ Por favor ingrese el nombre de su municipio o departamento (mínimo 3 letras)"
             
-        elif current_state in [self.STATES['ASK_LOAN'], self.STATES['CONFIRM_LOAN'], self.STATES['SHOW_ANALYSIS']]:
+        elif current_state in [self.STATES['ASK_LOAN'], self.STATES['CONFIRM_LOAN'], self.STATES['SHOW_ANALYSIS'], self.STATES['SHOW_LOAN']]:
             return "❌ Por favor responda solamente SI o NO"
             
         return "❌ Respuesta no válida, por favor intente nuevamente"
@@ -279,7 +288,7 @@ class ConversationFlow:
             return self.STATES['SHOW_ANALYSIS']
             
         elif current_state == self.STATES['SHOW_ANALYSIS']:
-            return self.STATES['SHOW_LOAN']
+            return self.STATES['CONFIRM_LOAN']
             
         elif current_state == self.STATES['SHOW_LOAN']:
             return self.STATES['CONFIRM_LOAN']
@@ -421,8 +430,8 @@ class ConversationFlow:
                     report = await self.process_show_analysis(user_data['data'])
                     await self.whatsapp.send_message(phone_number, report)
                     
-                    # Actualizar estado a SHOW_LOAN
-                    user_data['state'] = self.STATES['SHOW_LOAN']
+                    # Actualizar estado a CONFIRM_LOAN directamente 
+                    user_data['state'] = self.STATES['CONFIRM_LOAN']
                     await firebase_manager.update_user_state(phone_number, user_data)
                     
                 except Exception as e:
