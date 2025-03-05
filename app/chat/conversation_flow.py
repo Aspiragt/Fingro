@@ -158,6 +158,9 @@ class ConversationFlow:
         elif current_state == self.STATES['GET_LOCATION']:
             return "¿En qué departamento está ubicado el terreno? 📍"
             
+        elif current_state == self.STATES['SHOW_ANALYSIS']:
+            return ""  # No mostrar mensaje adicional
+            
         return "❌ Estado no válido"
 
     def validate_input(self, current_state: str, user_input: str) -> tuple:
@@ -484,7 +487,7 @@ class ConversationFlow:
             await firebase_manager.update_user_state(phone_number, user_data)
             
             # Si no es estado especial, mostrar siguiente mensaje
-            if next_state not in [self.STATES['SHOW_LOAN'], self.STATES['CONFIRM_LOAN'], self.STATES['DONE']]:
+            if next_state not in [self.STATES['SHOW_LOAN'], self.STATES['CONFIRM_LOAN'], self.STATES['DONE'], self.STATES['SHOW_ANALYSIS']]:
                 next_message = self.get_next_message(next_state, user_data)
                 await self.whatsapp.send_message(phone_number, next_message)
             
