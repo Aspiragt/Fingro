@@ -444,6 +444,23 @@ class ConversationFlow:
                     await self.whatsapp.send_message(phone_number, error_message)
                     return
                     
+            # Manejo especial para confirmación del préstamo después del análisis
+            elif current_state == self.STATES['CONFIRM_LOAN'] and processed_value is True:
+                try:
+                    confirm_message = self.process_confirm_loan(user_data)
+                    await self.whatsapp.send_message(phone_number, confirm_message)
+                    user_data['state'] = self.STATES['DONE']
+                    await firebase_manager.update_user_state(phone_number, user_data)
+                    return
+                except Exception as e:
+                    logger.error(f"Error confirmando préstamo: {str(e)}")
+                    error_message = (
+                        "Lo siento, ha ocurrido un error procesando su solicitud. "
+                        "Por favor intente de nuevo."
+                    )
+                    await self.whatsapp.send_message(phone_number, error_message)
+                    return
+            
             # Actualizar estado
             user_data['state'] = next_state
             
@@ -469,7 +486,7 @@ class ConversationFlow:
                 
             elif next_state == self.STATES['CONFIRM_LOAN']:
                 try:
-                    confirm_message = self.process_confirm_loan()
+                    confirm_message = self.process_confirm_loan(user_data)
                     await self.whatsapp.send_message(phone_number, confirm_message)
                 except Exception as e:
                     logger.error(f"Error confirmando préstamo: {str(e)}")
@@ -699,7 +716,7 @@ class ConversationFlow:
         
         if response in respuestas_si:
             user_data['state'] = self.STATES['CONFIRM_LOAN']
-            return self.process_confirm_loan()
+            return self.process_confirm_loan(user_data)
         elif response in respuestas_no:
             user_data['state'] = self.STATES['DONE']
             return (
@@ -820,13 +837,19 @@ class ConversationFlow:
             return None
         return result
 
-    def process_confirm_loan(self) -> str:
+    def process_confirm_loan(self, user_data: Dict[str, Any] = None) -> str:
         """
         Procesa la confirmación de solicitud de préstamo
         
+        Args:
+            user_data: Datos opcionales del usuario
+            
         Returns:
             str: Mensaje de confirmación
         """
+        if user_data:
+            user_data['state'] = self.STATES['DONE']
+            
         return (
             "¡Excelente! 👍 Ya estamos procesando su solicitud de préstamo.\n\n"
             "En los próximos días nos comunicaremos por este mismo chat para "
