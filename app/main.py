@@ -134,7 +134,8 @@ async def verify_webhook(request: Request):
                     status_code=400,
                     content={"error": "Challenge no proporcionado"}
                 )
-            return Response(content=challenge, media_type="text/plain")
+            logger.info(f"Webhook verificado exitosamente, devolviendo challenge: {challenge}")
+            return challenge
         
         return JSONResponse(status_code=403, content={"error": "Token inválido"})
         
