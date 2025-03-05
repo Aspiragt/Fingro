@@ -213,9 +213,9 @@ class ConversationFlow:
                 return True, user_input.strip().capitalize()
             return False, None
             
-        elif current_state in [self.STATES['ASK_LOAN'], self.STATES['CONFIRM_LOAN']]:
+        elif current_state in [self.STATES['ASK_LOAN'], self.STATES['CONFIRM_LOAN'], self.STATES['SHOW_ANALYSIS']]:
             # Validar respuestas SI/NO
-            if self.validate_yes_no(user_input):
+            if self.validate_yes_no(user_input) is not None:
                 return True, self.get_yes_no(user_input)
             return False, None
             
@@ -243,7 +243,7 @@ class ConversationFlow:
         elif current_state == self.STATES['GET_LOCATION']:
             return "❌ Por favor ingrese el nombre de su municipio o departamento (mínimo 3 letras)"
             
-        elif current_state in [self.STATES['ASK_LOAN'], self.STATES['CONFIRM_LOAN']]:
+        elif current_state in [self.STATES['ASK_LOAN'], self.STATES['CONFIRM_LOAN'], self.STATES['SHOW_ANALYSIS']]:
             return "❌ Por favor responda solamente SI o NO"
             
         return "❌ Respuesta no válida, por favor intente nuevamente"
