@@ -813,20 +813,17 @@ class ConversationFlow:
 
     def process_confirm_loan(self) -> str:
         """
-        Procesa la confirmación del préstamo
+        Procesa la confirmación de solicitud de préstamo
         
         Returns:
             str: Mensaje de confirmación
         """
         return (
-            "✨ *¡Excelente decisión!*\n\n"
-            "Su solicitud de préstamo está siendo procesada.\n\n"
-            "En las próximas 24 horas:\n"
-            "• Revisaremos su solicitud 📋\n"
-            "• Prepararemos los documentos 📄\n"
-            "• Nos comunicaremos con usted 📱\n\n"
-            "¿Tiene alguna pregunta mientras tanto? 🤝\n"
-            "Estoy aquí para ayudarle."
+            "¡Excelente! 👍 Ya estamos procesando su solicitud de préstamo.\n\n"
+            "En los próximos días nos comunicaremos por este mismo chat para "
+            "informarle cómo recibir su préstamo.\n\n"
+            "Mientras tanto, puede continuar con sus actividades normales. "
+            "Gracias por confiar en FinGro para impulsar su proyecto agrícola. 🌱💰"
         )
 
     def process_area(self, user_data: Dict[str, Any], response: str) -> str:

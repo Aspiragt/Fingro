@@ -139,38 +139,63 @@ class FinancialResultsPresenter:
         else:
             return 'medio'  # Valor por defecto
     
-    def get_recommendations(self, score_details: Dict[str, int]) -> List[str]:
+    def get_recommendations(self, score_details: Dict[str, int], user_data: Dict[str, Any]) -> List[str]:
         """
         Genera recomendaciones personalizadas basadas en los puntajes
         
         Args:
             score_details: Detalle de puntajes por categoría
+            user_data: Datos completos del usuario
             
         Returns:
             Lista de recomendaciones
         """
         recommendations = []
         
-        # Encontrar las dos categorías con puntuación más baja
-        categories = ['cultivo', 'area', 'comercializacion', 'riego', 'ubicacion']
-        category_scores = [(cat, score_details.get(cat, 0)) for cat in categories]
-        category_scores.sort(key=lambda x: x[1])  # Ordenar por puntaje ascendente
+        # Obtener los datos del usuario para personalizar recomendaciones
+        crop = user_data.get('crop', '').lower()
+        irrigation = user_data.get('irrigation', '').lower()
+        area = float(user_data.get('area', 0))
+        channel = user_data.get('channel', '').lower()
         
-        # Generar recomendaciones para las dos categorías más bajas
-        for category, score in category_scores[:2]:
-            level = self.get_category_level(category, score)
-            if level == 'bajo' or level == 'medio':
-                recommendations.append(self.recommendations[category][level])
+        # Recomendación específica para sistema de riego
+        if irrigation == 'temporal':
+            recommendations.append(
+                "Depender solo de la lluvia es riesgoso. Un sistema de riego simple "
+                "podría ayudarle a sembrar todo el año 💧."
+            )
         
-        # Si no hay recomendaciones de bajo nivel, incluir una general
+        # Recomendación específica para cultivo (solo si no tiene cultivos de alto valor)
+        if crop not in ['aguacate', 'cafe', 'café', 'cardamomo', 'macadamia']:
+            recommendations.append(
+                "Los cultivos como el aguacate 🥑, café ☕ o cardamomo rinden "
+                "mejores ganancias que los cultivos tradicionales."
+            )
+        
+        # Recomendación para el área (si es pequeña)
+        if area < 3 and len(recommendations) < 2:
+            recommendations.append(
+                "Aumentar el área de siembra le permitiría mejorar sus ingresos. "
+                "Con un préstamo podría expandir su producción 🌱."
+            )
+        
+        # Recomendación para comercialización (si vende local)
+        if channel == 'mercado_local' and len(recommendations) < 2:
+            recommendations.append(
+                "Vender directamente a mercados locales limita sus ganancias. "
+                "¿Ha considerado unirse a una cooperativa? 🤝"
+            )
+        
+        # Si no hay recomendaciones, incluir una general
         if not recommendations:
             recommendations.append(
                 "Su perfil agrícola es muy sólido. Para mejorar aún más, "
                 "considere nuevas tecnologías o métodos de cultivo 🌟."
             )
         
-        return recommendations
-    
+        # Limitar a 2 recomendaciones
+        return recommendations[:2]
+
     def format_financial_analysis(self, user_data: Dict[str, Any]) -> str:
         """
         Genera un análisis financiero formateado para WhatsApp
@@ -189,7 +214,7 @@ class FinancialResultsPresenter:
             status, message = score_calculator.get_loan_approval_status(score)
             
             # Obtener recomendaciones personalizadas
-            recommendations = self.get_recommendations(score_details)
+            recommendations = self.get_recommendations(score_details, user_data)
             
             # Obtener área y calcular monto de préstamo según tarifas predeterminadas
             area = float(user_data.get('area', 1))
@@ -207,12 +232,12 @@ class FinancialResultsPresenter:
 📊 *Análisis de su proyecto de {crop_name}*
 
 *¡Felicitaciones! Su Fingro Score es: {score} puntos* ✨
-{message}
+Usted tiene un excelente perfil para aplicar a un préstamo. Su proyecto agrícola muestra un alto potencial de éxito.
 
-*Monto máximo aprobado: {format_currency(max_loan)}*
+*Monto máximo disponible: {format_currency(max_loan)}*
 Este monto está calculado para su área de {area} {'hectárea' if area == 1 else 'hectáreas'} de {crop_name}.
 
-¿Desea recibir su préstamo ahora? 💰
+¿Le interesa aplicar a este préstamo? 📝
 
 Responda *SÍ* para continuar o *NO* para finalizar.
 """
@@ -233,8 +258,7 @@ Este monto está calculado para su área de {area} {'hectárea' if area == 1 els
                     analysis += f"{i}. {recommendation}\n"
                 
                 analysis += f"""
-¿Le interesa continuar con su solicitud de préstamo de hasta {format_currency(max_loan)}? 📝
-El proceso tomará 48 horas para aprobación.
+¿Le interesa aplicar a este préstamo de hasta {format_currency(max_loan)}? 📝
 
 Responda *SÍ* para continuar o *NO* para finalizar.
 """

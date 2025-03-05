@@ -263,8 +263,8 @@ class FingroScoreCalculator:
         """
         if score >= 800:
             return "APROBADO", (
-                "¡Felicidades! 🎉 Su préstamo ha sido aprobado automáticamente. "
-                "Su perfil agrícola muestra un excelente potencial de éxito."
+                "Usted tiene un excelente perfil para aplicar a un préstamo. "
+                "Su proyecto agrícola muestra un alto potencial de éxito."
             )
         elif score >= 500:
             return "EVALUACIÓN", (
